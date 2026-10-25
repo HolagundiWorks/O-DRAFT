@@ -18,9 +18,13 @@ internal sealed class CommandChrome
     private readonly Window _bar = new() { Title = "Ask" };
     private readonly Window _dyn = new() { Title = "CAD input" };
     private readonly Border _cadCard;
-    private readonly StackPanel _dynRoot;
+    private readonly Border _dynRoot;
     private bool _barReady;
     private bool _dynReady;
+
+    /// <summary>Cursor field, half the previous 140×36 DIP bar.</summary>
+    public const double DynWidthDip = 70;
+    public const double DynHeightDip = 18;
 
     public TextBox CadInput { get; }
     public ListView SuggestList { get; }
@@ -41,12 +45,12 @@ internal sealed class CommandChrome
         CadInput = new TextBox
         {
             FontFamily = ShellFonts.MonoFamily,
-            FontSize = Density.FontCaption,
-            MinHeight = 22,
-            MinWidth = 96,
+            FontSize = Density.FontCaption * 0.5,
+            MinHeight = DynHeightDip,
+            MinWidth = DynWidthDip,
             BorderThickness = new Thickness(0),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            Padding = new Thickness(0, 2, 4, 2),
+            Padding = new Thickness(2, 0, 2, 0),
             VerticalAlignment = VerticalAlignment.Center,
             PlaceholderText = "",
         };
@@ -55,12 +59,12 @@ internal sealed class CommandChrome
         AutomationProperties.SetName(CadInput, "CAD command line");
         SuggestList = new ListView
         {
-            MaxHeight = 72,
+            MaxHeight = 36,
             Visibility = Visibility.Collapsed,
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
             FontFamily = ShellFonts.MonoFamily,
-            FontSize = Density.FontCaption,
+            FontSize = Density.FontCaption * 0.5,
             SelectionMode = ListViewSelectionMode.Single,
             IsItemClickEnabled = true,
         };
@@ -73,19 +77,19 @@ internal sealed class CommandChrome
         };
         _cadCard = new Border
         {
-            Padding = new Thickness(4, 2, 4, 2),
-            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(2, 0, 2, 0),
+            CornerRadius = new CornerRadius(Density.CornerControl),
             BorderThickness = new Thickness(0),
             Child = cadColumn,
         };
-        _dynRoot = new StackPanel
+        _dynRoot = new Border
         {
-            Orientation = Orientation.Vertical,
-            Spacing = Density.SpaceXs,
-            Padding = new Thickness(Density.SpaceSm),
-            Children = { _cadCard },
+            Padding = new Thickness(1),
+            CornerRadius = new CornerRadius(Density.CornerControl),
+            Child = _cadCard,
         };
         _dyn.Content = _dynRoot;
+        Native.MatchButtonCorners(WindowNative.GetWindowHandle(_dyn));
         ApplyTheme(ElementTheme.Dark);
     }
 
@@ -143,6 +147,7 @@ internal sealed class CommandChrome
         }
         Native.Frame(WindowNative.GetWindowHandle(_bar), Native.DwmColorNone, dark);
         Native.Frame(WindowNative.GetWindowHandle(_dyn), Native.DwmColorNone, dark);
+        Native.MatchButtonCorners(WindowNative.GetWindowHandle(_dyn));
         _dynRoot.RequestedTheme = theme;
         var fill = Density.ThemeBrush("CommandChromeCadBrush")
             ?? new SolidColorBrush(dark ? Color(242, 40, 40, 40) : Color(250, 247, 247, 247));
@@ -154,7 +159,8 @@ internal sealed class CommandChrome
         _cadCard.Background = fill;
         _cadCard.BorderThickness = new Thickness(2, 0, 0, 0);
         _cadCard.BorderBrush = cadEdge;
-        _cadCard.CornerRadius = new CornerRadius(Density.CornerChrome);
+        _dynRoot.CornerRadius = new CornerRadius(Density.CornerControl);
+        _cadCard.CornerRadius = new CornerRadius(Density.CornerControl);
         CadInput.Foreground = ink;
         CadInput.FontFamily = ShellFonts.MonoFamily;
         CadInput.PlaceholderText = "";
@@ -235,12 +241,14 @@ internal sealed class CommandChrome
         {
             _dyn.AppWindow.Move(new Windows.Graphics.PointInt32(x, y));
         }
+        var hwnd = WindowNative.GetWindowHandle(_dyn);
+        Native.MatchButtonCorners(hwnd);
         if (!_dyn.AppWindow.IsVisible)
         {
             _dyn.AppWindow.Show();
-            var hwnd = WindowNative.GetWindowHandle(_dyn);
             Native.ShowWindow(hwnd, 8);
             Native.Lift(hwnd);
+            Native.MatchButtonCorners(hwnd);
         }
     }
 
@@ -299,10 +307,10 @@ internal sealed class CommandChrome
     private static Style SuggestItemStyle()
     {
         var style = new Style(typeof(ListViewItem));
-        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 20.0));
-        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(4, 1, 4, 1)));
+        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, DynHeightDip));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(2, 0, 2, 0)));
         style.Setters.Add(new Setter(Control.FontFamilyProperty, ShellFonts.MonoFamily));
-        style.Setters.Add(new Setter(Control.FontSizeProperty, 10.0));
+        style.Setters.Add(new Setter(Control.FontSizeProperty, Density.FontCaption * 0.5));
         style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Left));
         return style;
     }

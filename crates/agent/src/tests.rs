@@ -71,6 +71,8 @@ fn schemas_are_offered_in_function_calling_format_and_only_for_built_tools() {
             "get_room_area_total",
             "get_drawing_revision",
             "check_permit_layers",
+            "get_drawing_digest",
+            "query_context_cards",
             "get_spatial_overview",
             "find_objects_in_window",
             "find_nearest_objects",

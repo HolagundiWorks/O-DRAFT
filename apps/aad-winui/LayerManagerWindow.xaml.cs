@@ -855,9 +855,9 @@ public sealed partial class LayerManagerWindow : Window
     {
         if (_selected.Contains(name))
         {
-            return new SolidColorBrush(Windows.UI.Color.FromArgb(64, 0, 120, 215));
+            return Density.SelectionFill();
         }
-        return index % 2 == 1 ? new SolidColorBrush(Windows.UI.Color.FromArgb(16, 128, 128, 128)) : Transparent();
+        return index % 2 == 1 ? Density.ZebraFill() : Transparent();
     }
 
     private void FillStates()

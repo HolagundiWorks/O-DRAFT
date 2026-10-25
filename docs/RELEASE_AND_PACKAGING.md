@@ -24,8 +24,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/windows/package.ps
    the model under `models\`).
 3. Build the MSI with WiX v5 (`packaging/windows/aad.wxs`: Welcome splash bitmaps, open-source EULA,
    Shortcuts) and the portable zip.
-4. Sign with `packaging/windows/sign.ps1` if signing secrets exist; otherwise the artifacts are
-   unsigned and the script warns.
+4. Sign with `packaging/windows/sign.ps1` if signing material exists; otherwise the artifacts are
+   unsigned and the script warns. Options: `WINDOWS_CERTIFICATE` (PFX), Azure Trusted Signing
+   (OSSign when `ossign.exe` is available — see `ossign.config.example.yaml` — or `SIGN_BACKEND=signtool`),
+   or local **self-sign** with `SIGN_SELF_SIGNED=1` (dev cert under `%LOCALAPPDATA%\O-Draft\dev-codesign\`;
+   SmartScreen still warns).
 
 Output: `dist/release/o-draft-<version>-windows-x64.msi` and `...-portable.zip`, or with `-Assistant`
 `o-draft-ai-<version>-windows-x64.msi` (and matching portable zip).

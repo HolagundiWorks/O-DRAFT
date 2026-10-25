@@ -17,15 +17,25 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["la", "layers", "-layer"])
             .params("{} → layers, states, linetypes (typed -LAYER: option prompts)")
             .interactive(|_| Ok(Box::new(prompts::LayerM::default()))),
-        CommandSpec::new("layer.new", "New Layer", run_new).params("{name, color?, linetype?, lineweight? (mm), current?: bool}"),
+        CommandSpec::new("layer.new", "New Layer", run_new)
+            .menu(&["Format", "Layer Tools", "New Layer"])
+            .alias(&["-layer.new"])
+            .params("{name, color?, linetype?, lineweight? (mm), current?: bool}"),
         CommandSpec::new("layer.set", "Set Layer Properties", run_set)
+            .alias(&["-layer.set"])
             .params("{name, on?, frozen?, locked?, plot?, color?, linetype?, lineweight?, transparency?, description?, newVpFreeze?, plotStyle? (named plot style), newName?}"),
         CommandSpec::new("layer.current", "Make Current", run_current)
             .menu(&["Format", "Layer Tools", "Make Current"])
             .alias(&["clayer"])
             .params("{name}"),
-        CommandSpec::new("layer.delete", "Delete Layer", run_delete).params("{name}"),
-        CommandSpec::new("laymcur", "Make Object's Layer Current", run_laymcur).params("{handles?}"),
+        CommandSpec::new("layer.delete", "Delete Layer", run_delete)
+            .menu(&["Format", "Layer Tools", "Delete Layer"])
+            .alias(&["-layer.delete"])
+            .params("{name}"),
+        CommandSpec::new("laymcur", "Make Object's Layer Current", run_laymcur)
+            .menu(&["Format", "Layer Tools", "Make Object's Layer Current"])
+            .alias(&["mlc"])
+            .params("{handles?}"),
         CommandSpec::new("laymch", "Layer Match", run_laymch).menu(&["Format", "Layer Tools", "Layer Match"]).params("{handles?, layer}"),
         CommandSpec::new("laycur", "Change to Current Layer", run_laycur)
             .menu(&["Format", "Layer Tools", "Change to Current Layer"])
@@ -49,14 +59,28 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Format", "Layer Tools", "Unlock Layer"])
             .params("{handles?}")
             .interactive(|_| Ok(Box::new(SelectRun::single("layulk", "LAYULK", "Select an object on the layer to be unlocked")))),
-        CommandSpec::new("layon", "Turn All Layers On", |s, _| all_layers(s, |l| l.on = true)),
-        CommandSpec::new("laythw", "Thaw All Layers", |s, _| all_layers(s, |l| l.frozen = false)),
+        CommandSpec::new("layon", "Turn All Layers On", |s, _| all_layers(s, |l| l.on = true))
+            .menu(&["Format", "Layer Tools", "Turn All Layers On"])
+            .alias(&["layers.on"]),
+        CommandSpec::new("laythw", "Thaw All Layers", |s, _| all_layers(s, |l| l.frozen = false))
+            .menu(&["Format", "Layer Tools", "Thaw All Layers"])
+            .alias(&["layers.thaw"]),
         CommandSpec::new("layerp", "Previous Layer", run_layerp).menu(&["Format", "Layer Tools", "Previous Layer"]),
         CommandSpec::new("layerstate.save", "Save Layer State", run_state_save).menu(&["Format", "Layer States Manager..."]).params("{name}"),
-        CommandSpec::new("layerstate.restore", "Restore Layer State", run_state_restore).params("{name}"),
-        CommandSpec::new("layerstate.list", "List Layer States", run_state_list).params("{} → states").noundo(),
-        CommandSpec::new("layerstate.delete", "Delete Layer State", run_state_delete).params("{name}"),
-        CommandSpec::new("layerstate.rename", "Rename Layer State", run_state_rename).params("{from, to}"),
+        CommandSpec::new("layerstate.restore", "Restore Layer State", run_state_restore)
+            .menu(&["Format", "Layer States", "Restore"])
+            .alias(&["las.restore"])
+            .params("{name}"),
+        CommandSpec::new("layerstate.list", "List Layer States", run_state_list)
+            .menu(&["Format", "Layer States", "List"])
+            .params("{} → states")
+            .noundo(),
+        CommandSpec::new("layerstate.delete", "Delete Layer State", run_state_delete)
+            .menu(&["Format", "Layer States", "Delete"])
+            .params("{name}"),
+        CommandSpec::new("layerstate.rename", "Rename Layer State", run_state_rename)
+            .menu(&["Format", "Layer States", "Rename"])
+            .params("{from, to}"),
         CommandSpec::new("laymrg", "Layer Merge", merge::run_laymrg)
             .menu(&["Format", "Layer Tools", "Layer Merge"])
             .params("{from: [names], to} (the from layers' objects move to `to`, then the from layers are deleted)")

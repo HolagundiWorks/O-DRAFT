@@ -279,23 +279,36 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{floor?: only spaces for this floor and for every floor} → {active, dirty, spaces}")
             .noundo(),
         CommandSpec::new("space.get", "Drawing Space Details", run_get)
+            .menu(&["Format", "Drawing Space", "Details"])
+            .alias(&["space.details"])
             .params("{id | name} → the configuration with a row per layer (visible, frozen, locked, editable, exists)")
             .noundo(),
         CommandSpec::new("space.save", "Save Drawing Space", run_save)
+            .menu(&["Format", "Drawing Space", "Save"])
+            .alias(&["space.store"])
             .params("{name, description?, floor?, current?: layer | true (the current layer), unlisted?: keep|hide|lock, layers?: [{layer, visible?, frozen?, locked?}] (default: every layer as it is now), activate?: bool (default true)} → {space}"),
         CommandSpec::new("space.update", "Edit Drawing Space", run_update)
+            .menu(&["Format", "Drawing Space", "Edit"])
             .params("{id | name, newName?, description?, floor?, current?, unlisted?, layers?: [{layer, visible?, frozen?, locked?}] (merged by layer), remove?: [layer]} edits the saved configuration only; the drawing is not changed"),
         CommandSpec::new("space.capture", "Update Drawing Space from Layers", run_capture)
+            .menu(&["Format", "Drawing Space", "Capture from Layers"])
             .params("{id | name} stores every layer's current visible, frozen and locked state in the configuration"),
         CommandSpec::new("space.activate", "Activate Drawing Space", run_activate)
+            .menu(&["Format", "Drawing Space", "Activate"])
             .params("{id | name} → {space, changed: [{layer, field, from, to}], missing, warnings, current}")
             .alias(&["ads"]),
         CommandSpec::new("space.preview", "Preview Drawing Space", run_preview)
+            .menu(&["Format", "Drawing Space", "Preview"])
             .params("{id | name} → the changes activation would make; nothing is changed")
             .noundo(),
-        CommandSpec::new("space.duplicate", "Duplicate Drawing Space", run_duplicate).params("{id | name, newName?} → {space}"),
-        CommandSpec::new("space.delete", "Delete Drawing Space", run_delete).params("{id | name}"),
+        CommandSpec::new("space.duplicate", "Duplicate Drawing Space", run_duplicate)
+            .menu(&["Format", "Drawing Space", "Duplicate"])
+            .params("{id | name, newName?} → {space}"),
+        CommandSpec::new("space.delete", "Delete Drawing Space", run_delete)
+            .menu(&["Format", "Drawing Space", "Delete"])
+            .params("{id | name}"),
         CommandSpec::new("space.status", "Drawing Space Status", run_status)
+            .menu(&["Format", "Drawing Space", "Status"])
             .params("{} → {active: {id, name} | null, dirty, differences: [{layer, field, saved, now}]}")
             .noundo(),
         CommandSpec::new("space.recover", "Show, Thaw and Unlock All Layers", run_recover)

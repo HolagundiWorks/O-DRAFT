@@ -13,7 +13,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("project", "Project Details", run_project)
             .menu(&["Architecture", "Project", "Project Details"])
             .alias(&["hcwproject"])
-            .params("{details?: {title, owner, architect, engineer, pid, siteArea, plotUse, address, authority, date}} → {details} (set merges the given fields)"),
+            .params("{details?: {title, owner, architect, engineer, pid, siteArea, plotUse, address, authority, date, summary}} → {details} (set merges the given fields)"),
         CommandSpec::new("floors", "Floors and Heights", run_floors)
             .menu(&["Architecture", "Project", "Floors and Heights"])
             .alias(&["hcwfloors"])
@@ -63,7 +63,7 @@ fn num(v: &Value, key: &str, default: f64) -> f64 {
 }
 
 pub(super) fn run_project(s: &mut Session, p: &Value) -> Result<Value> {
-    const KEYS: [&str; 11] = ["title", "owner", "architect", "engineer", "pid", "siteArea", "plotUse", "address", "authority", "date", "location"];
+    const KEYS: [&str; 12] = ["title", "owner", "architect", "engineer", "pid", "siteArea", "plotUse", "address", "authority", "date", "location", "summary"];
     let mut cur = match get(s.doc()?, "details") {
         Value::Object(o) => o,
         _ => Map::new(),

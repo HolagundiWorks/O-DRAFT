@@ -1,0 +1,19 @@
+# Example OSSign config for O-Draft Windows signing (Azure Artifact / Trusted Signing).
+# Copy to %USERPROFILE%\.ossign\config.yaml and fill in values, or let
+# packaging/windows/sign.ps1 write a temporary config from AZURE_* env vars.
+#
+# Install: https://github.com/OSSign/OSSign/releases (Windows x86_64 zip)
+# Or set OSSIGN to the ossign.exe path. Licence: AGPL-3.0 (signing tool only).
+#
+# sign.ps1 prefers OSSign for Azure when ossign.exe is found; set SIGN_BACKEND=signtool
+# to force the Windows SDK path. PFX (WINDOWS_CERTIFICATE) always uses signtool.
+
+tokenType: azureTrusted
+azureTrusted:
+  tenantId: "00000000-0000-0000-0000-000000000000"
+  clientId: "00000000-0000-0000-0000-000000000000"
+  clientSecret: "replace-me"
+  region: eus
+  account: "your-signing-account"
+  profile: "your-cert-profile"
+msTimestampUrl: http://timestamp.acs.microsoft.com

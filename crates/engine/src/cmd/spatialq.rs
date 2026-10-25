@@ -23,15 +23,23 @@ const MAX_CELLS: usize = 12;
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("spatial.overview", "Spatial Overview", run_overview)
+            .menu(&["Tools", "Spatial", "Overview"])
+            .alias(&["sp.overview"])
             .params("{cols?: 1..12 (default 6), rows?: 1..12 (default 4)} → {space, extents, view, cell: [w, h], cells: [{col, row, min, max, count, types, layers}]} (a grid over the drawing: which parts hold what; empty cells are left out; Y up)")
             .noundo(),
         CommandSpec::new("spatial.query", "Objects in a Window", run_query)
+            .menu(&["Tools", "Spatial", "Query Window"])
+            .alias(&["sp.query"])
             .params("{window: [x0, y0, x1, y1], mode?: inside|crossing (default crossing), layers?: [name], types?: [Line|Circle|Text|...], limit?: 1..50 (default 25)} → {window, matched, shown, truncated, objects: [{handle, type, layer, min, max, center, ...}]} (objects whose bounds are inside, or touch, the window)")
             .noundo(),
         CommandSpec::new("spatial.nearest", "Nearest Objects", run_nearest)
+            .menu(&["Tools", "Spatial", "Nearest"])
+            .alias(&["sp.nearest"])
             .params("{point: [x, y], count?: 1..20 (default 5), layers?: [name], types?: [type]} → {point, objects: [{..., distance}]} (distance to the object's bounds, 0 when the point is inside them)")
             .noundo(),
         CommandSpec::new("spatial.describe", "Describe Objects", run_describe)
+            .menu(&["Tools", "Spatial", "Describe"])
+            .alias(&["sp.describe"])
             .params("{handles: [hex handle] (at most 20)} → {objects: [{handle, type, layer, min, max, center, ...geometry}], missing: [handle]}")
             .noundo(),
     ]

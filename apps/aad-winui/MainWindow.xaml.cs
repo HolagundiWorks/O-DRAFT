@@ -58,7 +58,7 @@ public sealed partial class MainWindow : Window
     private bool _hoverLeft;
     private bool _leftCollapsed;
     private DateTime _leftIdleSince = DateTime.UtcNow;
-    private double _leftWidth = 280;
+    private double _leftWidth = Density.SidePanelWidth;
     private bool _start;
     private bool _ucs = true;
     private Window? _calc;
@@ -520,7 +520,7 @@ public sealed partial class MainWindow : Window
             _ = PickVdb(id);
             return;
         }
-        if (id is "vdb.connect" or "vdb.disconnect" or "vdb.push" or "vdb.pull" or "vdb.sidecar")
+        if (id is "vdb.connect" or "vdb.disconnect" or "vdb.push" or "vdb.pull" or "vdb.sidecar" or "vdb.convert")
         {
             RunShilpiCommand(id);
             return;
@@ -891,7 +891,7 @@ public sealed partial class MainWindow : Window
             _ = PickVdb(id);
             return;
         }
-        if (id is "vdb.connect" or "vdb.disconnect" or "vdb.push" or "vdb.pull" or "vdb.sidecar")
+        if (id is "vdb.connect" or "vdb.disconnect" or "vdb.push" or "vdb.pull" or "vdb.sidecar" or "vdb.convert")
         {
             RunShilpiCommand(id);
             return;
@@ -1821,10 +1821,10 @@ public sealed partial class MainWindow : Window
 
     private static ShellPrefs.ModeSlot DefaultSlot(bool classic) => new()
     {
-        PinLeft = classic,
+        PinLeft = false,
         ToolsVisible = true,
         LeftWidth = 280,
-        LeftCollapsed = !classic,
+        LeftCollapsed = true,
     };
 
     private ShellPrefs.ModeSlot CaptureSlot() => new()
@@ -1839,7 +1839,7 @@ public sealed partial class MainWindow : Window
     {
         _pinLeft = slot.PinLeft;
         _showTools = slot.ToolsVisible;
-        _leftWidth = Math.Clamp(slot.LeftWidth > 0 ? slot.LeftWidth : 280, 180, 640);
+        _leftWidth = Math.Clamp(slot.LeftWidth > 0 ? slot.LeftWidth : Density.SidePanelWidth, 180, 640);
         _leftCollapsed = slot.LeftCollapsed;
         _leftIdleSince = DateTime.UtcNow;
         UpdatePinButton();
@@ -1908,7 +1908,8 @@ public sealed partial class MainWindow : Window
             return;
         }
         var delta = e.GetCurrentPoint(Content).Position.X - _dragX;
-        SetSideWidth(_dragWidth + delta);
+        // The panel is on the right, so dragging the grip left makes it wider.
+        SetSideWidth(_dragWidth - delta);
         PlaceChild();
         e.Handled = true;
     }
@@ -1943,7 +1944,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         var step = KeyDown(Windows.System.VirtualKey.Shift) ? 40 : 16;
-        if (e.Key == Windows.System.VirtualKey.Left)
+        if (e.Key == Windows.System.VirtualKey.Right)
         {
             step = -step;
         }
@@ -2291,6 +2292,7 @@ public sealed partial class MainWindow : Window
             {
             }
         }
+        Add("Convert / Push to ShilpiDB\tCtrl+Shift+H", "vdb.convert");
         if (connected)
         {
             Add("Push drawing (replace server)", "vdb.push");
@@ -2324,7 +2326,7 @@ public sealed partial class MainWindow : Window
             History.Text = Native.LastError(_host);
             Status.Text = Native.LastError(_host);
         }
-        else if (id is "vdb.connect" or "vdb.push" or "vdb.pull" or "vdb.disconnect" or "vdb.sidecar")
+        else if (id is "vdb.connect" or "vdb.push" or "vdb.pull" or "vdb.disconnect" or "vdb.sidecar" or "vdb.convert")
         {
             try
             {
@@ -2623,6 +2625,7 @@ public sealed partial class MainWindow : Window
             ShowDocuments(state);
             _draftingWindow?.Reload(state.Polar, state.Osnap, state.Dynmode, state.Ortho, state.Osmode, state.Polarang, state.DynpiCartesian, state.DynpiAbsolute);
             UpdateQuick();
+            PlaceCommandBar();
         }
         var stats = Native.ReadStats(_host);
         Status.Text = stats.entities + " entities";
@@ -3340,9 +3343,9 @@ public sealed partial class MainWindow : Window
         var name = layer.Name;
         var grid = LayerGrid();
         grid.Background = layer.Current
-            ? new SolidColorBrush(Windows.UI.Color.FromArgb(64, 0, 120, 215))
+            ? Density.SelectionFill()
             : index % 2 == 1
-                ? new SolidColorBrush(Windows.UI.Color.FromArgb(16, 128, 128, 128))
+                ? Density.ZebraFill()
                 : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         var status = layer.Current ? "check" : "layers";
         var statusTip = layer.Current ? "Current layer " + name : "Make " + name + " the current layer";
@@ -3437,7 +3440,7 @@ public sealed partial class MainWindow : Window
             var line = new Border
             {
                 Padding = new Thickness(4, 4, 4, 4),
-                CornerRadius = new CornerRadius(3),
+                CornerRadius = new CornerRadius(Density.CornerControl),
                 Background = selected ? SelectedBlockBrush() : null,
             };
             var stack = new StackPanel { Spacing = Density.SpaceXs };
@@ -3843,10 +3846,78 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(gear, "Customize tool bar");
         gear.Click += (_, _) => OpenTools();
         ToolStrip.Children.Add(gear);
+        RebuildArchitectureBar();
+    }
+
+    /// <summary>The drawing tools from the Architecture menu. Reports and settings stay in the menu.</summary>
+    private static readonly (string Id, string Label)[] ArchitectureTools =
+    [
+        ("hcwlayers", "Layer set"),
+        ("wall.draw", "Wall"),
+        ("wall.door", "Door"),
+        ("wall.window", "Window"),
+        ("room", "Room"),
+        ("rarea", "Room area"),
+        ("grid.axis", "Axis grid"),
+        ("column.place", "Column"),
+        ("stair.plan", "Stair"),
+        ("north.arrow", "North"),
+    ];
+
+    private void RebuildArchitectureBar()
+    {
+        ArchBar.Children.Clear();
+        foreach (var (id, label) in ArchitectureTools)
+        {
+            var command = id;
+            var button = new Button
+            {
+                Content = ToolIcons.Architecture(command, _dark),
+                Width = Density.MinTarget,
+                Height = Density.MinTarget,
+                MinWidth = Density.MinTarget,
+                MinHeight = Density.MinTarget,
+                Padding = new Thickness(0),
+            };
+            AutomationProperties.SetName(button, label);
+            ToolTipService.SetToolTip(button, label);
+            button.Click += (_, _) => StartCommand(command);
+            ArchBar.Children.Add(button);
+        }
+    }
+
+    private int _titlePlateDoc = -1;
+
+    /// A new drawing's empty Layout1 and Layout2 become the one Title plate sheet.
+    private void EnsureTitlePlate(ChromeState state)
+    {
+        var doc = state.Documents.FirstOrDefault(item => item.Active);
+        if (doc == null || doc.Index == _titlePlateDoc)
+        {
+            return;
+        }
+        var papers = state.Layouts.Where(name => !name.Equals("Model", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (papers.Count == 0)
+        {
+            return;
+        }
+        var stock = papers.All(name => name.Equals("Layout1", StringComparison.OrdinalIgnoreCase) || name.Equals("Layout2", StringComparison.OrdinalIgnoreCase));
+        _titlePlateDoc = doc.Index;
+        if (!stock)
+        {
+            return;
+        }
+        if (Native.Execute(_host, "sheet.designer", "{}") != 0)
+        {
+            History.Text = Native.LastError(_host);
+            return;
+        }
+        _layoutKey = "";
     }
 
     private void ShowLayouts(ChromeState state)
     {
+        EnsureTitlePlate(state);
         var key = state.Space + "\n" + string.Join("\n", state.Layouts);
         if (key == _layoutKey)
         {
@@ -4124,7 +4195,6 @@ public sealed partial class MainWindow : Window
     {
         Bar.Visibility = _showMenu ? Visibility.Visible : Visibility.Collapsed;
         FileTabs.Visibility = _showTabs ? Visibility.Visible : Visibility.Collapsed;
-        ToolRow.Height = new GridLength(0);
         PlaceCommandBar();
         StatusRow.Visibility = _showStatus ? Visibility.Visible : Visibility.Collapsed;
         StartPage.Visibility = _start ? Visibility.Visible : Visibility.Collapsed;
@@ -4137,10 +4207,29 @@ public sealed partial class MainWindow : Window
         var tools = _classic && _showTools;
         ToolColumn.Width = tools ? GridLength.Auto : new GridLength(0);
         ToolStripHost.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
+        if (tools && ArchBar.Children.Count == 0)
+        {
+            RebuildArchitectureBar();
+        }
+        ArchColumn.Width = tools ? GridLength.Auto : new GridLength(0);
+        ArchBarHost.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
         var leftOpen = _leftFloat != null || _pinLeft || _hoverLeft || !_leftCollapsed;
         // Floated panels leave only the context/pin strip in the dock.
+        // Unpinned panels collapse to a rail pinned on the right edge.
         var dockWidth = _leftFloat != null ? Math.Min(_leftWidth, 200) : _leftWidth;
-        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth : 12);
+        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth : 36);
+        SideRail.Visibility = leftOpen ? Visibility.Collapsed : Visibility.Visible;
+        LeftColumn.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
+        if (!leftOpen)
+        {
+            var header = (SideTabs.SelectedItem as TabViewItem)?.Header?.ToString();
+            if (string.IsNullOrEmpty(header))
+            {
+                header = "Properties";
+            }
+            SideRailLabel.Text = string.Join('\n', header);
+            AutomationProperties.SetName(SideRail, header + ". Move the pointer here to open the side panel.");
+        }
         LeftSplitterColumn.Width = leftOpen && _leftFloat == null ? new GridLength(8) : new GridLength(0);
         LeftSplitter.Visibility = leftOpen && _leftFloat == null ? Visibility.Visible : Visibility.Collapsed;
         SideTabs.Visibility = leftOpen && _leftFloat == null ? Visibility.Visible : Visibility.Collapsed;
@@ -4596,19 +4685,6 @@ public sealed partial class MainWindow : Window
         return false;
     }
 
-    private void OnBarPressed(object sender, PointerRoutedEventArgs e)
-    {
-        // AI command bar is fixed bottom-centre; drag is disabled.
-    }
-
-    private void OnBarMoved(object sender, PointerRoutedEventArgs e)
-    {
-    }
-
-    private void OnBarReleased(object sender, PointerRoutedEventArgs e)
-    {
-    }
-
     private void SyncHistory()
     {
         var text = History.Text ?? "";
@@ -4696,11 +4772,11 @@ public sealed partial class MainWindow : Window
             }
             _chrome.CadInput.PlaceholderText = "";
             var suggestH = SuggestList is { Visibility: Visibility.Visible, Items.Count: > 0 }
-                ? Math.Min(72.0, SuggestList.Items.Count * 20.0 + 4.0)
+                ? Math.Min(36.0, SuggestList.Items.Count * CommandChrome.DynHeightDip + 2.0)
                 : 0.0;
-            // Typed input only (no prompt / Length / Angle chrome).
-            var dipW = 140.0;
-            var dipH = 28.0 + suggestH;
+            // Half the previous 140×36 DIP cursor field. Typed text only.
+            var dipW = CommandChrome.DynWidthDip;
+            var dipH = CommandChrome.DynHeightDip + suggestH;
             var left = origin.X + px / scale + 18;
             var top = origin.Y + py / scale + 8;
             if (left + dipW > origin.X + canvasW - 8)
@@ -4738,6 +4814,13 @@ public sealed partial class MainWindow : Window
             chrome.ShowCad(false, 0, 0, 0, 0, "", false, "", "", "", "", 0);
             return;
         }
+        // Hide Ask while a CAD command runs so it does not cover the lower drawing (UX-007).
+        // Keep it when Allow/Decline is showing so the user can answer the assistant.
+        if (!string.IsNullOrEmpty(_command) && AssistantButtons.Visibility != Visibility.Visible)
+        {
+            chrome.ShowBar(false);
+            return;
+        }
         var available = Math.Max(0, canvasW - 48);
         var barW = Math.Min(600, available);
         if (double.IsNaN(CommandBar.Width) || Math.Abs(CommandBar.Width - barW) > 0.5)
@@ -4749,9 +4832,9 @@ public sealed partial class MainWindow : Window
         {
             CommandBar.Height = barH;
         }
-        // Fixed bottom-centre of the drawing canvas (not draggable).
+        // Fixed bottom-centre of the drawing canvas (not draggable); extra clearance above the status strip.
         var left = origin.X + Math.Max(0, (canvasW - barW) / 2);
-        var top = origin.Y + Math.Max(8, canvasH - barH - 16);
+        var top = origin.Y + Math.Max(8, canvasH - barH - 40);
         left = Math.Clamp(left, origin.X + 8, Math.Max(origin.X + 8, origin.X + canvasW - barW - 8));
         top = Math.Clamp(top, origin.Y + 8, Math.Max(origin.Y + 8, origin.Y + canvasH - barH - 8));
         if (!ClientToScreen(left, top, out var sx, out var sy))

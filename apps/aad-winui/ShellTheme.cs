@@ -19,6 +19,8 @@ internal static class ShellTheme
         "CadChannelBrush",
         "CanvasBackgroundBrush",
         "BorderSubtleBrush",
+        "SplashBackgroundBrush",
+        "SplashForegroundBrush",
     ];
 
     public static void VerifyTokens()

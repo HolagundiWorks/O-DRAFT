@@ -52,9 +52,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{fix?: bool} → {ok, errors, fixed?, issues, counts, message}")
             .noundo(),
         CommandSpec::new("inspect", "Inspect", run_inspect_alias)
+            .alias(&["insp"])
             .params("{entities?: bool, limit?: n} (same as drawing.inspect)")
             .noundo(),
         CommandSpec::new("query", "Query", run_query_alias)
+            .alias(&["qry"])
             .params(
                 "{type?, layer?, window?: [[x,y],[x,y]], crossing?: bool, limit?, offset?} \
                  (same as entities) | {window: [x0,y0,x1,y1], ...} (same as spatial.query)",

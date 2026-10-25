@@ -16,7 +16,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo()
             .transparent(),
         CommandSpec::new("find", "Find...", run_find).menu(&["Edit", "Find..."]).params("{find, replace?, matchCase?: bool, wholeWord?: bool}"),
-        CommandSpec::new("measuregeom", "Measure Geometry", run_measuregeom).params("{mode: distance|radius|angle|area, ...}").noundo(),
+        CommandSpec::new("measuregeom", "Measure Geometry", run_measuregeom)
+            .menu(&["Tools", "Inquiry", "Measure Geometry"])
+            .alias(&["mea", "measure"])
+            .params("{mode: distance|radius|angle|area, ...}")
+            .noundo(),
         CommandSpec::new("radius.measure", "Radius", run_radius).menu(&["Tools", "Inquiry", "Radius"]).params("{handle}").noundo(),
         CommandSpec::new("angle.measure", "Angle", run_angle).menu(&["Tools", "Inquiry", "Angle"]).params("{vertex, p1, p2} | {h1, h2}").noundo(),
     ]

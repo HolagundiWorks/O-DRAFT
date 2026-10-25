@@ -81,7 +81,11 @@ pub fn specs() -> Vec<CommandSpec> {
             Ok(json!({"center": [v.center.x, v.center.y], "height": v.height, "viewportPx": [s.viewport_px.0, s.viewport_px.1]}))
         })
         .noundo(),
-        CommandSpec::new("layout.set", "Switch Layout", run_layout_set).params("{name: \"Model\" | layout name}").noundo(),
+        CommandSpec::new("layout.set", "Switch Layout", run_layout_set)
+            .menu(&["View", "Layout", "Switch"])
+            .alias(&["layout", "tilemode"])
+            .params("{name: \"Model\" | layout name}")
+            .noundo(),
     ]
 }
 

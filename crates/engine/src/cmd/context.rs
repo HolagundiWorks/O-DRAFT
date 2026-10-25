@@ -21,6 +21,8 @@ pub struct Provider {
 
 /// Only providers that return real data are listed.
 pub const PROVIDERS: &[Provider] = &[
+    Provider { name: "digest", summary: "Compact drawing digest for AI (counts, extents, room tally) — prefer this over /drawing" },
+    Provider { name: "cards", summary: "Capped ContextCards for the current view (layer, type, length, geom)" },
     Provider { name: "drawing", summary: "The open drawing: units, space, object counts, extents, layouts" },
     Provider { name: "view", summary: "What is on screen now: the visible window and the objects in it, with positions" },
     Provider { name: "selection", summary: "The selected objects: type, layer and where each is" },
@@ -103,6 +105,8 @@ pub fn resolve(s: &Session, name: &str) -> Result<Value, RefError> {
     let n = name.to_ascii_lowercase();
     let d = s.doc().map_err(|_| unavailable(&n, "no drawing is open"))?;
     let v = match n.as_str() {
+        "digest" => super::aicards::drawing_digest(s).map_err(|e| unavailable("digest", &e.to_string()))?,
+        "cards" => super::aicards::context_cards(s, &json!({})).map_err(|e| unavailable("cards", &e.to_string()))?,
         "drawing" => drawing(s, d),
         "view" => view(s, d),
         "selection" => selection(s, d),

@@ -439,11 +439,35 @@ fn write_slot(
 
 // ---------------- the shared server ----------------
 
-/// Find a ShilpiDB program: `SHILPIDB_BIN` (a folder), `%LocalAppData%\ShilpiDB\bin`, then `PATH`.
+/// Folders to search for engine-bundled `shilpid` / `shilpi-http` (beside the running app first).
+#[cfg(not(target_arch = "wasm32"))]
+fn app_bin_dirs() -> Vec<std::path::PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            dirs.push(dir.to_path_buf());
+            // Some layouts put the shell one folder deeper than the staged binaries.
+            if let Some(parent) = dir.parent() {
+                dirs.push(parent.to_path_buf());
+            }
+        }
+    }
+    if let Some(d) = std::env::var_os("LOCALAPPDATA") {
+        let local = std::path::Path::new(&d);
+        // Suite ships the same binaries under Programs\OSAS\shilpidb when present.
+        dirs.push(local.join("Programs").join("OSAS").join("shilpidb"));
+        dirs.push(local.join("Programs").join("O-Draft"));
+        dirs.push(local.join("Programs").join("O-CoreOp"));
+    }
+    dirs
+}
+
+/// Find a ShilpiDB program: beside the app (engine bundle), then `SHILPIDB_BIN`,
+/// `%LocalAppData%\ShilpiDB\bin`, then `PATH`.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn find_program(name: &str) -> Option<std::path::PathBuf> {
     let exe = format!("{name}{}", std::env::consts::EXE_SUFFIX);
-    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    let mut dirs: Vec<std::path::PathBuf> = app_bin_dirs();
     if let Some(d) = std::env::var_os("SHILPIDB_BIN") {
         dirs.push(d.into());
     }
@@ -481,7 +505,10 @@ pub(crate) fn ensure_server(cmd: &str, addr: &str, gateway: &str, dir: &str, fil
     let shilpid = find_program("shilpid").ok_or_else(|| {
         bad(
             cmd,
-            format!("no ShilpiDB server answers on {addr} and shilpid was not found (set SHILPIDB_BIN to its folder, or pass `server` or `path`)"),
+            format!(
+                "no ShilpiDB server answers on {addr} and shilpid was not found beside the app \
+                 (engine bundle). Reinstall O-Draft, or set SHILPIDB_BIN, or pass `server` / `path`"
+            ),
         )
     })?;
     let base = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);

@@ -523,7 +523,11 @@ fn run_titleblock(s: &mut Session, p: &Value) -> Result<Value> {
     if !contact.is_empty() {
         labels.push((contact, Vec2::new(at.x + 0.010 * k, at.y + 0.026 * k), 0.005 * k));
     }
-    let site = [pick(&details, "owner").map(|o| format!("Client: {o}")), pick(&details, "address").map(|a| format!("Site: {a}"))]
+    let site = [
+        pick(&details, "owner").map(|o| format!("Client: {o}")),
+        pick(&details, "address").map(|a| format!("Site: {a}")),
+        pick(&details, "summary").map(|s| format!("Summary: {s}")),
+    ]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
@@ -693,7 +697,7 @@ mod tests {
         let context = json!({
             "v": 1, "prepared_on": "2026-10-19",
             "company": { "name": "Studio One", "address": "12 MG Road, Hospet", "phone": "+91 99999", "email": "a@b.in", "architect_name": "Aditi Rao" },
-            "project": { "project": { "name": "Mehta residence", "code": "P-007", "site_address": "Plot 4, Hospet" }, "client": { "name": "Mehta family" }, "project_ref": { "v": 1 } }
+            "project": { "project": { "name": "Mehta residence", "code": "P-007", "site_address": "Plot 4, Hospet", "summary": "Two-storey residence with courtyard." }, "client": { "name": "Mehta family" }, "project_ref": { "v": 1 } }
         });
         s.execute("companyfile", &json!({ "context": context })).unwrap();
         s.execute("bplttitleblock", &json!({ "at": [0, 0] })).unwrap();
@@ -701,7 +705,7 @@ mod tests {
         assert!(printed.iter().any(|t| t == "Mehta residence"), "{printed:?}");
         assert!(printed.iter().any(|t| t == "Studio One"));
         assert!(printed.iter().any(|t| t.contains("12 MG Road, Hospet") && t.contains("+91 99999")));
-        assert!(printed.iter().any(|t| t == "Client: Mehta family  |  Site: Plot 4, Hospet"));
+        assert!(printed.iter().any(|t| t == "Client: Mehta family  |  Site: Plot 4, Hospet  |  Summary: Two-storey residence with courtyard."));
         assert!(printed.iter().any(|t| t == "Date: 2026-10-19"));
         assert!(!printed.iter().any(|t| t == "PROJECT NAME"), "the placeholder is replaced");
     }

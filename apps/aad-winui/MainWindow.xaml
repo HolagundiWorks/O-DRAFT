@@ -8,31 +8,35 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition x:Name="ToolRow" Height="0" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="0" />
-            <RowDefinition Height="0" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock x:Name="PromptLive" Width="0" Height="0" Opacity="0" IsHitTestVisible="False" AutomationProperties.Name="Command prompt" />
         <MenuBar x:Name="Bar" Background="{ThemeResource SurfaceBrush}" AutomationProperties.Name="Menu" />
         <TabView x:Name="FileTabs" Grid.Row="1" Height="{StaticResource FileTabHeight}" VerticalAlignment="Top" Background="{ThemeResource SurfaceBrush}" IsAddTabButtonVisible="True" AddTabButtonClick="OnNewDrawingTab" TabCloseRequested="OnDrawingTabClose" SelectionChanged="OnDrawingTabSelected" CanDragTabs="False" CanReorderTabs="False" TabWidthMode="SizeToContent" AutomationProperties.Name="Open drawings" />
-        <Border Grid.Row="3" Height="1" Background="{ThemeResource BorderSubtleBrush}" />
-        <Grid Grid.Row="4">
+        <Border Grid.Row="2" Height="1" Background="{ThemeResource BorderSubtleBrush}" />
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="ToolColumn" Width="Auto" />
-                <ColumnDefinition x:Name="PropertiesColumn" Width="280" MinWidth="0" />
-                <ColumnDefinition x:Name="LeftSplitterColumn" Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition x:Name="ArchColumn" Width="Auto" />
+                <ColumnDefinition x:Name="LeftSplitterColumn" Width="Auto" />
+                <ColumnDefinition x:Name="PropertiesColumn" Width="280" MinWidth="0" />
             </Grid.ColumnDefinitions>
             <Border x:Name="ToolStripHost" Style="{StaticResource ToolStripChromeStyle}" AutomationProperties.Name="Tool strip">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel x:Name="ToolStrip" Orientation="Vertical" Spacing="{StaticResource SpaceSm}" Margin="{StaticResource PaddingSm}" />
                 </ScrollViewer>
             </Border>
-            <Border Grid.Column="1" Style="{StaticResource SidePanelChromeStyle}">
-            <Grid x:Name="LeftColumn" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited" Tag="left" AutomationProperties.Name="Side panel">
+            <Border x:Name="ArchBarHost" Grid.Column="2" Visibility="Collapsed" Background="{ThemeResource SurfaceSecondaryBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="1,0,0,0" AutomationProperties.Name="Architecture toolbar" AutomationProperties.LandmarkType="Navigation">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="ArchBar" Orientation="Vertical" Spacing="2" Margin="4,8,4,8" />
+                </ScrollViewer>
+            </Border>
+            <Border x:Name="SideHost" Grid.Column="4" Style="{StaticResource SidePanelChromeStyle}" BorderThickness="1,0,0,0" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited">
+            <Grid>
+            <Grid x:Name="LeftColumn" Tag="left" AutomationProperties.Name="Side panel">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -79,11 +83,15 @@
                     </TabViewItem>
                 </TabView>
             </Grid>
+            <Border x:Name="SideRail" Visibility="Collapsed" Background="{ThemeResource SurfaceSecondaryBrush}" Padding="4,12" ToolTipService.ToolTip="Side panel. Move the pointer here to open it." AutomationProperties.Name="Side panel">
+                <TextBlock x:Name="SideRailLabel" Style="{StaticResource MutedCaptionStyle}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" IsHitTestVisible="False" />
+            </Border>
+            </Grid>
             </Border>
             <!-- Control with a Border template so Background is hit-testable (empty Control was not). -->
-            <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="2" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
-            <Border x:Name="CanvasHost" Grid.Column="3" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
-            <Grid x:Name="StartPage" Grid.Column="3" Visibility="Collapsed" Background="{ThemeResource AppBackgroundBrush}" AutomationProperties.Name="Start">
+            <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="3" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
+            <Border x:Name="CanvasHost" Grid.Column="1" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
+            <Grid x:Name="StartPage" Grid.Column="1" Visibility="Collapsed" Background="{ThemeResource AppBackgroundBrush}" AutomationProperties.Name="Start">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">
                     <Image x:Name="StartLogo" Width="72" Height="72" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
                     <TextBlock x:Name="StartHeading" Text="O-Draft" FontSize="{StaticResource FontSizePageTitle}" FontWeight="SemiBold" HorizontalAlignment="Center" AutomationProperties.HeadingLevel="Level1" />
@@ -94,7 +102,7 @@
                 </StackPanel>
             </Grid>
         </Grid>
-        <Border x:Name="CommandBar" Visibility="Collapsed" Padding="{StaticResource PaddingCommandBar}" CornerRadius="{StaticResource CornerRadiusControl}" BorderThickness="0,2,0,0" BorderBrush="{ThemeResource CommandChromeAccentBrush}" Background="{ThemeResource CommandChromeBrush}" PreviewKeyDown="OnAiKey" PointerPressed="OnBarPressed" PointerMoved="OnBarMoved" PointerReleased="OnBarReleased" AutomationProperties.Name="AI command prompt">
+        <Border x:Name="CommandBar" Visibility="Collapsed" Padding="{StaticResource PaddingCommandBar}" CornerRadius="{StaticResource CornerRadiusControl}" BorderThickness="0,2,0,0" BorderBrush="{ThemeResource CommandChromeAccentBrush}" Background="{ThemeResource CommandChromeBrush}" PreviewKeyDown="OnAiKey" AutomationProperties.Name="AI command prompt">
             <Grid RowSpacing="{StaticResource SpaceSm}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -124,10 +132,10 @@
                             <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
                         </TextBox.Resources>
                     </TextBox>
-                    <Button x:Name="HistoryToggle" Grid.Column="1" Style="{StaticResource IconButtonStyle}" Background="Transparent" BorderThickness="{StaticResource BorderThicknessNone}" CornerRadius="{StaticResource CornerRadiusControl}" Click="OnHistoryToggle" AutomationProperties.Name="Command history" ToolTipService.ToolTip="Command history">
+                    <Button x:Name="HistoryToggle" Grid.Column="1" Style="{StaticResource IconButtonStyle}" Background="Transparent" BorderThickness="{StaticResource BorderThicknessNone}" CornerRadius="{StaticResource CornerRadiusButton}" Click="OnHistoryToggle" AutomationProperties.Name="Command history" ToolTipService.ToolTip="Command history">
                         <FontIcon x:Name="HistoryGlyph" Glyph="&#xE70D;" FontSize="{StaticResource FontSizeBody}" />
                     </Button>
-                    <Button x:Name="ClearHistory" Grid.Column="2" Style="{StaticResource IconButtonStyle}" Background="Transparent" BorderThickness="{StaticResource BorderThicknessNone}" CornerRadius="{StaticResource CornerRadiusControl}" Click="OnClearHistory" AutomationProperties.Name="Clear history" ToolTipService.ToolTip="Clear history">
+                    <Button x:Name="ClearHistory" Grid.Column="2" Style="{StaticResource IconButtonStyle}" Background="Transparent" BorderThickness="{StaticResource BorderThicknessNone}" CornerRadius="{StaticResource CornerRadiusButton}" Click="OnClearHistory" AutomationProperties.Name="Clear history" ToolTipService.ToolTip="Clear history">
                         <local:DrawnIcon Kind="delete" />
                     </Button>
                     <StackPanel x:Name="AssistantButtons" Grid.Column="3" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" VerticalAlignment="Center" Visibility="Collapsed">
@@ -149,7 +157,7 @@
                 <TextBlock x:Name="History" Visibility="Collapsed" />
             </Grid>
         </Border>
-        <Border Grid.Row="7" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="4" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
         <Grid x:Name="StatusRow" Padding="{StaticResource PaddingStatus}" ColumnSpacing="{StaticResource SpaceMd}" AutomationProperties.Name="Status">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -209,12 +217,12 @@
         </Grid>
         </Border>
         <!-- In-window splash (avoids a second top-level window fighting the command chrome). -->
-        <Grid x:Name="SplashOverlay" Grid.RowSpan="8" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
+        <Grid x:Name="SplashOverlay" Grid.RowSpan="5" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">
                 <Image x:Name="SplashLogo" Width="96" Height="96" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
-                <TextBlock Text="O-Draft" FontSize="{StaticResource FontSizeSplashTitle}" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" />
-                <TextBlock Text="Drafting. Part of OSAS, the Open Source Architecture Suite." FontSize="{StaticResource FontSizeSection}" Foreground="White" HorizontalAlignment="Center" />
-                <TextBlock Text="Open source · MIT OR Apache-2.0" FontSize="{StaticResource FontSizeBody}" Foreground="White" HorizontalAlignment="Center" Margin="0,8,0,0" />
+                <TextBlock Text="O-Draft" FontSize="{StaticResource FontSizeSplashTitle}" FontWeight="SemiBold" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Drafting. Part of OSAS, the Open Source Architecture Suite." FontSize="{StaticResource FontSizeSection}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Open source · MIT OR Apache-2.0" FontSize="{StaticResource FontSizeBody}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" Margin="0,8,0,0" />
             </StackPanel>
         </Grid>
     </Grid>

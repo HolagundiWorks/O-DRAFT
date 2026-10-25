@@ -8,6 +8,9 @@
         <Setter Property="Padding" Value="{StaticResource PaddingNone}" />
         <Setter Property="MinWidth" Value="{StaticResource IconButtonSize}" />
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusButton}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
     </Style>
     <Style x:Key="IconToggleButtonStyle" TargetType="ToggleButton">
         <Setter Property="Width" Value="{StaticResource IconButtonSize}" />
@@ -15,6 +18,9 @@
         <Setter Property="Padding" Value="{StaticResource PaddingNone}" />
         <Setter Property="MinWidth" Value="{StaticResource IconButtonSize}" />
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusButton}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
     </Style>
     <Style x:Key="DialogFieldStyle" TargetType="TextBox">
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}" />
@@ -55,6 +61,15 @@
     <Style x:Key="PrimaryActionStyle" TargetType="Button">
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}" />
         <Setter Property="Padding" Value="12,4" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusButton}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusButton}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="{StaticResource ControlHeight}" />
     </Style>
     <Style x:Key="AiChannelLabelStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeCaption}" />

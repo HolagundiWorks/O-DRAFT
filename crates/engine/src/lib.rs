@@ -356,7 +356,8 @@ impl Default for Settings {
             qpmode: false,
             polar_flags: 0,
             polaraddang: Vec::new(),
-            vdb_sidecar: false,
+            // Always keep a ShilpiDB `.vdb` beside the DWG/DXF on save (OLMo / spatial index).
+            vdb_sidecar: true,
         }
     }
 }

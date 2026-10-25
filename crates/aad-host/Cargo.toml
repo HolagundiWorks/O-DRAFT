@@ -39,6 +39,8 @@ aad-agent = { workspace = true }
 aad-llm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Loopback client for OSAS AI Core (local OLMo) when llama is not compiled in.
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
 pollster = "0.4"
 raw-window-handle = "0.6"
 wgpu = "30"

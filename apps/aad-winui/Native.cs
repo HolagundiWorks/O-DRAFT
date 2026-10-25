@@ -711,6 +711,16 @@ internal static class Native
 
     public static void RoundWindow(IntPtr hwnd) => Frame(hwnd, DwmColorNone, true);
 
+    /// <summary>
+    /// Drop the system window capsule so the cursor field can use the same 2 DIP corner as a button
+    /// (<c>CornerRadiusButton</c> / <see cref="Density.CornerControl"/>).
+    /// </summary>
+    public static void MatchButtonCorners(IntPtr hwnd)
+    {
+        var preference = 1; // DWMWCP_DONOTROUND
+        _ = DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int));
+    }
+
     public static void Frame(IntPtr hwnd, int borderColor, bool dark)
     {
         const long caption = 0x00C00000;
@@ -724,7 +734,7 @@ internal static class Native
             _ = SetWindowLongPtr(hwnd, -16, new IntPtr(next));
             _ = SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, 0x0020 | 0x0002 | 0x0001 | 0x0004 | 0x0010);
         }
-        var preference = 2;
+        var preference = 2; // DWMWCP_ROUND — system window corners. The cursor field opts out in MatchButtonCorners.
         _ = DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int));
         var mode = dark ? 1 : 0;
         _ = DwmSetWindowAttribute(hwnd, 20, ref mode, sizeof(int));

@@ -37,8 +37,14 @@ pub fn specs() -> Vec<CommandSpec> {
             .interactive(|_| Ok(Box::new(AreaM::default()))),
         CommandSpec::new("time", "Time", run_time).menu(&["Tools", "Inquiry", "Time"]).noundo(),
         CommandSpec::new("status", "Status", run_status).menu(&["Tools", "Inquiry", "Status"]).noundo(),
-        CommandSpec::new("drawing.inspect", "Inspect Drawing", run_inspect).params("{entities?: bool, limit?: n}").noundo(),
+        CommandSpec::new("drawing.inspect", "Inspect Drawing", run_inspect)
+            .menu(&["Tools", "Inquiry", "Inspect Drawing"])
+            .alias(&["dwginspect"])
+            .params("{entities?: bool, limit?: n}")
+            .noundo(),
         CommandSpec::new("entities", "Query Entities", run_entities)
+            .menu(&["Tools", "Inquiry", "Query Entities"])
+            .alias(&["ents"])
             .params("{type?, layer?, window?: [[x,y],[x,y]], crossing?: bool (default true; false = entirely inside), limit?, offset?} → {count (all matches), returned, offset, entities}")
             .noundo(),
         CommandSpec::new("count", "Count", run_count)

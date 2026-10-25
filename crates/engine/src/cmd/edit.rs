@@ -12,7 +12,12 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         // U undoes the last operation at once (Edit > Undo, Cmd+Z); UNDO asks how many.
         CommandSpec::new("u", "Undo", run_u).menu(&["Edit", "Undo"]).key("Cmd+Z").params("{}").noundo(),
-        CommandSpec::new("undo", "Undo", run_undo).params("{count?: n}").noundo().interactive(|_| Ok(Box::new(UndoM::default()))),
+        CommandSpec::new("undo", "Undo", run_undo)
+            .menu(&["Edit", "Undo Multiple"])
+            .alias(&["undo.multi"])
+            .params("{count?: n}")
+            .noundo()
+            .interactive(|_| Ok(Box::new(UndoM::default()))),
         CommandSpec::new("redo", "Redo", run_redo).menu(&["Edit", "Redo"]).key("Cmd+Shift+Z").alias(&["mredo"]).params("{count?: n}").noundo(),
         CommandSpec::new("cutclip", "Cut", run_cut)
             .menu(&["Edit", "Cut"])
@@ -50,8 +55,14 @@ pub fn specs() -> Vec<CommandSpec> {
             .interactive(|_| Ok(Box::new(PasteM { mode: PasteMode::Orig }))),
         CommandSpec::new("erase.selection", "Clear", run_clear).menu(&["Edit", "Clear"]).key("Delete").enabled(has_selection).params("{}"),
         CommandSpec::new("selectall", "Select All", run_selectall).menu(&["Edit", "Select All"]).key("Cmd+A").alias(&["ai_selall"]).noundo(),
-        CommandSpec::new("ai_deselect", "Deselect All", run_deselect).params("{}").noundo(),
+        CommandSpec::new("ai_deselect", "Deselect All", run_deselect)
+            .menu(&["Edit", "Deselect All"])
+            .alias(&["deselect", "unselect"])
+            .params("{}")
+            .noundo(),
         CommandSpec::new("select", "Select", run_select)
+            .menu(&["Edit", "Select"])
+            .alias(&["sel"])
             .params("{handles: [hex]} | {window: [[x,y],[x,y]], crossing?: bool} | {at: [x,y]} | {clear: true} | {add?: bool}")
             .noundo()
             .interactive(|_| Ok(Box::new(SelectM::default()))),

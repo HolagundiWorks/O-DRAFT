@@ -955,19 +955,23 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             );
             draw_list(&painter, &xf, &list, bg, false);
         }
-        painter.extend(Shape::dashed_line(&[xf.to_screen(g.base), xf.to_screen(c)], Stroke::new(1.0, t.canvas_ink), 4.0, 3.0));
+        painter.extend(Shape::dashed_line(&[xf.to_screen(g.base), xf.to_screen(c)], Stroke::new(0.5, Color32::from_rgb(0x00, 0xe6, 0xff)), 4.0, 3.0));
     }
-    // Rubber band preview of the active command.
+    // Rubber band preview of the active command (cyan highlight, thinner than committed geometry).
     if let (Some(c), true) = (app.canvas.cursor, app.session.running.is_some()) {
         let ents = app.session.preview(c);
         if !ents.is_empty()
             && let Ok(st) = app.session.state()
         {
-            let list = aad_render::build_entities(
+            let mut list = aad_render::build_entities(
                 &st.doc,
                 ents.iter(),
                 &aad_render::Options { tolerance: 0.5 / scale, min_dash: 2.0 / scale, ..Default::default() },
             );
+            for prim in &mut list.prims {
+                prim.color = aad_color::Rgb(0x00, 0xe6, 0xff);
+                prim.aci7 = false;
+            }
             draw_list(&painter, &xf, &list, bg, false);
         }
     }
@@ -1093,7 +1097,8 @@ fn pickbox_half(pickbox: f64) -> Option<f32> {
 }
 
 fn draw_crosshair(app: &CadApp, p: &egui::Painter, rect: Rect, at: Pos2, pickbox: bool) {
-    let st = Stroke::new(1.0, Tokens::get().crosshair);
+    // AutoCAD-style thin hairlines: CURSORSIZE % of height; pick-box gap only while selecting.
+    let st = Stroke::new(0.5, Tokens::get().crosshair);
     let len = (rect.height() * app.session.settings.cursorsize as f32 / 100.0).max(12.0);
     let pb = if pickbox { pickbox_half(app.session.settings.pickbox) } else { None };
     let gap = pb.unwrap_or(0.0);

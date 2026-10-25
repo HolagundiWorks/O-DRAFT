@@ -135,6 +135,7 @@ fn apply(s: &mut Session, ctx: &Value) -> Result<()> {
                 ("title", text(project.get("name"), "name")?),
                 ("pid", text(project.get("code"), "code")?),
                 ("address", text(project.get("site_address"), "site_address")?),
+                ("summary", text(project.get("summary"), "summary")?),
                 ("owner", text(block.pointer("/client/name").or_else(|| project.get("client_name")), "client")?),
             ] {
                 if !value.is_empty() {
@@ -165,7 +166,7 @@ mod tests {
             "company": { "name": "Studio One", "address": "12 MG Road, Hospet", "phone": "+91 99999", "email": "a@b.in", "pan": "ABCDE1234F",
                          "gstin": "29ABCDE1234F1Z5", "coa_registration": "CA/2001/1234", "architect_name": "Aditi Rao" },
             "project": {
-                "project": { "id": 7, "code": "P-007", "name": "Mehta residence", "site_address": "Plot 4, Hospet", "client_name": "Mehta family" },
+                "project": { "id": 7, "code": "P-007", "name": "Mehta residence", "site_address": "Plot 4, Hospet", "summary": "Two-storey residence with courtyard.", "client_name": "Mehta family" },
                 "client": { "name": "Mehta family" },
                 "consultancy_label": "Interior architecture",
                 "project_ref": { "v": 1, "company_uuid": "u", "project_id": 7 }
@@ -183,6 +184,7 @@ mod tests {
         assert_eq!(r["details"]["owner"], "Mehta family");
         assert_eq!(r["details"]["architect"], "Aditi Rao");
         assert_eq!(r["details"]["address"], "Plot 4, Hospet");
+        assert_eq!(r["details"]["summary"], "Two-storey residence with courtyard.");
         assert_eq!(r["details"]["pid"], "P-007");
         assert_eq!(r["details"]["date"], "2026-10-19");
     }

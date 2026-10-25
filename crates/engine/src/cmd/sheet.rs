@@ -2,6 +2,8 @@
 //! block with fields, lets a finished sheet be saved as a reusable template, and lists and edits
 //! its viewports. There is no Layout panel; sheet setup is done through these commands.
 //!
+//! - **Title plate** (`sheet.designer`): a new drawing's empty Layout1 and Layout2 become one
+//!   layout, `Title plate`, with the title block. That sheet is the title plate designer.
 //! - **Title block** (`sheet.titleblock`): the block `AAD-TITLEBLOCK`, drawn in millimetres of real
 //!   paper size and inserted at the lower right of the printable area, with a border around it. Its
 //!   fields are block attributes (`PROJECT`, `CLIENT`, `TITLE`, `FLOOR`, `DRAWN`, `DATE`, `SHEET`,
@@ -32,6 +34,8 @@ use super::*;
 use crate::{Result, Session};
 
 pub const TITLE_BLOCK: &str = "AAD-TITLEBLOCK";
+/// The single paper layout a new drawing uses to design the title plate.
+pub const TITLE_PLATE: &str = "Title plate";
 const BORDER_LAYER: &str = "A-ANNO-BORD";
 const TITLE_LAYER: &str = "A-ANNO-TTLB";
 /// The fields of the standard title block, in the order the panel shows them.
@@ -55,6 +59,9 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("sheet.titleblock", "Title Block", run_titleblock)
             .menu(&["Architecture", "Sheets", "Title Block"])
             .params("{layout?, fields?: {PROJECT, CLIENT, TITLE, FLOOR, DRAWN, DATE, SHEET, SCALE, REV}} → {handle, fields, created}"),
+        CommandSpec::new("sheet.designer", "Title Plate", run_designer)
+            .menu(&["Architecture", "Sheets", "Title Plate"])
+            .params("{open?: bool} → {name, layouts, created}. A new drawing's empty Layout1/Layout2 become this one sheet; `open` switches to it."),
         CommandSpec::new("sheet.fields", "Sheet Fields", run_fields)
             .menu(&["Architecture", "Sheets", "Sheet Fields"])
             .params("{layout?, fields?: {TAG: value}} → {fields: {TAG: value}} (without `fields`: just reads them)"),
@@ -71,9 +78,19 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("sheet.template.delete", "Delete Sheet Template", run_tpl_delete)
             .params("{name, scope?: drawing|user, folder?} → {deleted}")
             .noundo(),
-        CommandSpec::new("viewport.list", "List Viewports", run_vp_list).params("{layout?} → {viewports: [{handle, rect, scale, scaleText, locked, frozen}]}").noundo(),
-        CommandSpec::new("viewport.add", "Add Viewport", run_vp_add).params("{layout?, p1?, p2? (paper units; default the printable area), scale?: \"1:100\", locked?: bool} → {handle}"),
-        CommandSpec::new("viewport.remove", "Remove Viewport", run_vp_remove).params("{handle}"),
+        CommandSpec::new("viewport.list", "List Viewports", run_vp_list)
+            .menu(&["View", "Viewports", "List"])
+            .alias(&["vplist"])
+            .params("{layout?} → {viewports: [{handle, rect, scale, scaleText, locked, frozen}]}")
+            .noundo(),
+        CommandSpec::new("viewport.add", "Add Viewport", run_vp_add)
+            .menu(&["View", "Viewports", "Add"])
+            .alias(&["vpadd", "mview"])
+            .params("{layout?, p1?, p2? (paper units; default the printable area), scale?: \"1:100\", locked?: bool} → {handle}"),
+        CommandSpec::new("viewport.remove", "Remove Viewport", run_vp_remove)
+            .menu(&["View", "Viewports", "Remove"])
+            .alias(&["vprem"])
+            .params("{handle}"),
     ]
 }
 
@@ -248,7 +265,15 @@ fn default_fields(d: &Drawing, layout: &str) -> BTreeMap<String, String> {
     let det = project::get(d, "details");
     let text = |k: &str| det.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     let mut m = BTreeMap::new();
-    m.insert("PROJECT".into(), text("title"));
+    let mut project = text("title");
+    let summary = text("summary");
+    if !summary.is_empty() {
+        if !project.is_empty() {
+            project.push_str(" — ");
+        }
+        project.push_str(&summary);
+    }
+    m.insert("PROJECT".into(), project);
     m.insert("CLIENT".into(), text("owner"));
     m.insert("DRAWN".into(), if text("engineer").is_empty() { text("architect") } else { text("engineer") });
     m.insert("SHEET".into(), layout.to_string());
@@ -286,6 +311,55 @@ fn string_map(v: Option<&Value>) -> Result<BTreeMap<String, String>> {
         }
     }
     Ok(out)
+}
+
+// ---------------- title plate ----------------
+
+/// Empty Layout1/Layout2 (or an existing Title plate) and nothing else.
+fn only_stock_sheets(d: &Drawing) -> bool {
+    !d.layouts.is_empty()
+        && d.layouts.iter().all(|l| {
+            let stock = l.name.eq_ignore_ascii_case("Layout1") || l.name.eq_ignore_ascii_case("Layout2");
+            let plate = l.name.eq_ignore_ascii_case(TITLE_PLATE);
+            (stock && l.entities.is_empty()) || plate
+        })
+}
+
+fn layout_names(s: &Session) -> Vec<String> {
+    s.doc().map(|d| d.layouts.iter().map(|l| l.name.clone()).collect()).unwrap_or_default()
+}
+
+/// One paper layout, `Title plate`, with the title block. Drawings that already have other sheets,
+/// or anything drawn on Layout1 or Layout2, are left as they are.
+fn run_designer(s: &mut Session, p: &Value) -> Result<Value> {
+    let open = bool_or(p, "open", false);
+    if only_stock_sheets(s.doc()?) {
+        if s.doc()?.layout(TITLE_PLATE).is_none() {
+            s.execute("layout.new", &json!({ "name": TITLE_PLATE, "viewport": false }))?;
+        }
+        let remove: Vec<String> = s
+            .doc()?
+            .layouts
+            .iter()
+            .filter(|l| !l.name.eq_ignore_ascii_case(TITLE_PLATE))
+            .map(|l| l.name.clone())
+            .collect();
+        for name in remove {
+            s.execute("layout.delete", &json!({ "name": name }))?;
+        }
+    } else if s.doc()?.layout(TITLE_PLATE).is_none() {
+        return Ok(json!({ "name": Value::Null, "layouts": layout_names(s), "created": false }));
+    }
+    let block = s.execute("sheet.titleblock", &json!({ "layout": TITLE_PLATE }))?;
+    if open {
+        s.execute("layout.set", &json!({ "name": TITLE_PLATE }))?;
+    }
+    Ok(json!({
+        "name": TITLE_PLATE,
+        "layouts": layout_names(s),
+        "created": block.get("created").cloned().unwrap_or(Value::Bool(false)),
+        "fields": block.get("fields").cloned().unwrap_or(Value::Null),
+    }))
 }
 
 // ---------------- title block and fields ----------------

@@ -1,4 +1,4 @@
-//! Sheets: the title block and its fields, saved sheet templates, and viewports.
+//! Sheets: the title block and its fields, the title-plate layout, saved sheet templates, and viewports.
 
 use aad_engine::Session;
 use aad_engine::doc::EntityKind;
@@ -58,6 +58,30 @@ fn a_title_block_starts_from_the_project_and_its_fields_can_be_edited() {
     s.execute("layout.set", &json!({"name": "Model"})).unwrap();
     assert!(s.execute("sheet.titleblock", &json!({})).is_err(), "not in the Model tab");
     assert!(s.execute("sheet.titleblock", &json!({"layout": "Nope"})).is_err());
+}
+
+#[test]
+fn a_new_drawing_has_one_title_plate_layout() {
+    let mut s = Session::new();
+    let r = s.execute("sheet.designer", &json!({})).unwrap();
+    assert_eq!(r["layouts"], json!(["Title plate"]));
+    assert_eq!(r["created"], true);
+    assert_eq!(r["fields"]["SHEET"], "Title plate");
+    assert!(matches!(s.layout_space(), aad_engine::doc::Space::Model), "preparing the plate stays in model space");
+    let again = s.execute("sheet.designer", &json!({})).unwrap();
+    assert_eq!(again["layouts"], json!(["Title plate"]));
+    assert_eq!(again["created"], false);
+
+    let mut drawn = Session::new();
+    drawn.execute("layout.set", &json!({"name": "Layout1"})).unwrap();
+    drawn.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
+    let kept = drawn.execute("sheet.designer", &json!({})).unwrap();
+    let names = kept["layouts"].as_array().unwrap();
+    assert!(names.iter().any(|n| n == "Layout1"));
+    assert!(names.iter().all(|n| n != "Title plate"));
+
+    s.execute("sheet.designer", &json!({"open": true})).unwrap();
+    assert!(matches!(s.layout_space(), aad_engine::doc::Space::Paper(n) if n == "Title plate"));
 }
 
 #[test]

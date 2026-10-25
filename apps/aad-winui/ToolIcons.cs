@@ -11,7 +11,7 @@ namespace Aad.WinUi;
 /// The tool-strip marks, the same 24×24 line drawings as the other window: gray for geometry
 /// already there, blue for what the command adds, orange for a picked point.
 /// </summary>
-internal static class ToolIcons
+internal static partial class ToolIcons
 {
     public static UIElement For(string id, bool dark, bool onFill = false)
     {

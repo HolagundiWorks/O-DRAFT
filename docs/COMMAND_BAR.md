@@ -87,13 +87,18 @@ Host `dyn` JSON (when the pointer is known, or at canvas centre until the first 
 
 WinUI renders this state; it does not hard-code per-command stages. See also [UI_UX.md](UI_UX.md).
 
-Cursor CAD chrome is ~50% size at 50% opacity and shows **only** the typed command/text (no
-prompt label, unit hint, or Length/Angle readouts). Typed distances still accept SketchUp-style
-units (`mm`, `cm`, `m`, `km`, `in`, `ft`, `yd`, `5'6"`) in the engine.
+Cursor CAD chrome shows **only** the typed command/text (no prompt label, unit hint, or
+Length/Angle readouts). The field is 70×18 DIP, half the previous 140×36 DIP bar; suggestion rows
+use the same 18 DIP height. Its corner radius is the button radius, 2 DIP
+(`CornerRadiusButton`), not the system window capsule. That is below the 32 DIP floor used by the rest of the chrome. Typed
+distances still accept SketchUp-style units (`mm`, `cm`, `m`, `km`, `in`, `ft`, `yd`, `5'6"`) in
+the engine.
 
 ## AI bar placement
 
 Fixed bottom-centre of the drawing canvas. Solid fill (no acrylic / glass); not draggable.
+While a CAD command is running the Ask bar hides so it does not cover the lower drawing; it
+stays visible when Allow/Decline is showing.
 
 ## Assistant safety
 

@@ -125,6 +125,33 @@ pub fn registry() -> Vec<ToolDef> {
             run: |s, _| exec(s, "bpltcheck", json!({})),
         },
         ToolDef {
+            name: "get_drawing_digest",
+            description: "Compact drawing digest for AI: object counts by type/layer, extents, room tally, schedule opening count, Shilpi connection. Prefer this over dumping the whole drawing into the prompt.",
+            schema: empty_schema,
+            risk: |_| Risk::Read,
+            summary: |_| "Read the drawing digest".into(),
+            run: |s, _| exec(s, "ai.digest", json!({})),
+        },
+        ToolDef {
+            name: "query_context_cards",
+            description: "Capped ContextCards (id, layer, type, bboxMm, lengthMm/geom) for a window of the open drawing. Default window is the current view. Filter with layers/types (e.g. A-DOOR, A-WALL, Insert).",
+            schema: || {
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "window": { "type": "array", "items": { "type": "number" }, "maxItems": 4, "description": "[x0,y0,x1,y1]; omit for current view" },
+                        "layers": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "maxItems": 20 },
+                        "types": { "type": "array", "items": { "type": "string", "maxLength": 32 }, "maxItems": 10 },
+                        "limit": { "type": "integer", "minimum": 1, "maximum": 24 }
+                    },
+                    "additionalProperties": false
+                })
+            },
+            risk: |_| Risk::Read,
+            summary: |_| "Query context cards in a window".into(),
+            run: |s, a| exec(s, "ai.cards", Value::Object(a.clone())),
+        },
+        ToolDef {
             name: "get_spatial_overview",
             description: "Where things are: the drawing's extents, the part on screen, and a grid showing how many objects of which types and layers lie in each part. Row 0 is the bottom (smallest Y), column 0 the left (smallest X). Use it first to find out where to look.",
             schema: || {

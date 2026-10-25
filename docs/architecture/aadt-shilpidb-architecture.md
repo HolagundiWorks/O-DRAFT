@@ -72,7 +72,7 @@ are not in the drawing so the server mirrors model space.
 | `vdb.query` | Bbox query against a `.vdb` file |
 | `vdb.connect` / `vdb.disconnect` | Ping and remember / clear a local `shilpid` address |
 | `vdb.push` / `vdb.pull` | Push store to server (`replace?`) / pull into drawing (`replace?`) |
-| `vdb.sidecar` | Pref (`enabled?` / `toggle?`): after DXF/DWG save, also write `<stem>.vdb` |
+| `vdb.sidecar` | Pref (`enabled?` / `toggle?`): after DXF/DWG save, write `<stem>.vdb` beside the drawing (**default on**) |
 | `vdb.status` | `{connected, addr?, sidecar}` for the shell status chip |
 
 Programmatic calls never open dialogs; pass `{path}` (and `{window}` for query).

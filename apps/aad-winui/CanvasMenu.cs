@@ -198,7 +198,7 @@ internal static class CanvasMenu
             FontSize = Density.Font,
             BorderThickness = new Thickness(0),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            CornerRadius = new CornerRadius(4),
+            CornerRadius = new CornerRadius(Density.CornerControl),
         };
         Density.Name(button, label);
         button.Click += (_, _) =>

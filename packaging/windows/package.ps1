@@ -115,6 +115,59 @@ Copy-Item (Join-Path $Bin 'aad-cli.exe') $Stage
 # Licence texts and notices, installed beside the program (the licence page of the wizard shows LICENSE-MIT).
 foreach ($n in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'THIRD_PARTY_LICENSES.md', 'ATTRIBUTION.md') { Copy-Item (Join-Path $Root $n) $Stage }
 
+# ShilpiDB engine binaries (bundled sibling process — not a separate product). Prefer a local
+# shilpidb workspace build, then OSAS suite-tools, then SHILPIDB_BIN.
+$ShilpiDefine = @()
+$ShilpiStage = Join-Path $Stage 'shilpidb-engine'
+function Find-ShilpiEngineBins {
+  $names = @('shilpid.exe', 'shilpi-http.exe')
+  $candidates = [System.Collections.Generic.List[string]]::new()
+  if ($env:SHILPIDB_BIN) { [void]$candidates.Add($env:SHILPIDB_BIN) }
+  $shilpiRoot = Join-Path $Root '..\shilpidb'
+  if (Test-Path $shilpiRoot) {
+    $rel = Join-Path (Resolve-Path $shilpiRoot) 'target\release'
+    [void]$candidates.Add($rel)
+    $triple = Join-Path (Resolve-Path $shilpiRoot) "target\$Target\release"
+    [void]$candidates.Add($triple)
+  }
+  foreach ($suite in @(
+      (Join-Path $Root '..\OSAS-Open_Source_Architecture_Suit\installer\suite-tools'),
+      (Join-Path $Root '..\OSAS-Open_Source_Architecture_Suit\osas-open_source_architecture_suit\..\installer\suite-tools'),
+      (Join-Path $env:LOCALAPPDATA 'Programs\OSAS\shilpidb')
+    )) {
+    if (Test-Path $suite) { [void]$candidates.Add((Resolve-Path $suite).Path) }
+  }
+  foreach ($dir in $candidates) {
+    if (($names | ForEach-Object { Test-Path (Join-Path $dir $_) }) -notcontains $false) { return $dir }
+  }
+  # Build from sibling shilpidb when sources exist but binaries do not.
+  if (Test-Path (Join-Path $Root '..\shilpidb\Cargo.toml')) {
+    $repo = (Resolve-Path (Join-Path $Root '..\shilpidb')).Path
+    Write-Output "==> cargo build shilpid + shilpi-http ($repo)"
+    Push-Location $repo
+    try {
+      cargo build --release -p shilpid -p shilpi-http --target $Target
+      if ($LASTEXITCODE -ne 0) { throw "shilpidb engine build failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $built = Join-Path $repo "target\$Target\release"
+    if (-not (Test-Path (Join-Path $built 'shilpid.exe'))) { $built = Join-Path $repo 'target\release' }
+    if (($names | ForEach-Object { Test-Path (Join-Path $built $_) }) -notcontains $false) { return $built }
+  }
+  return $null
+}
+$ShilpiSrc = Find-ShilpiEngineBins
+if ($ShilpiSrc) {
+  New-Item -ItemType Directory -Force -Path $ShilpiStage | Out-Null
+  Copy-Item (Join-Path $ShilpiSrc 'shilpid.exe') $Stage -Force
+  Copy-Item (Join-Path $ShilpiSrc 'shilpi-http.exe') $Stage -Force
+  Copy-Item (Join-Path $ShilpiSrc 'shilpid.exe') $ShilpiStage -Force
+  Copy-Item (Join-Path $ShilpiSrc 'shilpi-http.exe') $ShilpiStage -Force
+  $ShilpiDefine = @('-d', "ShilpiDir=$ShilpiStage")
+  Write-Output "shilpidb engine: staged from $ShilpiSrc"
+} else {
+  Write-Warning 'shilpid.exe / shilpi-http.exe not found — package will not bundle the ShilpiDB engine. Set SHILPIDB_BIN or build ..\shilpidb.'
+}
+
 $WinUiDir = $null
 $WinUiDefine = @()
 if ($Arch -eq 'x64') {
@@ -139,6 +192,10 @@ if ($Arch -eq 'x64') {
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'o-draft.exe') (Join-Path $Stage 'aad-cli.exe')
 if (Test-Path (Join-Path $Stage 'ODraft.WinUi.exe')) {
   & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'ODraft.WinUi.exe') (Join-Path $Stage 'aad_host.dll')
+}
+# WiX and the portable zip also take binaries from WinUiDir; sign those copies too.
+if ($WinUiDir -and (Test-Path (Join-Path $WinUiDir 'ODraft.WinUi.exe'))) {
+  & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $WinUiDir 'ODraft.WinUi.exe') (Join-Path $WinUiDir 'aad_host.dll')
 }
 
 # Typography presets: AAD_FONTS_DIR holds the font files (.ttf/.otf) and their licence texts, taken
@@ -191,7 +248,7 @@ Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'aad.wxs') -arch $Arch -ext WixToolset.UI.wixext `
     -d "Version=$MsiVersion" -d "ProductName=$ProductName" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\aad.ico')" `
     -d "LicenseRtf=$LicenseRtf" -d "DialogBmp=$DialogBmp" -d "BannerBmp=$BannerBmp" `
-    @FontsDefine @ModelDefine @WinUiDefine -o $Msi
+    @FontsDefine @ModelDefine @WinUiDefine @ShilpiDefine -o $Msi
 }
 # wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
 Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Msi, '.wixpdb'))
@@ -203,12 +260,21 @@ Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
 if (Test-Path (Join-Path $Stage 'aad_host.dll')) { Copy-Item (Join-Path $Stage 'aad_host.dll') $Portable }
+foreach ($n in 'shilpid.exe', 'shilpi-http.exe') {
+  $src = Join-Path $Stage $n
+  if (Test-Path $src) { Copy-Item $src $Portable -Force }
+}
 if ($WinUiDir -and (Test-Path $WinUiDir)) {
   Get-ChildItem -Path $WinUiDir -File | ForEach-Object {
     Copy-Item $_.FullName $Portable -Force
   }
   Get-ChildItem -Path $WinUiDir -Directory | ForEach-Object {
     Copy-Item $_.FullName (Join-Path $Portable $_.Name) -Recurse -Force
+  }
+  # Prefer the signed Stage copies over whatever WinUiDir last wrote for these names.
+  foreach ($n in 'ODraft.WinUi.exe', 'aad_host.dll', 'o-draft.exe', 'aad-cli.exe') {
+    $src = Join-Path $Stage $n
+    if (Test-Path $src) { Copy-Item $src $Portable -Force }
   }
 }
 if (Test-Path (Join-Path $Stage 'fonts')) { Copy-Item (Join-Path $Stage 'fonts') $Portable -Recurse }

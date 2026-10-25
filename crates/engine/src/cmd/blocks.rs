@@ -45,9 +45,19 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["pu", "-purge"])
             .params("{type?: all|blocks|dimstyles|groups|layers|linetypes|mleaderstyles|tablestyles|textstyles|zerolength|emptytext (default all: every named type), names?: \"A*,B\" (default *)} → purged")
             .interactive(|_| Ok(Box::new(purge::PurgeM::default()))),
-        CommandSpec::new("blocks.list", "List Blocks", run_list).enabled(has_doc).noundo(),
-        CommandSpec::new("blocktext", "Block Text", run_blocktext).params("{block} → {text: [{handle, kind, text, layer, tag?}]}").noundo(),
+        CommandSpec::new("blocks.list", "List Blocks", run_list)
+            .menu(&["Insert", "Block", "List"])
+            .alias(&["blist"])
+            .enabled(has_doc)
+            .noundo(),
+        CommandSpec::new("blocktext", "Block Text", run_blocktext)
+            .menu(&["Insert", "Block", "List Text"])
+            .alias(&["btext"])
+            .params("{block} → {text: [{handle, kind, text, layer, tag?}]}")
+            .noundo(),
         CommandSpec::new("blocktextedit", "Edit Block Text", run_blocktextedit)
+            .menu(&["Insert", "Block", "Edit Text"])
+            .alias(&["btextedit"])
             .params("{block, handle (an object inside the block), text} → {block, instances} (changes every reference of the block)"),
         CommandSpec::new("battman", "Block Attribute Manager...", run_battman)
             .menu(&["Modify", "Object", "Attribute", "Block Attribute Manager..."])

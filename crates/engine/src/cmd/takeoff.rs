@@ -81,7 +81,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Architecture", "Take-off", "Clear Labels"])
             .alias(&["mclear"])
             .params("{} → {erased} (erases the objects on MEASURE-LABELS and MEASURE-TABLE only)"),
-        CommandSpec::new("takeoff.list", "List Take-offs", run_list).params("{name?} → {takeoffs: [name] | the saved result}").noundo(),
+        CommandSpec::new("takeoff.list", "List Take-offs", run_list)
+            .menu(&["Architecture", "Take-off", "List"])
+            .alias(&["tolist", "mlist"])
+            .params("{name?} → {takeoffs: [name] | the saved result}")
+            .noundo(),
         CommandSpec::new("takeoff.export", "Export Take-off", run_export)
             .menu(&["Architecture", "Take-off", "Export CSV"])
             .alias(&["mexport"])

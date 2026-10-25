@@ -7,9 +7,22 @@ use aad_color::Rgb;
 use aad_engine::Session;
 use aad_engine::doc::{Entity, Handle};
 use aad_engine::grips;
+use aad_engine::snap::{self, SnapHit};
+use aad_engine::snap::tracking::{Acquired, PathShape, Track};
 use aad_geom::Vec2;
 use aad_render::mesh::{self, MeshData};
 use aad_render::{DPrim, DisplayList, Kind};
+
+/// Selection highlight (matches egui `Tokens::selection`).
+const SELECTION_INK: Rgb = Rgb(0x4a, 0x8f, 0xff);
+/// Rollover / hover highlight (matches egui `Tokens::hover`).
+const HOVER_INK: Rgb = Rgb(0x9c, 0xc6, 0xff);
+/// Rubber-band / command preview: cyan so the active geometry stands out from committed entities.
+const ACTIVE_INK: Rgb = Rgb(0x00, 0xe6, 0xff);
+/// Object-snap and tracking ink (matches egui `Tokens::snap`).
+const SNAP_INK: Rgb = Rgb(0x2f, 0xd0, 0x62);
+/// Overlay hairline width in points: near one device pixel on typical DPI (AutoCAD-thin).
+const OVERLAY_HAIRLINE: f32 = 0.5;
 
 /// A grip the pointer has picked and not yet placed.
 #[derive(Clone, Copy)]
@@ -48,8 +61,13 @@ impl HotGrip {
 pub struct Cursor {
     pub aim: Vec2,
     pub raw: Option<Vec2>,
-    pub snap: Option<Vec2>,
+    pub snap: Option<SnapHit>,
+    pub track: Option<Track>,
     pub hot: Option<HotGrip>,
+    /// Entity under the pick box while selecting (rollover).
+    pub hover: Option<Handle>,
+    /// Grip under the pointer while idle (warm highlight).
+    pub warm_grip: Option<(Handle, usize)>,
 }
 
 pub fn mesh(
@@ -67,6 +85,7 @@ pub fn mesh(
     let view = state.view();
     let scale = f64::from(height.max(1)) / view.height.max(1e-12);
     let mut list = DisplayList::default();
+    let mut window_fill: Option<([Vec2; 4], [u8; 4])> = None;
     if let Some(cursor) = cursor {
         if let Some(hot) = cursor.hot {
             if let Some(entity) = state.doc.entity(hot.handle)
@@ -86,8 +105,9 @@ pub fn mesh(
                         ..Default::default()
                     },
                 );
+                tint(&mut list, ACTIVE_INK);
             }
-            add_poly(&mut list, &[hot.base, cursor.aim], Rgb(255, 255, 255), true);
+            add_dashed(&mut list, &[hot.base, cursor.aim], ACTIVE_INK, 4.0 / scale, 3.0 / scale);
         } else if session.running.is_some() {
             let ents = session.preview(cursor.aim);
             if !ents.is_empty() {
@@ -104,19 +124,34 @@ pub fn mesh(
                         ..Default::default()
                     },
                 );
+                tint(&mut list, ACTIVE_INK);
             }
+        }
+        if cursor.hot.is_none() {
+            if let Some(hover) = cursor.hover.filter(|h| !session.selection().iter().any(|s| s == h)) {
+                add_entity_outline(&mut list, &state.doc, &[hover], scale, view.height, HOVER_INK, false);
+            }
+            add_selection_highlight(&mut list, session, &state.doc, scale, view.height);
         }
         if let (Some(pw), Some(raw)) = (session.pending_window, cursor.raw) {
             let crossing = raw.x < pw.corner.x;
             let color = if crossing { Rgb(80, 220, 120) } else { Rgb(80, 160, 255) };
             let a = pw.corner;
             let b = raw;
-            add_poly(
-                &mut list,
-                &[Vec2::new(a.x, a.y), Vec2::new(b.x, a.y), Vec2::new(b.x, b.y), Vec2::new(a.x, b.y), Vec2::new(a.x, a.y)],
-                color,
-                false,
-            );
+            let corners = [
+                Vec2::new(a.x, a.y),
+                Vec2::new(b.x, a.y),
+                Vec2::new(b.x, b.y),
+                Vec2::new(a.x, b.y),
+            ];
+            let fill = if crossing { [0x18, 0x48, 0x18, 0x50] } else { [0x18, 0x30, 0x60, 0x50] };
+            window_fill = Some((corners, fill));
+            let ring = [corners[0], corners[1], corners[2], corners[3], corners[0]];
+            if crossing {
+                add_dashed(&mut list, &ring, color, 5.0 / scale, 3.0 / scale);
+            } else {
+                add_poly(&mut list, &ring, color, false);
+            }
         }
         if session.running.is_none() {
             let half = session.settings.gripsize.max(1.0) / scale;
@@ -127,12 +162,21 @@ pub fn mesh(
                 }
                 for (index, grip) in entity.kind.grips().into_iter().enumerate() {
                     let hot = cursor.hot.is_some_and(|h| h.handle == *handle && h.index == index);
-                    add_poly(&mut list, &square(grip, half), if hot { Rgb(255, 40, 40) } else { Rgb(0, 120, 255) }, false);
+                    let warm = cursor.warm_grip.is_some_and(|(h, i)| h == *handle && i == index);
+                    let color = if hot {
+                        Rgb(255, 40, 40)
+                    } else if warm {
+                        Rgb(255, 120, 160)
+                    } else {
+                        Rgb(0, 120, 255)
+                    };
+                    add_poly(&mut list, &square(grip, half), color, false);
                 }
             }
         }
-        if let Some(at) = cursor.snap {
-            add_poly(&mut list, &square(at, 6.0 / scale), Rgb(0, 220, 80), false);
+        add_tracking(&mut list, &session.tracking.acquired, cursor.track.as_ref(), cursor.aim, scale, view.height);
+        if let Some(hit) = cursor.snap {
+            add_snap_marker(&mut list, hit, scale);
         }
         add_crosshair(&mut list, cursor.aim, scale, height, session.settings.cursorsize, session.picking_objects(), session.settings.pickbox);
         if let Some(tip) = tip {
@@ -143,8 +187,245 @@ pub fn mesh(
         add_ucs(&mut list, view.center, width, height, scale, icon_px);
     }
     let mut built = mesh::build_mesh(&list, origin, paper, false);
-    mesh::expand_hairlines(&mut built);
+    if let Some((corners, rgba)) = window_fill {
+        mesh::append_fill_quad(&mut built, origin, corners, rgba);
+    }
+    mesh::expand_hairlines_width(&mut built, OVERLAY_HAIRLINE);
     built
+}
+
+/// Tooltip text for snap / tracking / grip (caller picks priority).
+pub fn cursor_tip(snap: Option<&SnapHit>, track: Option<&Track>, hot: Option<HotGrip>) -> Option<String> {
+    if let Some(hot) = hot {
+        return Some(hot.label().to_string());
+    }
+    let mut tips = Vec::new();
+    if let Some(hit) = snap {
+        tips.push(hit.name.to_string());
+    }
+    if let Some(tr) = track {
+        for path in &tr.paths {
+            let distance = aad_engine::units::format_distance(path.from.dist(tr.point), 2, 4);
+            let angle = (path.from.angle_to(tr.point).to_degrees().round() as i64).rem_euclid(360);
+            tips.push(if path.name == "Polar" {
+                format!("Polar: {distance} < {angle}°")
+            } else {
+                format!("{}: {distance} < {angle}°", path.name)
+            });
+        }
+        if let Some(o) = tr.object {
+            tips.push(o.to_string());
+        }
+    }
+    (!tips.is_empty()).then_some(tips.join(", "))
+}
+
+fn tint(list: &mut DisplayList, color: Rgb) {
+    for prim in &mut list.prims {
+        prim.color = color;
+        prim.aci7 = false;
+    }
+}
+
+fn add_selection_highlight(list: &mut DisplayList, session: &Session, doc: &aad_engine::doc::Drawing, scale: f64, view_height: f64) {
+    let handles: Vec<Handle> = session.selection().iter().copied().take(200).collect();
+    add_entity_outline(list, doc, &handles, scale, view_height, SELECTION_INK, true);
+}
+
+fn add_entity_outline(
+    list: &mut DisplayList,
+    doc: &aad_engine::doc::Drawing,
+    handles: &[Handle],
+    scale: f64,
+    view_height: f64,
+    color: Rgb,
+    dashed: bool,
+) {
+    let ents: Vec<&aad_engine::doc::Entity> = handles.iter().filter_map(|handle| doc.entity(*handle).map(|e| e.as_ref())).collect();
+    if ents.is_empty() {
+        return;
+    }
+    let built = aad_render::build_entities(
+        doc,
+        ents.into_iter(),
+        &aad_render::Options {
+            tolerance: 0.5 / scale,
+            min_dash: 2.0 / scale,
+            text: true,
+            fill: false,
+            lineweights: false,
+            view_height,
+            ..Default::default()
+        },
+    );
+    let on = (6.0 / scale).max(1e-9);
+    let off = (4.0 / scale).max(0.0);
+    for prim in &built.prims {
+        if matches!(prim.kind, Kind::Polyline) {
+            let pts = built.points(prim);
+            if dashed {
+                add_dashed(list, pts, color, on, off);
+            } else {
+                add_poly(list, pts, color, false);
+            }
+        }
+    }
+}
+
+fn add_snap_marker(list: &mut DisplayList, hit: SnapHit, scale: f64) {
+    if !hit.point.is_finite() || !(scale > 0.0) {
+        return;
+    }
+    let s = 5.5 / scale;
+    let at = hit.point;
+    use snap::mode;
+    match hit.mode {
+        mode::END => add_poly(list, &square(at, s), SNAP_INK, false),
+        mode::MID => add_poly(list, &[at + Vec2::new(0.0, -s), at + Vec2::new(s, s * 0.8), at + Vec2::new(-s, s * 0.8), at + Vec2::new(0.0, -s)], SNAP_INK, false),
+        mode::CEN | mode::GCEN => add_circle(list, at, s, SNAP_INK),
+        mode::QUA => add_poly(
+            list,
+            &[at + Vec2::new(0.0, -s), at + Vec2::new(s, 0.0), at + Vec2::new(0.0, s), at + Vec2::new(-s, 0.0), at + Vec2::new(0.0, -s)],
+            SNAP_INK,
+            false,
+        ),
+        mode::INT | mode::APP => {
+            add_poly(list, &[at + Vec2::new(-s, -s), at + Vec2::new(s, s)], SNAP_INK, false);
+            add_poly(list, &[at + Vec2::new(s, -s), at + Vec2::new(-s, s)], SNAP_INK, false);
+            if hit.mode == mode::APP {
+                add_poly(list, &square(at, s), SNAP_INK, false);
+            }
+        }
+        mode::PER => {
+            add_poly(list, &[at + Vec2::new(-s, -s), at + Vec2::new(-s, s), at + Vec2::new(s, s)], SNAP_INK, false);
+            add_poly(list, &[at + Vec2::new(-s, 0.0), at, at + Vec2::new(0.0, s)], SNAP_INK, false);
+        }
+        mode::TAN => {
+            add_circle(list, at, s * 0.8, SNAP_INK);
+            add_poly(list, &[at + Vec2::new(-s, -s), at + Vec2::new(s, -s)], SNAP_INK, false);
+        }
+        mode::NOD => {
+            add_circle(list, at, s, SNAP_INK);
+            add_poly(list, &[at + Vec2::new(-s, -s), at + Vec2::new(s, s)], SNAP_INK, false);
+            add_poly(list, &[at + Vec2::new(s, -s), at + Vec2::new(-s, s)], SNAP_INK, false);
+        }
+        mode::INS => add_poly(
+            list,
+            &[
+                at + Vec2::new(-s, -s),
+                at + Vec2::new(0.0, -s),
+                at,
+                at + Vec2::new(s, 0.0),
+                at + Vec2::new(s, s),
+                at + Vec2::new(-s, s),
+                at + Vec2::new(-s, -s),
+            ],
+            SNAP_INK,
+            false,
+        ),
+        _ => add_poly(
+            list,
+            &[
+                at + Vec2::new(-s, -s),
+                at + Vec2::new(s, -s),
+                at + Vec2::new(-s, s),
+                at + Vec2::new(s, s),
+                at + Vec2::new(-s, -s),
+            ],
+            SNAP_INK,
+            false,
+        ),
+    }
+}
+
+fn add_circle(list: &mut DisplayList, center: Vec2, radius: f64, color: Rgb) {
+    if !(center.is_finite() && radius.is_finite() && radius > 0.0) {
+        return;
+    }
+    let n = 24u32;
+    let mut pts = Vec::with_capacity(n as usize + 1);
+    for i in 0..=n {
+        let a = std::f64::consts::TAU * f64::from(i) / f64::from(n);
+        pts.push(Vec2::new(center.x + radius * a.cos(), center.y + radius * a.sin()));
+    }
+    add_poly(list, &pts, color, false);
+}
+
+fn add_tracking(list: &mut DisplayList, acquired: &[Acquired], track: Option<&Track>, aim: Vec2, scale: f64, view_height: f64) {
+    let far = view_height * 4.0;
+    let mark = 4.0 / scale;
+    for a in acquired {
+        let c = a.at();
+        if !c.is_finite() {
+            continue;
+        }
+        if matches!(a, Acquired::Parallel { .. }) {
+            add_poly(list, &[c + Vec2::new(-5.0 / scale, 3.0 / scale), c + Vec2::new(-1.0 / scale, -5.0 / scale)], SNAP_INK, false);
+            add_poly(list, &[c + Vec2::new(1.0 / scale, 3.0 / scale), c + Vec2::new(5.0 / scale, -5.0 / scale)], SNAP_INK, false);
+        } else {
+            add_poly(list, &[c + Vec2::new(-mark, 0.0), c + Vec2::new(mark, 0.0)], SNAP_INK, false);
+            add_poly(list, &[c + Vec2::new(0.0, -mark), c + Vec2::new(0.0, mark)], SNAP_INK, false);
+        }
+    }
+    let Some(tr) = track else { return };
+    let on = (2.0 / scale).max(1e-9);
+    let off = (4.0 / scale).max(0.0);
+    for path in &tr.paths {
+        let pts: Vec<Vec2> = match path.shape {
+            PathShape::Ray { origin, dir } => {
+                let back = (tr.point - origin).dot(dir).clamp(0.0, far);
+                vec![tr.point - dir * back, tr.point + dir * far]
+            }
+            PathShape::Line { dir, .. } => vec![tr.point - dir * far, tr.point + dir * far],
+            PathShape::Circle { center, radius, .. } => {
+                let (a0, span) = (center.angle_to(tr.point), (far / radius.max(1e-12)).min(std::f64::consts::PI));
+                (0..=48)
+                    .map(|i| Vec2::polar(center, radius, a0 - span + span * f64::from(i) / 24.0))
+                    .collect()
+            }
+        };
+        if pts.iter().all(|p| p.is_finite()) {
+            add_dashed(list, &pts, SNAP_INK, on, off);
+        }
+    }
+    if tr.paths.len() > 1 || tr.object.is_some() {
+        let at = if aim.is_finite() { aim } else { tr.point };
+        add_poly(list, &[at + Vec2::new(-mark, -mark), at + Vec2::new(mark, mark)], SNAP_INK, false);
+        add_poly(list, &[at + Vec2::new(mark, -mark), at + Vec2::new(-mark, mark)], SNAP_INK, false);
+    }
+}
+
+fn add_dashed(list: &mut DisplayList, pts: &[Vec2], color: Rgb, on: f64, off: f64) {
+    if pts.len() < 2 || !(on.is_finite() && on > 0.0 && off.is_finite() && off >= 0.0) {
+        return;
+    }
+    for window in pts.windows(2) {
+        let (a, b) = (window[0], window[1]);
+        if ![a.x, a.y, b.x, b.y].into_iter().all(f64::is_finite) {
+            continue;
+        }
+        let len = a.dist(b);
+        if !(len.is_finite() && len > 1e-12) {
+            continue;
+        }
+        let dir = (b - a) / len;
+        let mut t = 0.0;
+        let mut draw = true;
+        let mut guard = 0u32;
+        while t < len && guard < 100_000 {
+            guard = guard.saturating_add(1);
+            let span = if draw { on } else { off };
+            let t1 = (t + span).min(len);
+            if draw && t1 > t {
+                add_poly(list, &[a + dir * t, a + dir * t1], color, false);
+            }
+            if t1 <= t {
+                break;
+            }
+            t = t1;
+            draw = !draw;
+        }
+    }
 }
 
 fn grip_ghost(kind: &aad_engine::doc::EntityKind, hot: HotGrip, aim: Vec2) -> Option<aad_engine::doc::EntityKind> {
@@ -200,12 +481,13 @@ fn add_crosshair(list: &mut DisplayList, at: Vec2, scale: f64, height: u32, curs
     let gap = if picking { (pickbox.max(0.0) * 1.5) / scale } else { 0.0 };
     let x = |dx: f64| Vec2::new(at.x + dx, at.y);
     let y = |dy: f64| Vec2::new(at.x, at.y + dy);
-    add_poly(list, &[x(-len), x(-gap)], Rgb(255, 255, 255), true);
-    add_poly(list, &[x(gap), x(len)], Rgb(255, 255, 255), true);
-    add_poly(list, &[y(-len), y(-gap)], Rgb(255, 255, 255), true);
-    add_poly(list, &[y(gap), y(len)], Rgb(255, 255, 255), true);
+    let ink = Rgb(255, 255, 255);
+    add_poly(list, &[x(-len), x(-gap)], ink, true);
+    add_poly(list, &[x(gap), x(len)], ink, true);
+    add_poly(list, &[y(-len), y(-gap)], ink, true);
+    add_poly(list, &[y(gap), y(len)], ink, true);
     if gap > 0.0 {
-        add_poly(list, &square(at, gap), Rgb(255, 255, 255), true);
+        add_poly(list, &square(at, gap), ink, true);
     }
 }
 
@@ -255,4 +537,54 @@ fn add_poly(list: &mut DisplayList, pts: &[Vec2], color: Rgb, aci7: bool) {
     let Ok(len) = u32::try_from(pts.len()) else { return };
     list.verts.extend_from_slice(pts);
     list.prims.push(DPrim { handle: Handle(0), color, aci7, lw: 0.0, kind: Kind::Polyline, start, len });
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use aad_engine::snap::SnapHit;
+
+    #[test]
+    fn cursor_tip_prefers_grip_then_snap_name() {
+        let hit = SnapHit {
+            point: Vec2::new(1.0, 2.0),
+            mode: 1,
+            name: "Endpoint",
+            deferred: None,
+        };
+        assert_eq!(cursor_tip(Some(&hit), None, None).as_deref(), Some("Endpoint"));
+        let hot = HotGrip {
+            handle: Handle(1),
+            index: 0,
+            base: Vec2::new(0.0, 0.0),
+            mode: grips::GripMode::Move,
+        };
+        assert_eq!(cursor_tip(Some(&hit), None, Some(hot)).as_deref(), Some("** MOVE **"));
+        assert!(cursor_tip(None, None, None).is_none());
+    }
+
+    #[test]
+    fn overlay_mesh_draws_crosshair_and_snap_marker() {
+        let session = Session::new();
+        let cursor = Cursor {
+            aim: Vec2::new(10.0, 10.0),
+            raw: Some(Vec2::new(10.0, 10.0)),
+            snap: Some(SnapHit {
+                point: Vec2::new(10.0, 10.0),
+                mode: 1,
+                name: "Endpoint",
+                deferred: None,
+            }),
+            track: None,
+            hot: None,
+            hover: None,
+            warm_grip: None,
+        };
+        let built = mesh(&session, Some(&cursor), Rgb(0, 0, 0), 600, Vec2::ZERO, Some("Endpoint"), 800, false, 24.0);
+        assert!(
+            built.line_vertices() > 0 || built.quad_instances() > 0 || built.tri_vertices() > 0,
+            "crosshair and snap marker must emit geometry"
+        );
+    }
 }

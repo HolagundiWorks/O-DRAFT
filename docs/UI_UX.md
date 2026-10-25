@@ -12,7 +12,7 @@ and [UI_BASELINE.md](UI_BASELINE.md); workspace details in [workspaces.md](works
 | Toolbars | Classic only: Draw and Modify (with Dimension and Leader) as two vertical bars on the left, and the customisable top tool bar under the menu (right-click it or View > Customize Top Bar) |
 | Context bar | Both workspaces: current layer (searchable), floor, drawing space, panel pin/auto-hide ([ACTIVE_DRAWING_SPACE.md](ACTIVE_DRAWING_SPACE.md)) |
 | File tabs and layout tabs | Drawings along the top; Model and layout tabs along the bottom, with New layout and a layout list |
-| Canvas | GPU-drawn; crosshair, snap markers, grips, selection window |
+| Canvas | GPU-drawn; thin AutoCAD-style crosshair (`CURSORSIZE` / pick-box gap while selecting; OS cursor hidden on the WinUI drawing HWND), cyan rubber-band preview, dashed blue selection / solid hover highlight, mode-specific snap markers with tips, polar/OTRACK paths, grips (warm under pointer), selection window fill + dashed crossing |
 | Panels | Layers, Properties and Blocks (one tabbed stack on the right), Plot window; docked, floatable, closable, pin and auto-collapse |
 | Command line and history | Typed commands with prompts; F2 opens the history |
 | Status bar | Toggles (snap, ortho, polar, tracking, dynamic input), coordinates, units popup, messages |
@@ -81,7 +81,9 @@ See [TESTING.md](TESTING.md) and [UI_TESTING_STRATEGY.md](UI_TESTING_STRATEGY.md
 
 ## Dynamic input beside the cursor (WinUI)
 
-The cursor-anchored CAD field parks beside the crosshair when Dynamic Input is on (host `dyn.on`).
-It shows **typed text only** (no prompt label or Length/Angle readouts). Typed distances still accept
-SketchUp-style units in the engine (`40`, `40<90`, `5'6"`). Slash assistant drafts stay on the fixed
-AI bar (`dyn.on` false for `/…` drafts). Full dual-channel contract: [COMMAND_BAR.md](COMMAND_BAR.md).
+The cursor-anchored CAD field parks beside the crosshair when host `dyn.on` is true (independent of
+the Dynamic Input mode toggle). It shows **typed text only** (no prompt label or Length/Angle
+readouts). The field is 70×18 DIP (half the previous bar), with the same 2 DIP corner radius as a button, below the 32 DIP floor used elsewhere. Typed distances still accept SketchUp-style units
+in the engine (`40`, `40<90`, `5'6"`). Slash assistant drafts stay on the fixed AI bar (`dyn.on`
+false for `/…` drafts). While a CAD command runs, the Ask bar hides so it does not cover the lower
+drawing (Allow/Decline stays visible). Full dual-channel contract: [COMMAND_BAR.md](COMMAND_BAR.md).

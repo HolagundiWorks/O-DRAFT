@@ -9,6 +9,7 @@
 
 mod assistant;
 mod bar;
+mod osas_ai;
 mod chrome;
 mod control;
 mod ffi;
@@ -289,6 +290,10 @@ pub struct Host {
     aim: Vec2,
     screen: Option<Vec2>,
     snap: Option<aad_engine::snap::SnapHit>,
+    /// Polar / object-snap tracking result at the aim (drawn on the overlay).
+    track: Option<aad_engine::snap::tracking::Track>,
+    /// Entity under the pick box while selecting (rollover highlight).
+    hover: Option<aad_engine::doc::Handle>,
     hot: Option<overlay::HotGrip>,
     /// Command-line text that has not been submitted. Dynamic Input reads it.
     draft: String,
@@ -389,6 +394,8 @@ impl Host {
             aim: Vec2::ZERO,
             screen: None,
             snap: None,
+            track: None,
+            hover: None,
             hot: None,
             draft: String::new(),
             snap_cycle: None,
@@ -1475,17 +1482,19 @@ impl Host {
         self.screen = Some(Vec2::new(x, y));
         let prompt = self.session.current_prompt();
         let wants = self.hot.is_some() || prompt.as_ref().is_some_and(|p| p.accept.point && !p.accept.select);
+        let scale = self.pixels_per_unit();
+        self.update_hover(raw, scale);
         if !wants || self.session.pending_window.is_some() {
             if !wants {
                 self.session.tracking.clear();
             }
             self.aim = raw;
             self.snap = None;
+            self.track = None;
             self.session.cursor = raw;
             self.session.cursor_deferred = None;
             return Ok(());
         }
-        let scale = self.pixels_per_unit();
         let base = self.hot.map(|grip| grip.base).or_else(|| prompt.as_ref().and_then(|p| p.base));
         let deferred = self.hot.is_none() && prompt.as_ref().is_some_and(|p| p.deferred);
         let query = aad_engine::snap::tracking::CursorQuery {
@@ -1499,6 +1508,7 @@ impl Host {
         let snapped = self.session.snap_cursor(raw, &query);
         self.aim = snapped.point;
         self.snap = snapped.snap;
+        self.track = snapped.track;
         self.apply_snap_cycle(raw, self.session.settings.aperture / scale);
         if let Some(frame) = self.dyn_frame() {
             let drawn = self.session.doc().ok().and_then(aad_engine::annot::drawing_unit);
@@ -1509,6 +1519,15 @@ impl Host {
         self.session.cursor = self.aim;
         self.session.cursor_deferred = self.snap.and_then(|hit| hit.deferred);
         Ok(())
+    }
+
+    fn update_hover(&mut self, raw: Vec2, scale: f64) {
+        if !self.session.picking_objects() || self.session.pending_window.is_some() || self.hot.is_some() {
+            self.hover = None;
+            return;
+        }
+        let aperture = self.session.settings.pickbox.max(1.0) * 1.5 / scale.max(1e-12);
+        self.hover = self.session.state().ok().and_then(|st| aad_engine::select::pick(&st.doc, &st.edit_space(), raw, aperture));
     }
 
     /// Enter or Space while a grip is hot. An empty line is left for [`Self::grip_cycle`].
@@ -1944,9 +1963,17 @@ impl Host {
         self.pixels_per_point = window::dpi_scale(self.hwnd);
         let (key, uniform, origin) = self.mesh()?;
         let paper = self.paper();
-        let cursor =
-            self.screen.is_some().then_some(overlay::Cursor { aim: self.aim, raw: self.raw, snap: self.snap.map(|hit| hit.point), hot: self.hot });
-        let tip = self.hot.map(|hot| hot.label().to_string());
+        let warm_grip = self.screen.and_then(|s| self.grip_at(s.x, s.y)).map(|g| (g.handle, g.index));
+        let cursor = self.screen.is_some().then_some(overlay::Cursor {
+            aim: self.aim,
+            raw: self.raw,
+            snap: self.snap,
+            track: self.track.clone(),
+            hot: self.hot,
+            hover: self.hover,
+            warm_grip,
+        });
+        let tip = overlay::cursor_tip(self.snap.as_ref(), self.track.as_ref(), self.hot);
         let overlay = overlay::mesh(
             &self.session,
             cursor.as_ref(),
@@ -2388,7 +2415,15 @@ mod tests {
         host.pointer(Pointer { x: far.x, y: far.y, action: POINTER_MOVE, wheel: 0.0, mods: 0 }).unwrap();
         let rubber = overlay::mesh(
             &host.session,
-            Some(&overlay::Cursor { aim: host.aim, raw: host.raw, snap: host.snap.map(|hit| hit.point), hot: host.hot }),
+            Some(&overlay::Cursor {
+                aim: host.aim,
+                raw: host.raw,
+                snap: host.snap,
+                track: host.track.clone(),
+                hot: host.hot,
+                hover: host.hover,
+                warm_grip: None,
+            }),
             host.paper(),
             host.height,
             Vec2::ZERO,
@@ -2423,7 +2458,15 @@ mod tests {
         assert!(tip.contains("5"), "{tip}");
         let drawn = overlay::mesh(
             &host.session,
-            Some(&overlay::Cursor { aim: host.aim, raw: host.raw, snap: None, hot: None }),
+            Some(&overlay::Cursor {
+                aim: host.aim,
+                raw: host.raw,
+                snap: None,
+                track: None,
+                hot: None,
+                hover: None,
+                warm_grip: None,
+            }),
             host.paper(),
             host.height,
             Vec2::ZERO,
@@ -2485,6 +2528,26 @@ mod tests {
         host.key_activate(false).unwrap();
         let selected = host.session.state().unwrap().selection.len();
         assert!(selected >= 1, "Insert picks the entity under the keyboard cursor");
+        let idle = overlay::mesh(
+            &host.session,
+            Some(&overlay::Cursor {
+                aim: host.aim,
+                raw: host.raw,
+                snap: None,
+                track: None,
+                hot: None,
+                hover: host.hover,
+                warm_grip: None,
+            }),
+            host.paper(),
+            host.height,
+            Vec2::ZERO,
+            None,
+            host.width,
+            false,
+            f64::from(host.pixels_per_point),
+        );
+        assert!(idle.quad_instances() > 8, "selected geometry is dashed-highlighted with grips and crosshair");
         let center = host.session.state().unwrap().view().center;
         host.key_nudge(2, 0, true, false).unwrap();
         let moved = host.session.state().unwrap().view().center;
@@ -2858,5 +2921,22 @@ mod tests {
         let chrome: serde_json::Value = serde_json::from_str(&host.chrome_json()).unwrap();
         assert!(chrome["history"].as_array().is_some_and(|rows| rows.is_empty()));
         assert_eq!(chrome["command"], "line");
+    }
+
+    #[test]
+    fn high_value_commands_appear_on_the_menu() {
+        let host = Host::create(false);
+        let menu = host.menu_json();
+        for label in [
+            "Deselect All",
+            "Measure Geometry",
+            "New Layer",
+            "Inspect Drawing",
+            "Switch",
+        ] {
+            assert!(menu.contains(label), "menu should include {label}");
+        }
+        assert!(menu.contains("\"id\":\"ai_deselect\"") || menu.contains("ai_deselect"));
+        assert!(menu.contains("measuregeom") || menu.contains("\"id\":\"measuregeom\""));
     }
 }

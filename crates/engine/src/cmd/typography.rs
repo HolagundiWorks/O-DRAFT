@@ -17,17 +17,24 @@ use crate::{Result, Session};
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("fonts.presets", "Font Presets", run_presets)
+            .menu(&["Tools", "Fonts", "List Presets"])
+            .alias(&["fontpresets"])
             .params("{} → {presets: [{id, name, description, families, installed, license, upstream, note}], roles: [{id, face, weight}]} (which preset fonts are installed on this machine)")
             .noundo(),
         CommandSpec::new("fonts.resolve", "Resolve Font Roles", run_resolve)
+            .menu(&["Tools", "Fonts", "Resolve Roles"])
             .params("{preset?: id (default engineering)} → {preset, roles: [{role, family, weight, requested, substituted}]} (a missing family falls back and is reported as substituted; weightInstalled false means the role is drawn at Regular)")
             .noundo(),
         CommandSpec::new("fonts.scan", "Scan Fonts", run_scan)
+            .menu(&["Tools", "Fonts", "Scan Drawing"])
+            .alias(&["fontscan"])
             .params("{} → {styles: [{name, font, installed, usage, role, reason}], unclassified, missingFonts} (the text styles of the drawing, where they are used, whether their font is installed, and the role each most likely has)")
             .noundo(),
         CommandSpec::new("fonts.migrate", "Migrate Fonts", run_migrate)
+            .menu(&["Tools", "Fonts", "Migrate"])
             .params("{preset?: id, roles?: {styleName: role}, apply?: bool, root?: project folder} → {changes: [{style, from, to, role}], skipped, warnings, growth: [{handle, text, oldWidth, newWidth, overlaps}], applied} (apply false previews; apply true changes the `font` of the classified styles only, as one undo step; with root it runs over the project drawings, backs each changed one up to backups/fonts-N/, writes report.json and returns migrationId)"),
         CommandSpec::new("fonts.rollback", "Roll Back Font Migration", run_rollback)
+            .menu(&["Tools", "Fonts", "Roll Back Migration"])
             .params("{root: project folder, id: migrationId} → {restored, left} (restores the backed-up drawings; a drawing edited since the migration is left as it is)")
             .noundo(),
     ]

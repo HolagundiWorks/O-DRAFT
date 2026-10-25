@@ -166,40 +166,40 @@ impl Tokens {
         crosshair: Color32::from_rgb(0xe8, 0xe8, 0xe8),
     };
 
-    /// Light grey chrome with dark text and a white drawing area. The grips and snap
+    /// OSAS glass soft-UI chrome with navy ink and a white drawing area. The grips and snap
     /// markers are the same as [`Tokens::DARK`]'s.
     pub const LIGHT: Tokens = Tokens {
-        chrome: Color32::from_rgb(0xf3, 0xf3, 0xf4),
-        chrome_dark: Color32::from_rgb(0xe4, 0xe4, 0xe7),
-        panel: Color32::from_rgb(0xfa, 0xfa, 0xfb),
-        tab_active: Color32::from_rgb(0xff, 0xe6, 0xcc),
-        control: Color32::from_rgb(0xec, 0xec, 0xee),
-        control_hover: Color32::from_rgb(0xdc, 0xdc, 0xe0),
-        border: Color32::from_rgb(0xc8, 0xc8, 0xce),
-        text: Color32::from_rgb(0x16, 0x17, 0x1a),
-        text_dim: Color32::from_rgb(0x44, 0x46, 0x4c),
-        text_faint: Color32::from_rgb(0x5e, 0x60, 0x66),
-        icon: Color32::from_rgb(0x2a, 0x2c, 0x31),
-        icon_accent: Color32::from_rgb(0x1b, 0x1c, 0x20),
+        chrome: Color32::from_rgb(0xe4, 0xea, 0xf2),
+        chrome_dark: Color32::from_rgb(0xd8, 0xde, 0xe8),
+        panel: Color32::from_rgb(0xee, 0xf2, 0xf8),
+        tab_active: Color32::from_rgb(0xff, 0xff, 0xff),
+        control: Color32::from_rgb(0xf1, 0xf5, 0xfa),
+        control_hover: Color32::from_rgb(0xe4, 0xea, 0xf2),
+        border: Color32::from_rgb(0xd8, 0xde, 0xe8),
+        text: Color32::from_rgb(0x1a, 0x23, 0x32),
+        text_dim: Color32::from_rgb(0x64, 0x74, 0x8b),
+        text_faint: Color32::from_rgb(0x94, 0xa3, 0xb8),
+        icon: Color32::from_rgb(0x2a, 0x35, 0x48),
+        icon_accent: Color32::from_rgb(0x1a, 0x23, 0x32),
         icon_point: Color32::from_rgb(0xd3, 0x5a, 0x1c),
-        accent: Color32::from_rgb(0x1b, 0x1c, 0x20),
+        accent: Color32::from_rgb(0x1a, 0x23, 0x32),
         on_accent: Color32::from_rgb(0xff, 0xff, 0xff),
         cmd_bg: Color32::from_rgba_unmultiplied_const(0xff, 0xff, 0xff, 0xf2),
-        toggle_on: Color32::from_rgb(0xd9, 0x66, 0x0a),
+        toggle_on: Color32::from_rgb(0x1a, 0x23, 0x32),
         field: Color32::from_rgb(0xff, 0xff, 0xff),
-        select_bg: Color32::from_rgb(0xff, 0xd9, 0xb0),
-        cmd_history: Color32::from_rgba_unmultiplied_const(0xf3, 0xf3, 0xf4, 0xe0),
-        cmd_border: Color32::from_rgb(0xb4, 0xb4, 0xba),
-        cmd_keyword: Color32::from_rgb(0xb0, 0x4a, 0x00),
-        cmd_keyword_hover: Color32::from_rgb(0xff, 0xe3, 0xc4),
+        select_bg: Color32::from_rgb(0xe4, 0xea, 0xf2),
+        cmd_history: Color32::from_rgba_unmultiplied_const(0xee, 0xf2, 0xf8, 0xe0),
+        cmd_border: Color32::from_rgb(0xd8, 0xde, 0xe8),
+        cmd_keyword: Color32::from_rgb(0x1a, 0x23, 0x32),
+        cmd_keyword_hover: Color32::from_rgb(0xf1, 0xf5, 0xfa),
         list_bg: Color32::from_rgb(0xff, 0xff, 0xff),
-        list_row: Color32::from_rgb(0xf0, 0xf0, 0xf2),
+        list_row: Color32::from_rgb(0xf1, 0xf5, 0xfa),
         warn: Color32::from_rgb(0x8a, 0x4b, 0x00),
         canvas: Color32::from_rgb(0xff, 0xff, 0xff),
         axis_x: Color32::from_rgb(0xe0, 0x9a, 0x9a),
         axis_y: Color32::from_rgb(0x8f, 0xc9, 0x9a),
-        canvas_ink: Color32::from_rgb(0x44, 0x46, 0x4c),
-        crosshair: Color32::from_rgb(0x16, 0x17, 0x1a),
+        canvas_ink: Color32::from_rgb(0x64, 0x74, 0x8b),
+        crosshair: Color32::from_rgb(0x1a, 0x23, 0x32),
         hover: Color32::from_rgb(0x1b, 0x6f, 0xd6),
         selection: Color32::from_rgb(0x1b, 0x6f, 0xd6),
         window_fill: Color32::from_rgba_premultiplied(0x10, 0x20, 0x40, 0x30),
@@ -250,7 +250,7 @@ pub fn heading() -> FontId {
     FontId::new(15.0, family)
 }
 pub fn body() -> FontId {
-    FontId::new(12.5, FontFamily::Proportional)
+    FontId::new(13.0, FontFamily::Proportional)
 }
 pub fn mono() -> FontId {
     FontId::new(12.0, FontFamily::Monospace)
@@ -368,8 +368,9 @@ fn visuals(theme: Theme) -> Visuals {
     v.window_stroke = egui::Stroke::new(1.0, t.border);
     let shadow = Color32::from_black_alpha(if theme == Theme::Dark { 90 } else { 40 });
     v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 12, spread: 0, color: shadow };
-    v.window_corner_radius = egui::CornerRadius::same(6);
-    v.menu_corner_radius = egui::CornerRadius::same(5);
+    // Suite scale canon: control radius 12, overlay/menu radius 14.
+    v.window_corner_radius = egui::CornerRadius::same(12);
+    v.menu_corner_radius = egui::CornerRadius::same(14);
     v
 }
 
@@ -381,9 +382,10 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     ctx.set_visuals_of(Theme::Light, visuals(Theme::Light));
     ctx.set_theme(egui::ThemePreference::from(theme));
     ctx.all_styles_mut(|s| {
-        s.spacing.item_spacing = egui::vec2(6.0, 4.0);
-        s.spacing.button_padding = egui::vec2(6.0, 3.0);
-        s.spacing.interact_size.y = 20.0;
+        // Match Hcw.Ui SuiteStyles: 8/12 stack · 16×6 control pad · 36 hit.
+        s.spacing.item_spacing = egui::vec2(8.0, 8.0);
+        s.spacing.button_padding = egui::vec2(16.0, 6.0);
+        s.spacing.interact_size.y = 36.0;
         s.text_styles.insert(egui::TextStyle::Body, body());
         s.text_styles.insert(egui::TextStyle::Button, body());
         s.text_styles.insert(egui::TextStyle::Small, small());

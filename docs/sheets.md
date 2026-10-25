@@ -1,5 +1,7 @@
 # Sheets and batch plotting
 
+A new drawing has one paper layout, **Title plate**. `sheet.designer` replaces empty Layout1 and Layout2 with that sheet and places the title block on it. The layout tab is the title plate designer: the border and the title-block fields. A drawing that already has other sheets, or anything drawn on Layout1 or Layout2, is left unchanged. `open: true` switches to the sheet.
+
 A layout tab is a sheet. The commands are in `crates/engine/src/cmd/sheet.rs` (and `projfile.rs`
 for the project-aware ones); the Plot window only calls them. There is no separate Layout panel: it
 was removed, and a saved panel layout that still names it is read as unusable and the default panel
@@ -21,6 +23,7 @@ Used from the command line, menus, scripts and the control channel:
 | Paper size and orientation | `pagesetup` |
 | Viewports: scale (typed as `1:100`), lock, remove, add; in a project, which floors and layouts each shows | `viewport.list`, `viewport.set`, `viewport.add`, `viewport.remove`, `floor.viewport` |
 | Title block fields, adding a title block | `sheet.fields`, `sheet.titleblock` |
+| One Title plate layout on a new drawing | `sheet.designer` |
 | Saved layouts (apply as the sheet's title card, delete, save) | `sheet.template.*` |
 
 ## Title block

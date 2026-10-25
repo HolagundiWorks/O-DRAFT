@@ -11,43 +11,47 @@ namespace Aad.WinUi;
 /// </summary>
 internal static class Density
 {
-    // --- Spacing (4 px scale; SpaceXs for compact technical rows) ---
+    // --- Spacing (aligned with Hcw.Ui SuiteStyles: 4 / 8 / 12 / 16 / 20 / 24) ---
     public const double SpaceXs = 2;
     public const double SpaceSm = 4;
     public const double SpaceMd = 8;
     public const double SpaceLg = 12;
     public const double SpaceXl = 16;
+    public const double SpaceSection = 20;
     public const double SpaceXxl = 24;
 
-    public static Thickness DialogMargin { get; } = new Thickness(SpaceLg);
-    public static Thickness PanelPadding { get; } = new Thickness(SpaceMd);
-    public static Thickness PanelPaddingTight { get; } = new Thickness { Left = SpaceMd, Top = SpaceMd, Right = SpaceMd, Bottom = SpaceSm };
-    public static Thickness CommandBarPadding { get; } = new Thickness { Left = SpaceLg, Top = SpaceMd, Right = SpaceLg, Bottom = SpaceMd };
-    public static Thickness StatusPadding { get; } = new Thickness { Left = SpaceLg, Top = SpaceSm, Right = SpaceLg, Bottom = SpaceMd };
+    public static Thickness DialogMargin { get; } = new Thickness(SpaceLg, SpaceMd, SpaceLg, SpaceMd);
+    public static Thickness PanelPadding { get; } = new Thickness(SpaceLg, SpaceMd, SpaceLg, SpaceMd);
+    public static Thickness PanelPaddingTight { get; } = new Thickness { Left = SpaceMd, Top = SpaceSm, Right = SpaceMd, Bottom = SpaceSm };
+    public static Thickness CommandBarPadding { get; } = new Thickness { Left = SpaceLg, Top = SpaceSm, Right = SpaceLg, Bottom = SpaceSm };
+    public static Thickness StatusPadding { get; } = new Thickness { Left = SpaceLg, Top = 4, Right = SpaceLg, Bottom = SpaceSm };
     public static Thickness LabelFieldGap { get; } = new Thickness { Left = 0, Top = 0, Right = 0, Bottom = SpaceXs };
+    public static Thickness ControlPadding { get; } = new Thickness(SpaceLg, 4, SpaceLg, 4);
+    public static Thickness PageMargin { get; } = new Thickness(12, 10, 12, 12);
 
-    // --- Control sizing ---
-    /// <summary>WCAG 2.2 target-size floor for custom buttons (DIP).</summary>
-    public const double MinTarget = 32;
-    public const double ControlHeight = 32;
-    public const double ControlHeightCompact = 28;
-    public const double IconButton = 32;
-    public const double IconSize = 20;
-    public const double IconSizeSm = 16;
+    // --- Control sizing (suite canon: hit 36 · icons 0.6× · pane 260 · radius 2) ---
+    public const double MinTarget = 36;
+    public const double ControlHeight = 36;
+    public const double ControlHeightCompact = 36;
+    public const double IconButton = 24;
+    public const double IconSize = 13;
+    public const double IconSizeSm = 10;
     public const double SplitterWidth = 8;
-    public const double CornerChrome = 3;
-    public const double CornerControl = 4;
+    /// <summary>Default docked side-panel width (matches <c>SidePanelWidth</c> / SuitePaneWidth).</summary>
+    public const double SidePanelWidth = 260;
+    public const double CornerChrome = 2;
+    public const double CornerControl = 2;
 
-    // --- Typography ---
+    // --- Typography (suite: body 13 · section 15 · title 22) ---
     public static double Font = FontBody;
     public static bool OverrideFace;
-    public static string Face = "Segoe UI";
-    public const double FontCaption = 11;
-    public const double FontBody = 12;
+    public static string Face = "Segoe UI Variable";
+    public const double FontCaption = 12;
+    public const double FontBody = 13;
     public const double FontCommand = 13;
-    public const double FontSection = 14;
-    public const double FontHeading = 16;
-    public const double FontPageTitle = 24;
+    public const double FontSection = 15;
+    public const double FontHeading = 15;
+    public const double FontPageTitle = 22;
     /// <summary>Preferred UI face name; use <see cref="FontUiResolved"/> after <see cref="ShellFonts.Resolve"/>.</summary>
     public const string FontUi = "Segoe UI";
     /// <summary>Preferred mono face name; use <see cref="FontMonoResolved"/> after resolve.</summary>
@@ -141,6 +145,27 @@ internal static class Density
         ?? new SolidColorBrush(Theme == ElementTheme.Light
             ? Microsoft.UI.Colors.White
             : Microsoft.UI.Colors.Black);
+
+    /// <summary>Accent colour from tokens (for selection zebra fills).</summary>
+    public static Windows.UI.Color AccentColor()
+    {
+        if (ThemeBrush("AccentBrush") is SolidColorBrush brush)
+        {
+            return brush.Color;
+        }
+        return Theme == ElementTheme.Light
+            ? Windows.UI.Color.FromArgb(255, 0x00, 0x78, 0xD4)
+            : Windows.UI.Color.FromArgb(255, 0x60, 0xCD, 0xFF);
+    }
+
+    public static Brush SelectionFill(byte alpha = 64)
+    {
+        var c = AccentColor();
+        return new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, c.R, c.G, c.B));
+    }
+
+    public static Brush ZebraFill() =>
+        new SolidColorBrush(Windows.UI.Color.FromArgb(16, 128, 128, 128));
 
     /// <summary>Secondary body text at full opacity (avoids Opacity &lt; 1 contrast failures).</summary>
     public static TextBlock Secondary(string text, TextWrapping wrap = TextWrapping.NoWrap)

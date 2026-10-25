@@ -157,6 +157,18 @@ fn push_vertex(out: &mut Vec<u8>, p: [f32; 2], c: [u8; 4]) {
     out.extend_from_slice(&c);
 }
 
+/// Append a filled axis-aligned-ish quad (two triangles) with explicit RGBA.
+///
+/// Used for translucent selection-window fills on the overlay; [`build_mesh`] always writes opaque colours.
+pub fn append_fill_quad(mesh: &mut MeshData, origin: Vec2, corners: [Vec2; 4], rgba: [u8; 4]) {
+    if !corners.iter().all(|p| p.is_finite()) {
+        return;
+    }
+    for p in [corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]] {
+        push_vertex(&mut mesh.tris, rel(p, origin), rgba);
+    }
+}
+
 fn push_instance(out: &mut Vec<u8>, a: [f32; 2], b: [f32; 2], c: [u8; 4], width: f32) {
     for v in [a[0], a[1], b[0], b[1]] {
         out.extend_from_slice(&v.to_le_bytes());
@@ -271,9 +283,18 @@ pub fn append_infinite(mesh: &mut MeshData, list: &DisplayList, origin: Vec2, ce
 /// Hardware line lists leave gaps on diagonals and draw a single device pixel, which is thinner
 /// than one logical pixel on a scaled display. The quad shader strokes these in screen space.
 pub fn expand_hairlines(mesh: &mut MeshData) {
+    expand_hairlines_width(mesh, 1.0);
+}
+
+/// Like [`expand_hairlines`], with an explicit stroke width in points.
+///
+/// Overlay hairlines (crosshair, rubber band) use a half-point width so they stay near one device
+/// pixel on common display scales, matching AutoCAD-style thin crosshairs.
+pub fn expand_hairlines_width(mesh: &mut MeshData, width: f32) {
     if mesh.line_vertices() < 2 {
         return;
     }
+    let width = if width.is_finite() && width > 0.0 { width } else { 1.0 };
     let line_n = mesh.line_vertices();
     let quad_n = mesh.quad_instances();
     let mut quads = Vec::with_capacity(mesh.quads.len() + (line_n / 2) * INSTANCE_SIZE);
@@ -285,7 +306,7 @@ pub fn expand_hairlines(mesh: &mut MeshData) {
         let mut i = line_from;
         while i + 1 < line_to {
             if let (Some((a, color)), Some((b, _))) = (read_vertex(&mesh.lines, i), read_vertex(&mesh.lines, i + 1)) {
-                push_instance(&mut quads, a, b, color, 1.0);
+                push_instance(&mut quads, a, b, color, width);
             }
             i += 2;
         }

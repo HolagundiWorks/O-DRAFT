@@ -11,9 +11,9 @@ use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CS_HREDRAW, CS_VREDRAW, CallWindowProcW, CreateWindowExW, DefWindowProcW, DestroyWindow, GW_HWNDPREV, GWLP_USERDATA, GWLP_WNDPROC, GetClientRect,
-    GetWindow, GetWindowLongPtrW, HWND_TOP, IDC_ARROW, IsWindowVisible, LoadCursorW, MA_NOACTIVATE, RegisterClassW, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_DESTROY, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_PAINT, WM_RBUTTONDOWN, WNDCLASSW,
+    GetWindow, GetWindowLongPtrW, HWND_TOP, IsWindowVisible, MA_NOACTIVATE, RegisterClassW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    SetCursor, SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_DESTROY, WM_ERASEBKGND, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MBUTTONDBLCLK, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_PAINT, WM_RBUTTONDOWN, WM_SETCURSOR, WNDCLASSW,
     WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
 };
 
@@ -59,7 +59,8 @@ fn ensure_class() -> Result<(), String> {
         cbWndExtra: 0,
         hInstance: instance,
         hIcon: std::ptr::null_mut(),
-        hCursor: unsafe { LoadCursorW(std::ptr::null_mut(), IDC_ARROW) },
+        // NULL: the procedure hides the OS cursor under the drawn crosshair (WM_SETCURSOR).
+        hCursor: std::ptr::null_mut(),
         hbrBackground: std::ptr::null_mut(),
         lpszMenuName: std::ptr::null(),
         lpszClassName: CLASS.as_ptr(),
@@ -235,6 +236,11 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
         WM_PAINT => {
             unsafe { ValidateRect(hwnd, std::ptr::null()) };
             0
+        }
+        // Hide the system arrow so only the AutoCAD-style crosshair shows over the drawing.
+        WM_SETCURSOR => {
+            unsafe { SetCursor(std::ptr::null_mut()) };
+            1
         }
         WM_MOUSEACTIVATE => MA_NOACTIVATE as LRESULT,
         WM_MOUSEWHEEL => {

@@ -43,6 +43,15 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["File", "ShilpiDB", "Disconnect"])
             .params("{} → {ok: true}")
             .noundo(),
+        CommandSpec::new("vdb.convert", "Convert drawing to ShilpiDB", run_convert)
+            .menu(&["File", "ShilpiDB", "Convert / Push to ShilpiDB"])
+            .key("Cmd+Shift+H")
+            .alias(&["shilpi", "vdbc"])
+            .params(
+                "{} → {vdb?, pushed?, addr?, count?} (write `<stem>.vdb` beside the open DWG/DXF; \
+                 if connected to shilpid, also push with replace)",
+            )
+            .noundo(),
         CommandSpec::new("vdb.push", "Push drawing to ShilpiDB", run_push)
             .menu(&["File", "ShilpiDB", "Push drawing"])
             .params("{replace?: bool} → {addr, count, truncated, replaced} (upsert model space onto the connected shilpid; replace=true deletes server ids not in the drawing)")
@@ -52,9 +61,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{replace?: bool} → {addr, added, skipped} (pull records from the connected shilpid into model space; one undo step)"),
         CommandSpec::new("vdb.sidecar", "ShilpiDB sidecar on save", run_sidecar)
             .menu(&["File", "ShilpiDB", "Sidecar on save"])
-            .params("{enabled?: bool, toggle?: bool} → {enabled} (when true, DXF/DWG save also writes `<stem>.vdb`; default false; toggle flips; omit both to read)")
+            .params("{enabled?: bool, toggle?: bool} → {enabled} (when true, DXF/DWG save also writes `<stem>.vdb` beside the drawing; default true; toggle flips; omit both to read)")
             .noundo(),
         CommandSpec::new("vdb.status", "ShilpiDB status", run_status)
+            .menu(&["File", "ShilpiDB", "Status"])
+            .alias(&["vdbstat"])
             .params("{} → {connected, addr?, sidecar}")
             .noundo(),
     ]
@@ -146,6 +157,22 @@ fn run_query(_s: &mut Session, p: &Value) -> Result<Value> {
             {
                 hit["type"] = json!(payload.geom.type_name());
                 hit["layer"] = json!(payload.layer);
+                // Compact card fields for OLMo (same spirit as ai.cards).
+                match &payload.geom {
+                    aad_vdb::EntityGeom::Line { x0, y0, x1, y1 } => {
+                        let len = ((x1 - x0).hypot(y1 - y0) * 1000.0).round() / 1000.0;
+                        hit["length"] = json!(len);
+                        hit["geom"] = json!(format!("line {x0:.0},{y0:.0} → {x1:.0},{y1:.0}"));
+                    }
+                    aad_vdb::EntityGeom::Insert { block, x, y, .. } => {
+                        hit["block"] = json!(block);
+                        hit["geom"] = json!(format!("insert {block} @ {x:.0},{y:.0}"));
+                    }
+                    aad_vdb::EntityGeom::Text { value, .. } => {
+                        hit["text"] = json!(value.chars().take(48).collect::<String>());
+                    }
+                    _ => {}
+                }
             }
             hits.push(hit);
         }
@@ -173,6 +200,17 @@ fn run_connect(s: &mut Session, p: &Value) -> Result<Value> {
         if addr.is_empty() || addr.len() > 260 {
             return Err(bad("vdb.connect", "`addr` must be a non-empty host:port"));
         }
+        // Engine-owned daemon: when talking to the shared loopback endpoint and nothing answers,
+        // start the bundled shilpid (same path as takeoff.record).
+        if addr == DEFAULT_SHILPID || addr == super::takeoffrec::SHARED_ADDR {
+            let _ = super::takeoffrec::ensure_server(
+                "vdb.connect",
+                super::takeoffrec::SHARED_ADDR,
+                "127.0.0.1:7421",
+                "takeoff",
+                "takeoff.vdb",
+            );
+        }
         let mut client = VdbClient::connect(&addr).map_err(|e| bad("vdb.connect", e.to_string()))?;
         client.ping().map_err(|e| bad("vdb.connect", e.to_string()))?;
         s.vdb_addr = Some(addr.clone());
@@ -183,6 +221,67 @@ fn run_connect(s: &mut Session, p: &Value) -> Result<Value> {
 fn run_disconnect(s: &mut Session, _p: &Value) -> Result<Value> {
     s.vdb_addr = None;
     Ok(json!({ "ok": true }))
+}
+
+/// Write `.vdb` beside the drawing (when saved) and push to shilpid when connected.
+fn run_convert(s: &mut Session, _p: &Value) -> Result<Value> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = s;
+        return Err(bad("vdb.convert", "ShilpiDB convert is not available on the web"));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut out = json!({ "pushed": false });
+        let path = s.state().ok().and_then(|st| st.path.clone());
+        match path.as_deref() {
+            Some(p) => {
+                let drawing_path = Path::new(p);
+                // Always write the sidecar for convert, even if the save-pref is off.
+                let Some(stem) = drawing_path.file_stem().and_then(|s| s.to_str()) else {
+                    return Err(bad("vdb.convert", "drawing path has no file name"));
+                };
+                let parent = drawing_path.parent().unwrap_or_else(|| Path::new("."));
+                let vdb_path = parent.join(format!("{stem}.vdb"));
+                let (store, truncated, skipped) = store_from_drawing_ref(s)?;
+                let count = store.len();
+                save_path(&vdb_path, &store)
+                    .map_err(|e| bad("vdb.convert", format!("{}: {e}", vdb_path.display())))?;
+                out["vdb"] = json!(vdb_path.to_string_lossy());
+                out["count"] = json!(count);
+                out["truncated"] = json!(truncated);
+                out["skipped"] = json!(skipped);
+                s.echo(format!("ShilpiDB: {}", vdb_path.display()));
+            }
+            None => {
+                if s.vdb_addr.is_none() {
+                    // No path yet: still allow push-only when the engine daemon can start.
+                    ensure_shared_vdb(s)?;
+                    if s.vdb_addr.is_none() {
+                        return Err(bad(
+                            "vdb.convert",
+                            "save the drawing first (writes plan.vdb beside the DWG), or connect to shilpid and convert to push only",
+                        ));
+                    }
+                }
+            }
+        }
+        // Prefer pushing when a bundled engine daemon is available.
+        if s.vdb_addr.is_none() {
+            let _ = ensure_shared_vdb(s);
+        }
+        if let Some(info) = push_if_connected(s)? {
+            out["pushed"] = json!(true);
+            out["addr"] = info.get("addr").cloned().unwrap_or(Value::Null);
+            if out.get("count").is_none() {
+                out["count"] = info.get("count").cloned().unwrap_or(Value::Null);
+            }
+            out["replaced"] = json!(true);
+            let n = info.get("count").and_then(Value::as_u64).unwrap_or(0);
+            s.echo(format!("ShilpiDB pushed: {n} records"));
+        }
+        Ok(out)
+    }
 }
 
 fn run_push(s: &mut Session, p: &Value) -> Result<Value> {
@@ -237,26 +336,72 @@ fn run_status(s: &mut Session, _p: &Value) -> Result<Value> {
     }
 }
 
-/// After a DXF/DWG save, write `<stem>.vdb` when the sidecar preference is on.
-pub fn write_sidecar_if_enabled(s: &Session, drawing_path: &Path) -> Result<()> {
+/// Start the engine-bundled shared `shilpid` (if needed) and remember its address on the session.
+#[cfg(not(target_arch = "wasm32"))]
+fn ensure_shared_vdb(s: &mut Session) -> Result<()> {
+    super::takeoffrec::ensure_server(
+        "vdb.connect",
+        super::takeoffrec::SHARED_ADDR,
+        "127.0.0.1:7421",
+        "takeoff",
+        "takeoff.vdb",
+    )?;
+    let mut client = VdbClient::connect(DEFAULT_SHILPID).map_err(|e| bad("vdb.connect", e.to_string()))?;
+    client.ping().map_err(|e| bad("vdb.connect", e.to_string()))?;
+    s.vdb_addr = Some(DEFAULT_SHILPID.to_string());
+    Ok(())
+}
+
+/// After a DXF/DWG save, write `<stem>.vdb` beside the drawing when the sidecar preference is on.
+/// Returns the sidecar path when a file was written.
+pub fn write_sidecar_if_enabled(s: &Session, drawing_path: &Path) -> Result<Option<PathBuf>> {
     #[cfg(target_arch = "wasm32")]
     {
         let _ = (s, drawing_path);
-        return Ok(());
+        return Ok(None);
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
         if !s.settings.vdb_sidecar {
-            return Ok(());
+            return Ok(None);
         }
         let Some(stem) = drawing_path.file_stem().and_then(|s| s.to_str()) else {
-            return Ok(());
+            return Ok(None);
         };
         let parent = drawing_path.parent().unwrap_or_else(|| Path::new("."));
         let vdb_path = parent.join(format!("{stem}.vdb"));
         let (store, _, _) = store_from_drawing_ref(s)?;
         save_path(&vdb_path, &store).map_err(|e| bad("vdb.sidecar", format!("{}: {e}", vdb_path.display())))?;
-        Ok(())
+        Ok(Some(vdb_path))
+    }
+}
+
+/// After save: if connected to shilpid, push model space so OLMo/DB stay in sync.
+pub fn push_if_connected(s: &Session) -> Result<Option<Value>> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = s;
+        return Ok(None);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some(addr) = s.vdb_addr.clone() else {
+            return Ok(None);
+        };
+        let (store, truncated, _skipped) = store_from_drawing_ref(s)?;
+        let count = store.len();
+        let mut client = VdbClient::connect(&addr).map_err(|e| bad("vdb.push", e.to_string()))?;
+        client
+            .push_store(&store, true)
+            .map_err(|e| bad("vdb.push", e.to_string()))?;
+        client.save().map_err(|e| bad("vdb.push", e.to_string()))?;
+        Ok(Some(json!({
+            "addr": addr,
+            "count": count,
+            "truncated": truncated,
+            "replaced": true,
+            "auto": true,
+        })))
     }
 }
 
@@ -469,14 +614,42 @@ mod tests {
     }
 
     #[test]
+    fn convert_writes_vdb_beside_drawing_path() {
+        let dir = tempfile::tempdir().expect("temp");
+        let dxf = dir.path().join("plan.dxf");
+        std::fs::write(&dxf, b"0\nEOF\n").expect("stub");
+        let mut s = Session::new();
+        s.state_mut().expect("state").path = Some(dxf.to_string_lossy().into());
+        s.doc_mut()
+            .expect("doc")
+            .add(
+                &Space::Model,
+                Common::default(),
+                EntityKind::Line(Line {
+                    a: Vec3::new(0.0, 0.0, 0.0),
+                    b: Vec3::new(10.0, 0.0, 0.0),
+                }),
+            )
+            .expect("add");
+        let r = s.execute("vdb.convert", &json!({})).expect("convert");
+        let vdb = dir.path().join("plan.vdb");
+        assert_eq!(r["vdb"], vdb.to_string_lossy().as_ref());
+        assert!(vdb.is_file(), "sidecar missing");
+        assert_eq!(r["count"], 1);
+        assert_eq!(r["pushed"], false);
+        let info = s.execute("vdb.info", &json!({ "path": vdb.to_string_lossy() })).expect("info");
+        assert_eq!(info["count"], 1);
+    }
+
+    #[test]
     fn sidecar_pref_toggle_and_query_hits() {
         let dir = tempfile::tempdir().expect("temp");
         let path = dir.path().join("q.vdb");
         let mut s = Session::new();
-        assert_eq!(s.execute("vdb.sidecar", &json!({})).unwrap()["enabled"], false);
-        assert_eq!(s.execute("vdb.sidecar", &json!({ "enabled": true })).unwrap()["enabled"], true);
-        assert!(s.settings.vdb_sidecar);
-        assert_eq!(s.execute("vdb.sidecar", &json!({ "toggle": true })).unwrap()["enabled"], false);
+        assert_eq!(s.execute("vdb.sidecar", &json!({})).unwrap()["enabled"], true);
+        assert_eq!(s.execute("vdb.sidecar", &json!({ "enabled": false })).unwrap()["enabled"], false);
+        assert!(!s.settings.vdb_sidecar);
+        assert_eq!(s.execute("vdb.sidecar", &json!({ "toggle": true })).unwrap()["enabled"], true);
 
         s.doc_mut()
             .expect("doc")
