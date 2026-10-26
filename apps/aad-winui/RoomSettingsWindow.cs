@@ -62,7 +62,7 @@ internal static class RoomSettingsWindow
         root.Children.Add(boxed);
         root.Children.Add(Labeled("Text height (drawing units)", height));
         root.Children.Add(Labeled("Font", font));
-        root.Children.Add(Density.Secondary("Blank text height: 125 mm worth of drawing units.", TextWrapping.Wrap));
+        root.Children.Add(Density.Secondary("Blank text height uses the drawing default from the page-size hierarchy (ISO Small/Medium/Large).", TextWrapping.Wrap));
         root.Children.Add(status);
 
         var loading = false;
@@ -211,20 +211,7 @@ internal static class RoomSettingsWindow
         return window;
     }
 
-    private static FrameworkElement Labeled(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = Density.SpaceXs };
-        var text = new TextBlock { Text = label };
-        Density.Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    private static FrameworkElement Labeled(string label, FrameworkElement field) => DialogLayout.Labeled(label, field);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 }

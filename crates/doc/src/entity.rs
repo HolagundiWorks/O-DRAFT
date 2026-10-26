@@ -365,6 +365,52 @@ impl Insert {
             .then_before(Mat3::scale(self.scale.x, self.scale.y))
             .then_before(Mat3::translate(-base))
     }
+
+    /// Attribute text for `tag`, if this insert carries one.
+    pub fn attrib_value(&self, tag: &str) -> Option<&str> {
+        self.attribs.iter().find(|a| a.tag.eq_ignore_ascii_case(tag)).map(|a| a.text.value.as_str())
+    }
+
+    /// A door or window placed by `wall.door` / `wall.window` (parameters live on invisible attributes).
+    pub fn is_opening(&self) -> bool {
+        matches!(self.attrib_value("OKIND"), Some("door") | Some("window"))
+    }
+
+    /// Plan width in drawing units, when this insert is an opening.
+    pub fn opening_width(&self) -> Option<f64> {
+        if !self.is_opening() {
+            return None;
+        }
+        self.attrib_value("OWIDTH").and_then(|v| v.parse().ok()).filter(|w: &f64| w.is_finite() && *w > 0.0)
+    }
+
+    /// Set an invisible attribute, adding it when the tag is new.
+    pub fn set_attrib(&mut self, tag: &str, value: &str) {
+        if let Some(a) = self.attribs.iter_mut().find(|a| a.tag.eq_ignore_ascii_case(tag)) {
+            a.text.value = value.to_string();
+            a.invisible = true;
+            return;
+        }
+        self.attribs.push(Attrib {
+            tag: tag.to_string(),
+            text: Text {
+                insert: Vec3::ZERO,
+                align_pt: None,
+                height: 1.0,
+                value: value.to_string(),
+                rotation: 0.0,
+                width_factor: 1.0,
+                oblique: 0.0,
+                style: "Standard".into(),
+                halign: HAlign::Left,
+                valign: VAlign::Baseline,
+            },
+            invisible: true,
+            constant: true,
+            prompt: String::new(),
+            props: AttribProps::default(),
+        });
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1073,7 +1119,16 @@ impl EntityKind {
             EntityKind::Text(t) => vec![t.justify_point()],
             EntityKind::MText(t) => vec![t.insert.xy()],
             EntityKind::AttDef(a) => vec![a.text.justify_point()],
-            EntityKind::Insert(i) => std::iter::once(i.insert.xy()).chain(i.attribs.iter().map(|a| a.text.justify_point())).collect(),
+            EntityKind::Insert(i) => {
+                if let Some(w) = i.opening_width() {
+                    let sign = if i.scale.x < 0.0 { -1.0 } else { 1.0 };
+                    let u = Vec2::new(i.rotation.cos(), i.rotation.sin()) * sign;
+                    let half = w / 2.0;
+                    vec![i.insert.xy(), i.insert.xy() - u * half, i.insert.xy() + u * half]
+                } else {
+                    std::iter::once(i.insert.xy()).chain(i.attribs.iter().map(|a| a.text.justify_point())).collect()
+                }
+            }
             EntityKind::Dimension(d) => vec![d.p13.xy(), d.p14.xy(), d.defpt.xy(), d.text_mid.xy()],
             EntityKind::Leader(l) => l.vertices.iter().map(|v| v.xy()).collect(),
             EntityKind::MLeader(m) => m.leaders.iter().flat_map(|l| l.iter().map(|v| v.xy())).chain(std::iter::once(m.landing.xy())).collect(),

@@ -8,7 +8,7 @@
 //! square feet, and size label text from 125 mm of real height.
 
 use aad_color::Color;
-use aad_doc::{Drawing, EntityKind, HAlign, Handle, Layer, Lineweight, VAlign};
+use aad_doc::{Drawing, EntityKind, Group, HAlign, Handle, Layer, Lineweight, LwPolyline, VAlign};
 use aad_geom::{Polyline, Vec2};
 use serde_json::{Value, json};
 
@@ -17,6 +17,9 @@ use super::helpers::{lwpoly, rect_vertices};
 use super::machines::SelectRun;
 use super::*;
 use crate::{Accept, Input, Interactive, Prompt, Result, Session, Step};
+
+/// Project-data group description for a ROOM rectangle + its three labels.
+const ROOM_GROUP_DESC: &str = "aad-room";
 
 pub(crate) const LABEL_LAYER: (&str, i16) = ("ROOM-LABELS", 3);
 pub(crate) const RECT_LAYER: (&str, i16) = ("ROOM-RECT", 8);
@@ -504,7 +507,124 @@ fn make_room(s: &mut Session, p1: Vec2, p2: Vec2, name: &str, prefix: &str, rect
         }
         handles.push(add_on(s, LABEL_LAYER.0, kind)?);
     }
+    // Group the rectangle (if any) with its labels so grip edits can refresh size and area.
+    let key = handles.first().map(|h| h.hex()).unwrap_or_else(|| "0".into());
+    let d = s.doc_mut()?;
+    d.groups.push(Group {
+        name: format!("AAD-ROOM-{key}"),
+        description: ROOM_GROUP_DESC.into(),
+        selectable: true,
+        members: handles.clone(),
+    });
     Ok(RoomLabel { name: full, width: w, height: h, handles, area, unit })
+}
+
+/// After a grip stretch (or similar edit) of a room rectangle, rewrite the size and area labels.
+pub(crate) fn refit_rooms(s: &mut Session, edited: &[Handle]) -> Result<()> {
+    if edited.is_empty() {
+        return Ok(());
+    }
+    let room_groups: Vec<(usize, Vec<Handle>)> = {
+        let d = s.doc()?;
+        let mut out = Vec::new();
+        for &h in edited {
+            for i in super::groups::groups_of(d, h) {
+                let g = &d.groups[i];
+                if g.description != ROOM_GROUP_DESC && !g.name.starts_with("AAD-ROOM-") {
+                    continue;
+                }
+                if out.iter().any(|(j, _)| *j == i) {
+                    continue;
+                }
+                out.push((i, g.members.clone()));
+            }
+        }
+        out
+    };
+    for (_i, members) in room_groups {
+        refresh_room_labels(s, &members)?;
+    }
+    Ok(())
+}
+
+fn refresh_room_labels(s: &mut Session, members: &[Handle]) -> Result<()> {
+    let d = s.doc()?;
+    let mut corners: Option<(Vec2, Vec2)> = None;
+    let mut texts: Vec<(Handle, String, f64)> = Vec::new();
+    for &h in members {
+        let Some(e) = d.entity(h) else { continue };
+        match &e.kind {
+            EntityKind::LwPolyline(pl) if e.common.layer.eq_ignore_ascii_case(RECT_LAYER.0) => {
+                corners = poly_corners(pl);
+            }
+            EntityKind::Text(t) if e.common.layer.eq_ignore_ascii_case(LABEL_LAYER.0) => {
+                texts.push((h, t.value.clone(), t.height));
+            }
+            _ => {}
+        }
+    }
+    let Some((p1, p2)) = corners else {
+        return Ok(());
+    };
+    let mut name_h = None;
+    let mut dim_h = None;
+    let mut area_h = None;
+    let mut th = TEXT_MM / 1000.0;
+    let mut name_val = String::new();
+    for (h, v, height) in &texts {
+        if v.starts_with("Area:") {
+            area_h = Some(*h);
+        } else if v.contains(" x ") || v.contains('×') {
+            dim_h = Some(*h);
+        } else {
+            name_h = Some(*h);
+            name_val = v.clone();
+            th = *height;
+        }
+    }
+    let (Some(name_h), Some(dim_h), Some(area_h)) = (name_h, dim_h, area_h) else {
+        return Ok(());
+    };
+    let u = drawing_units(d, "room", &Value::Null)?;
+    let (w, h) = ((p2.x - p1.x).abs(), (p2.y - p1.y).abs());
+    if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() {
+        return Ok(());
+    }
+    let center = Vec2::new((p1.x + p2.x) / 2.0, (p1.y + p2.y) / 2.0);
+    let (area, unit) = area_in(u, w * h);
+    let dim_s = format_dim(u, w, h);
+    let area_s = format!("Area: {area:.2} {unit}");
+    let updates = [
+        (name_h, name_val.as_str(), 0.0, th),
+        (dim_h, dim_s.as_str(), th * 1.5, th * 0.8),
+        (area_h, area_s.as_str(), th * 2.8, th * 0.7),
+    ];
+    for (handle, text, down, height) in updates {
+        s.doc_mut()?.modify_entity(handle, |e| {
+            if let EntityKind::Text(t) = &mut e.kind {
+                t.value = text.into();
+                t.height = height;
+                t.insert = aad_geom::Vec3::new(center.x, center.y - down, 0.0);
+                t.align_pt = Some(aad_geom::Vec3::new(center.x, center.y - down, 0.0));
+                t.halign = HAlign::Center;
+                t.valign = VAlign::Middle;
+            }
+        })?;
+    }
+    Ok(())
+}
+
+fn poly_corners(pl: &LwPolyline) -> Option<(Vec2, Vec2)> {
+    if pl.vertices.len() < 2 {
+        return None;
+    }
+    let mut lo = pl.vertices[0].p;
+    let mut hi = lo;
+    for v in &pl.vertices {
+        lo = Vec2::new(lo.x.min(v.p.x), lo.y.min(v.p.y));
+        hi = Vec2::new(hi.x.max(v.p.x), hi.y.max(v.p.y));
+    }
+    Some((lo, hi))
 }
 
 fn run_room(s: &mut Session, p: &Value) -> Result<Value> {

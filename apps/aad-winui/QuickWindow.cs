@@ -29,7 +29,7 @@ internal sealed class QuickWindow : Window
         Content = new ScrollViewer { Content = new Grid { RequestedTheme = theme, Children = { _stack } } };
         Title = "Quick Properties";
         ShellIcon.Apply(this, theme);
-        ShellFit.UserResizable(this, minWidthDip: 280, minHeightDip: 240, maxWidthDip: 420, maxHeightDip: 640);
+        ShellFit.UserResizable(this, minWidthDip: 280, minHeightDip: 240, maxWidthDip: 420, maxHeightDip: 640, persistKey: "quickprops");
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsAlwaysOnTop = true;

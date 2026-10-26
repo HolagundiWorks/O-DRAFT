@@ -13,7 +13,7 @@ use crate::{Result, Session};
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("properties", "Properties", run_get).menu(&["Modify", "Properties"]).alias(&["pr", "props", "ch"]).params("{handles?} → properties of the selection").noundo(),
-        CommandSpec::new("properties.set", "Set Properties", run_set).params("{handles?, layer?, color?, linetype?, lineweight?, ltscale?, transparency?: \"ByLayer\" | \"ByBlock\" | 0..90, visible?, <geometry fields: radius, center, start, end, text, height, rotation…>}"),
+        CommandSpec::new("properties.set", "Set Properties", run_set).params("{handles?, layer?, color?, linetype?, lineweight?, ltscale?, transparency?: \"ByLayer\" | \"ByBlock\" | 0..90, visible?, <geometry fields: radius, center, start, end, text, height | textSize: small|medium|large, rotation…>, door/window: openingType?, openingWidth?, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units)}"),
         CommandSpec::new("matchprop", "Match Properties", run_matchprop)
             .menu(&["Modify", "Match Properties"])
             .alias(&["ma", "painter"])
@@ -157,6 +157,18 @@ fn set_xy(p: &mut Vec3, v: &Value) {
     }
 }
 
+
+fn text_height_from_rank(s: &Session, rank: &str) -> Result<f64> {
+    let d = s.doc()?;
+    let mm = crate::annot::printed_mm_for_rank(d, rank)
+        .ok_or_else(|| bad("properties.set", "`textSize` must be small, medium or large"))?;
+    let drawn = crate::annot::drawing_unit(d)
+        .ok_or_else(|| bad("properties.set", "the drawing's units are not set"))?;
+    let scale = d.header.f64("AADPLOTSCALE", 0.0);
+    let scale = if scale > 0.0 { crate::annot::PlotScale(scale) } else { crate::annot::PlotScale(100.0) };
+    Ok(crate::annot::sizes(crate::annot::PrintedSizes { text_mm: mm, arrow_mm: mm }, scale, drawn).text_height)
+}
+
 fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
     if hs.is_empty() {
@@ -169,6 +181,14 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
     if hs.is_empty() {
         return Err(bad("properties.set", "the selected objects are on locked layers"));
     }
+    const OPENING_KEYS: &[&str] = &["openingType", "openingWidth", "openingHeight", "sill", "lintelMode", "head"];
+    if OPENING_KEYS.iter().any(|k| p.get(*k).is_some()) {
+        return super::walls::edit_openings(s, &hs, p);
+    }
+    let rank_height = match str_param(p, "textSize") {
+        Some(r) => Some(text_height_from_rank(s, r)?),
+        None => None,
+    };
     if let Some(lt) = str_param(p, "linetype")
         && !lt.eq_ignore_ascii_case("ByLayer")
         && !lt.eq_ignore_ascii_case("ByBlock")
@@ -277,7 +297,7 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
                     if let Some(v) = str_param(p, "text") {
                         t.value = v.to_string();
                     }
-                    if let Some(x) = num("height").filter(|x| *x > 0.0) {
+                    if let Some(x) = num("height").or(rank_height).filter(|x| *x > 0.0) {
                         t.height = x;
                     }
                     if let Some(x) = num("rotation") {
@@ -299,7 +319,7 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
                     if let Some(v) = str_param(p, "text") {
                         t.contents = v.replace('\n', "\\P");
                     }
-                    if let Some(x) = num("height").filter(|x| *x > 0.0) {
+                    if let Some(x) = num("height").or(rank_height).filter(|x| *x > 0.0) {
                         t.height = x;
                     }
                     if let Some(x) = num("width").filter(|x| *x >= 0.0) {
@@ -321,7 +341,10 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
                     if let Some(x) = num("rotation") {
                         i.rotation = x.to_radians();
                     }
-                    if let Some(x) = num("scale").filter(|x| *x != 0.0) {
+                    // A door or window keeps a signed unit scale so the swing and the wall thickness stay put.
+                    if !i.is_opening()
+                        && let Some(x) = num("scale").filter(|x| *x != 0.0)
+                    {
                         i.scale = Vec3::new(x, x, x);
                     }
                 }

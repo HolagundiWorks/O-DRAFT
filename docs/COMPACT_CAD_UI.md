@@ -96,7 +96,7 @@ Implemented values live in `Density.cs` and `Themes/*Tokens.xaml` (keep in sync)
 |---|---|
 | MenuBar / MenuFlyout | WinUI templates retain some Fluent padding; height capped via styles + theme keys. |
 | ComboBox / TextBox | Template chrome may exceed 22 DIP even with `MinHeight` 24. |
-| Hatch swatches | Kept at 72 DIP for pattern legibility (not shrunk to toolbar density). |
+| Hatch swatches | 56 DIP (`Density.HatchSwatch`) so patterns stay readable without the old 72 DIP tiles. |
 | Cursor CAD field | Intentional transparent 105×27 DIP overlay (`CommandChrome`); not status-bar density. |
 | TabView | Add-tab control and item chrome follow WinUI; height set to `FileTabHeight`. |
 | Touch / pointer targets | Some controls stay ≥24 DIP for accessibility rather than classic 16–18. |
@@ -117,3 +117,20 @@ Store under `docs/baselines/compact-cad/` when available (`before/` / `after/`).
 - [UI_TOKENS.md](UI_TOKENS.md)
 - [WINDOW_SIZING.md](WINDOW_SIZING.md)
 - [UI_UX.md](UI_UX.md)
+
+## Consistency pass (dialog chrome)
+
+Shared helpers: `DialogLayout.cs` (`Labeled`, `Heading`, `Field`, `Action`, `ActionRow`). Width tokens: `ManagerListWidth` 180, `FieldWidth` 120, `DialogActionMinWidth` 72. Confirmation rows are right-aligned with the primary action immediately before Cancel. Live-apply managers keep their toolbars.
+
+| Surface | Change |
+|---|---|
+| Layer Manager | Token toolbar widths, tighter filter column and table columns, compact state buttons |
+| Hatch Editor | Swatches 56; dropped duplicate in-content title; actions right-aligned |
+| Dim / Text / MLeader / Plot / Linetype / Page setup | Shared field helpers; list column 180; persist keys where missing |
+| Parameters, Batch plot, Tools, Quick properties, Forms, Commands, Panels float | `ShellFit` persist keys |
+| Save prompt, clear history | Shared right-aligned action row (no stretched equal columns) |
+| Pomodoro, Calculator | `DialogLayout.Action` instead of ad-hoc buttons |
+
+Retained exceptions: Ask pill, `CommandChrome` overlays, native file pickers, platform title bars (`ExtendsContentIntoTitleBar` stays false).
+
+Remaining: WinUI ComboBox/TextBox templates can still exceed 24 DIP; visual pass of every dialog at 100/150% scaling is manual.

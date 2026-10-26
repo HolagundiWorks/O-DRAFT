@@ -243,17 +243,12 @@ internal static class LinetypeWindow
             presenter.IsResizable = true;
         }
         ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 380, minHeightDip: 320, maxWidthDip: 600, maxHeightDip: 640);
+        ShellFit.UserResizable(window, minWidthDip: 380, minHeightDip: 320, maxWidthDip: 600, maxHeightDip: 640, persistKey: "linetype");
         Reload();
         return window;
     }
 
-    private static Button ActionButton(string label) => Density.DialogAction(label);
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 }

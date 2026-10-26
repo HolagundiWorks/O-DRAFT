@@ -25,8 +25,8 @@ public sealed partial class LayerManagerWindow : Window
 
     private static readonly (double Width, string Title)[] Columns =
     [
-        (56, "Status"), (168, "Name"), (40, "On"), (56, "Freeze"), (44, "Lock"), (44, "Plot"),
-        (120, "Color"), (148, "Linetype"), (110, "Lineweight"), (110, "Transparency"), (120, "New VP Freeze"), (220, "Description"),
+        (48, "Status"), (148, "Name"), (36, "On"), (48, "Freeze"), (40, "Lock"), (40, "Plot"),
+        (110, "Color"), (132, "Linetype"), (100, "Lineweight"), (100, "Transparency"), (108, "New VP Freeze"), (180, "Description"),
     ];
 
     private readonly IntPtr _host;
@@ -64,13 +64,10 @@ public sealed partial class LayerManagerWindow : Window
             Density.Apply(root);
         }
         BuildHeader();
-        AutomationProperties.SetHeadingLevel(FiltersHeading, AutomationHeadingLevel.Level2);
-        AutomationProperties.SetName(FiltersHeading, "Filters");
         AutomationProperties.SetLiveSetting(Status, AutomationLiveSetting.Polite);
         AutomationProperties.SetLiveSetting(Summary, AutomationLiveSetting.Polite);
-        AutomationProperties.SetName(Empty, "No layers match the search and filters.");
+        AutomationProperties.SetName(Empty, "No layers match the search.");
         _reloading = true;
-        Filters.SelectedIndex = 0;
         LoadPrefs();
         _reloading = false;
         Closed += (_, _) => SavePrefs();
@@ -87,8 +84,9 @@ public sealed partial class LayerManagerWindow : Window
 
     public void ShowMerged(bool merged)
     {
+        // Dock returns to the compact Layer side tab; the full manager stays a separate window.
         MergeIcon.Kind = merged ? "undock" : "dock";
-        var tip = merged ? "Open in a window" : "Merge into the side panel";
+        var tip = merged ? "Open Layer Manager window" : "Show Layer side panel";
         ToolTipService.SetToolTip(MergeButton, tip);
         AutomationProperties.SetName(MergeButton, tip);
     }
@@ -159,16 +157,6 @@ public sealed partial class LayerManagerWindow : Window
     }
 
     private void OnSearch(object sender, TextChangedEventArgs e) => Show(SelectedNames());
-
-    private void OnFilterChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_reloading)
-        {
-            return;
-        }
-        SavePrefs();
-        Show(SelectedNames());
-    }
 
     private void OnSort(object sender, RoutedEventArgs e)
     {
@@ -702,7 +690,7 @@ public sealed partial class LayerManagerWindow : Window
         {
             return false;
         }
-        return Filters.SelectedIndex != 1 || row.Used;
+        return true;
     }
 
     private void BuildHeader()
@@ -1105,7 +1093,6 @@ public sealed partial class LayerManagerWindow : Window
             var values = ApplicationData.Current.LocalSettings.Values;
             _sortDesc = values["aad.layers.sortDesc"] as bool? ?? false;
             _nameSort.Content = _sortDesc ? "Name  ▼" : "Name  ▲";
-            Filters.SelectedIndex = values["aad.layers.filter"] as int? == 1 ? 1 : 0;
         }
         catch (Exception)
         {
@@ -1119,7 +1106,6 @@ public sealed partial class LayerManagerWindow : Window
         {
             var values = ApplicationData.Current.LocalSettings.Values;
             values["aad.layers.sortDesc"] = _sortDesc;
-            values["aad.layers.filter"] = Filters.SelectedIndex == 1 ? 1 : 0;
         }
         catch (Exception)
         {

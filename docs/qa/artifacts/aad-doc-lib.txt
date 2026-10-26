@@ -1,0 +1,48 @@
+﻿cargo :    Compiling aad-color v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\color)
+At line:1 char:184
++ ...  -Tail 12 ; cargo test -p aad-doc --lib -- --test-threads=8 2>&1 | Ou ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling aa...T\crates\color):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling aad-doc v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\doc)
+    Finished `test` profile [optimized + debuginfo] target(s) in 11.58s
+     Running unittests src\lib.rs 
+(C:\Users\holag\AppData\Local\Temp\odraft-cargo-target\debug\deps\aad_doc-3a0ad718b7e20588.exe)
+
+running 32 tests
+test plotstyle::tests::colour_transforms ... ok
+test extents::tests::right_justified_attdef_is_left_of_alignment_point ... ok
+test extents::tests::right_justified_text_is_left_of_alignment_point ... ok
+test extents::tests::centered_and_top_left_text_follow_placement ... ok
+test plotstyle::tests::builtins_are_complete_color_dependent_tables ... ok
+test plotstyle::tests::drawing_tables_shadow_builtins ... ok
+test store::tests::draw_order_moves ... ok
+test plotstyle::tests::named_builtins_and_sanitizing ... ok
+test tests::add_and_extents ... ok
+test plotstyle::tests::json_round_trip_with_defaults ... ok
+test store::tests::snapshots_are_independent ... ok
+test tests::attdef_in_block_is_ignored_in_insert_extents ... ok
+test tests::block_entity_on_layer_zero_counts_even_if_layer_zero_is_off_or_missing ... ok
+test tests::block_entity_with_invisible_flag_is_ignored_in_insert_extents ... ok
+test tests::block_entity_on_undefined_layer_counts ... ok
+test tests::entity_serde_roundtrip ... ok
+test tests::blank_text_and_mtext_have_no_bounds ... ok
+test tests::block_entity_on_off_or_frozen_layer_is_ignored ... ok
+test tests::hidden_layers_excluded_from_extents ... ok
+test tests::insert_bounds_with_cyclic_block_terminate ... ok
+test tests::inserts_of_missing_or_empty_blocks_do_not_stretch_extents ... ok
+test tests::new_drawing_has_standard_tables ... ok
+test tests::non_blank_text_and_mtext_have_bounds ... ok
+test tests::paper_space_entities ... ok
+test tests::transform_arc_mirror_keeps_shape ... ok
+test tests::rays_and_xlines_do_not_stretch_extents ... ok
+test tests::invisible_dimblock_entity_is_ignored_in_dimension_extents ... ok
+test tests::wide_polyline_extents_follow_the_band ... ok
+test plotstyle::tests::file_format_round_trip ... ok
+test store::tests::push_get_remove ... ok
+test tests::wide_arc_segment_extents_reach_the_outer_edge ... ok
+test store::tests::changed_since_matches_the_handle_lookup_definition ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+

@@ -48,6 +48,13 @@ internal static class Density
     public const double SplitterWidth = 4;
     /// <summary>Default docked side-panel width (matches <c>SidePanelWidth</c>).</summary>
     public const double SidePanelWidth = 240;
+    /// <summary>Left list column in style / manager dialogs.</summary>
+    public const double ManagerListWidth = 180;
+    /// <summary>Numeric and short text fields in dialogs.</summary>
+    public const double FieldWidth = 120;
+    public const double DialogActionMinWidth = 72;
+    /// <summary>Hatch pattern tile (readable, tighter than 72).</summary>
+    public const double HatchSwatch = 56;
     public const double CornerChrome = 2;
     public const double CornerControl = 2;
 

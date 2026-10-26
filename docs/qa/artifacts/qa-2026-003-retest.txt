@@ -1,0 +1,26 @@
+QA-2026-003 retest — 2026-10-26
+
+Root cause
+  Shell chrome re-applied current layer / floor / units through commands that always
+  called doc_mut() (Arc::make_mut), so is_dirty() became true with 0 entities.
+  Session::new / Host::create alone stay clean.
+
+Fix
+  - layer.current: no-op when name already matches CLAYER
+  - floor.current: no-op when name matches effective current (stored or first/default Ground)
+  - drawing.units metadata: no-op when unit unchanged
+  - layout.set: no-op when already on that tab without mspace
+  - FillCombo / SyncDraftingUnits: skip redundant SelectedIndex/SelectedItem writes
+  - Regression: cmd::layer::tests::making_the_current_layer_again_does_not_dirty_the_drawing
+  - Regression: cmd::layer::tests::chrome_reselects_do_not_dirty_a_new_imperial_drawing
+
+Unit evidence
+  cargo test -p aad-engine --lib chrome_reselects_do_not_dirty -- --nocapture
+  → ok (1 passed)
+
+Visual evidence (WinUI Debug x64, rebuilt host Release + shell)
+  Launch empty session: status tab "Drawing1" without " *" suffix; status "0 entities".
+  Screenshot capture in session (zoom on status Drawing1 tab, 2026-10-26 ~09:52 IST).
+  Title bar: "O-Draft — Drawing1" (no dirty marker).
+
+Status: fixed

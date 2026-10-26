@@ -35,12 +35,12 @@ internal static class DimStyleWindow
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         Density.Name(status, "Dimension style status");
 
-        var list = new ListBox { MinHeight = 160, MinWidth = 160 };
+        var list = new ListBox { MinHeight = 160, MinWidth = Density.ManagerListWidth };
         Density.Name(list, "Dimension styles");
         var currentLabel = Density.Secondary("Current style: ?", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current dimension style");
         var setCurrent = ActionButton("Set Current");
-        var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = 140 };
+        var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
         Density.Name(newName, "New style name");
         var create = ActionButton("New");
         var scale = FieldBox("Overall scale");
@@ -58,7 +58,7 @@ internal static class DimStyleWindow
         Density.Name(linearUnit, "Linear units");
         var propsHeading = Heading("Properties");
 
-        var left = new StackPanel { Spacing = Density.SpaceSm, Width = 200 };
+        var left = new StackPanel { Spacing = Density.SpaceSm, Width = Density.ManagerListWidth };
         left.Children.Add(Heading("Styles"));
         left.Children.Add(list);
         left.Children.Add(setCurrent);
@@ -393,31 +393,13 @@ internal static class DimStyleWindow
         return window;
     }
 
-    private static Button ActionButton(string label) => Density.DialogAction(label);
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
-    private static TextBox FieldBox(string name)
-    {
-        var box = new TextBox { MinHeight = Density.ControlHeight, Width = 120 };
-        Density.Name(box, name);
-        return box;
-    }
+    private static TextBox FieldBox(string name) => DialogLayout.Field(name);
 
-    private static FrameworkElement Labeled(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = Density.SpaceXs };
-        var text = new TextBlock { Text = label };
-        Density.Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    private static FrameworkElement Labeled(string label, FrameworkElement field) => DialogLayout.Labeled(label, field);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private static string Num(JsonElement style, string key) =>
         style.TryGetProperty(key, out var v) && v.TryGetDouble(out var n)

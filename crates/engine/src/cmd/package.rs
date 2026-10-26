@@ -1,23 +1,14 @@
-//! ETRANSMIT (pack drawing + dependencies) and ADCENTER (browse reusable content).
+//! ADCENTER (browse reusable content).
 
 use serde_json::{Value, json};
 
 use super::*;
 use crate::{Result, Session};
 
-const MAX_FILES: usize = 500;
 const MAX_LIST: usize = 10_000;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("etransmit", "eTransmit", run_etransmit)
-            .menu(&["File", "eTransmit..."])
-            .alias(&["et"])
-            .params(
-                "{path?: output folder (default: <drawing>-etransmit beside the drawing), includeXrefs?: bool (default true), \
-                 includeImages?: bool (default true)} → {folder, files: [{role, path}]}",
-            )
-            .noundo(),
         CommandSpec::new("adcenter", "Design Center", run_adcenter)
             .menu(&["Tools", "Design Center"])
             .alias(&["adc", "dc"])
@@ -27,75 +18,6 @@ pub fn specs() -> Vec<CommandSpec> {
             )
             .noundo(),
     ]
-}
-
-fn run_etransmit(s: &mut Session, p: &Value) -> Result<Value> {
-    const CMD: &str = "etransmit";
-    #[cfg(target_arch = "wasm32")]
-    {
-        let _ = (s, p);
-        return Err(bad(CMD, "eTransmit is not available in this build"));
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        use std::path::{Path, PathBuf};
-        let st = s.state()?;
-        let drawing = st.path.as_ref().ok_or_else(|| bad(CMD, "save the drawing first"))?;
-        let src = Path::new(drawing);
-        let parent = src.parent().unwrap_or_else(|| Path::new("."));
-        let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("drawing");
-        let out = str_param(p, "path").map(PathBuf::from).unwrap_or_else(|| parent.join(format!("{stem}-etransmit")));
-        std::fs::create_dir_all(&out).map_err(|e| bad(CMD, format!("{}: {e}", out.display())))?;
-        let mut files = Vec::new();
-        let dest = out.join(src.file_name().unwrap_or_default());
-        std::fs::copy(src, &dest).map_err(|e| bad(CMD, format!("copy drawing: {e}")))?;
-        files.push(json!({ "role": "drawing", "path": dest.display().to_string() }));
-        if bool_or(p, "includeXrefs", true) {
-            for b in s.doc()?.blocks.values().take(MAX_FILES) {
-                let Some(path) = b.xref_path.as_deref().filter(|s| !s.is_empty()) else { continue };
-                let from = Path::new(path);
-                if !from.is_file() {
-                    // Resolve beside the drawing.
-                    let beside = parent.join(path);
-                    if beside.is_file() {
-                        let name = beside.file_name().unwrap_or_default();
-                        let to = out.join(name);
-                        if std::fs::copy(&beside, &to).is_ok() {
-                            files.push(json!({ "role": "xref", "name": b.name, "path": to.display().to_string() }));
-                        }
-                    }
-                    continue;
-                }
-                let name = from.file_name().unwrap_or_default();
-                let to = out.join(name);
-                if std::fs::copy(from, &to).is_ok() {
-                    files.push(json!({ "role": "xref", "name": b.name, "path": to.display().to_string() }));
-                }
-                if files.len() >= MAX_FILES {
-                    break;
-                }
-            }
-        }
-        if bool_or(p, "includeImages", true) {
-            let d = s.doc()?;
-            for e in d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())).take(MAX_LIST) {
-                if let aad_doc::EntityKind::Image(img) = &e.kind {
-                    let from = Path::new(&img.path);
-                    if from.is_file() {
-                        let name = from.file_name().unwrap_or_default();
-                        let to = out.join(name);
-                        if std::fs::copy(from, &to).is_ok() {
-                            files.push(json!({ "role": "image", "path": to.display().to_string() }));
-                        }
-                    }
-                }
-                if files.len() >= MAX_FILES {
-                    break;
-                }
-            }
-        }
-        Ok(json!({ "folder": out.display().to_string(), "files": files, "count": files.len() }))
-    }
 }
 
 fn run_adcenter(s: &mut Session, p: &Value) -> Result<Value> {

@@ -21,9 +21,10 @@ internal sealed class CalcWindow : Window
         Density.Name(_expr, "Expression");
         AutomationProperties.SetLiveSetting(_result, AutomationLiveSetting.Polite);
         Density.Name(_result, "Result");
-        var equals = Action("=");
+        var equals = DialogLayout.Action("=", primary: true);
+        Density.Name(equals, "Evaluate");
         equals.Click += (_, _) => Evaluate();
-        var clear = Action("Clear");
+        var clear = DialogLayout.Action("Clear");
         clear.Click += (_, _) =>
         {
             _expr.Text = "";
@@ -55,13 +56,6 @@ internal sealed class CalcWindow : Window
                 Evaluate();
             }
         };
-    }
-
-    private static Button Action(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight, MinWidth = 48 };
-        Density.Name(button, label == "=" ? "Evaluate" : label);
-        return button;
     }
 
     public static CalcWindow Show(Window owner, IntPtr host)

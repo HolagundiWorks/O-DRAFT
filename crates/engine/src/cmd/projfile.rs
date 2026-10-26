@@ -953,7 +953,15 @@ fn run_current(s: &mut Session, p: &Value) -> Result<Value> {
             .find(|x| x.eq_ignore_ascii_case(n))
             .cloned()
             .ok_or_else(|| bad("floor.current", format!("no floor `{n}`; the floors are {}", names.join(", "))))?;
-        project::set(s.doc_mut()?, "activeFloor", &json!(found));
+        // Effective current: stored activeFloor when valid, else first floor (including the virtual
+        // default Ground when no floors are persisted yet). Do not COW just to write that default.
+        let effective = project::active_floor(d)
+            .map(|(_, cur)| cur)
+            .or_else(|| names.first().cloned())
+            .unwrap_or_default();
+        if !effective.eq_ignore_ascii_case(&found) {
+            project::set(s.doc_mut()?, "activeFloor", &json!(found));
+        }
     }
     let d = s.doc()?;
     let (_, active) = project::active_floor(d).unwrap_or((0, names.first().cloned().unwrap_or_default()));

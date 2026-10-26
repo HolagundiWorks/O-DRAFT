@@ -143,6 +143,7 @@ pub fn right_palettes(app: &mut CadApp, ui: &mut egui::Ui) {
 pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     section_header(ui, "Layers");
+    layer_set_controls(app, ui);
     // Layer tools row.
     let mut cmd = None;
     ui.horizontal(|ui| {
@@ -279,6 +280,65 @@ pub(crate) fn layers_section(app: &mut CadApp, ui: &mut egui::Ui) {
     if let Some((n, k, v)) = toggle {
         let _ = app.run("layer.set", json!({ "name": n, k: v }));
     }
+}
+
+fn layer_set_controls(app: &mut CadApp, ui: &mut egui::Ui) {
+    let Ok(list) = app.run("space.list", json!({})) else { return };
+    let spaces = list["spaces"].as_array().cloned().unwrap_or_default();
+    let active = list["active"].as_str().unwrap_or("").to_string();
+    let mut activate = None;
+    let mut save_name = ui.data_mut(|d| d.get_temp::<String>(egui::Id::new("layer_set_name"))).unwrap_or_default();
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(crate::tl!("Layer set"));
+        let shown = spaces
+            .iter()
+            .find(|s| s["id"].as_str() == Some(active.as_str()))
+            .and_then(|s| s["name"].as_str())
+            .unwrap_or(crate::tl!("None"));
+        egui::ComboBox::from_id_salt("layer_set_pick").selected_text(shown).width(140.0).show_ui(ui, |ui| {
+            for sp in &spaces {
+                let id = sp["id"].as_str().unwrap_or("");
+                let name = sp["name"].as_str().unwrap_or(id);
+                if ui.selectable_label(id == active, name).clicked() {
+                    activate = Some(id.to_string());
+                }
+            }
+        });
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.add(egui::TextEdit::singleline(&mut save_name).hint_text(crate::tl!("New set name")).desired_width(120.0));
+        if ui.add_enabled(!save_name.trim().is_empty(), egui::Button::new(crate::tl!("Create"))).clicked() {
+            let name = save_name.trim().to_string();
+            let _ = app.run("space.save", json!({ "name": name, "activate": true }));
+            save_name.clear();
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("layer_set_name"), save_name));
+    if let Some(id) = activate {
+        let _ = app.run("space.activate", json!({ "id": id }));
+    }
+    ui.add_space(4.0);
+}
+
+fn text_size_row(ui: &mut egui::Ui, height: f64, set: &mut Option<Value>, ids: &[String]) {
+    prop_row(ui, "Text size", |ui| {
+        let mut custom = None;
+        ui.horizontal(|ui| {
+            for (rank, label) in [("small", "Small"), ("medium", "Medium"), ("large", "Large")] {
+                if ui.small_button(crate::i18n::t(label)).clicked() {
+                    *set = Some(json!({ "handles": ids, "textSize": rank }));
+                }
+            }
+        });
+        if let Some(v) = edit_field(ui, ui.id().with(("txth", ids)), format!("{height:.4}")) {
+            custom = v.trim().parse::<f64>().ok().filter(|h| *h > 0.0);
+        }
+        if let Some(h) = custom {
+            *set = Some(json!({ "handles": ids, "height": h }));
+        }
+    });
 }
 
 fn prop_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
@@ -776,7 +836,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                         set = Some(json!({ "handles": ids, "text": s }));
                     }
                 });
-                num(ui, "Height", "height", tx.height, &mut set, &ids);
+                text_size_row(ui, tx.height, &mut set, &ids);
                 num(ui, "Rotation", "rotation", tx.rotation.to_degrees(), &mut set, &ids);
                 num(ui, "Width factor", "widthFactor", tx.width_factor, &mut set, &ids);
             }
@@ -786,7 +846,7 @@ pub(crate) fn properties_section(app: &mut CadApp, ui: &mut egui::Ui) {
                         set = Some(json!({ "handles": ids, "text": s }));
                     }
                 });
-                num(ui, "Text height", "height", tx.height, &mut set, &ids);
+                text_size_row(ui, tx.height, &mut set, &ids);
                 num(ui, "Defined width", "width", tx.width, &mut set, &ids);
             }
             EntityKind::LwPolyline(pl) => {

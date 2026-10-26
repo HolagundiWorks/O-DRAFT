@@ -105,6 +105,7 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
         }
         if q.is_null() { None } else { Some(q) }
     });
+    let layiso = !doc.header.str("AAD_LAYISO", "").is_empty();
     json!({
         "uid": state.uid,
         "revision": state.revision,
@@ -112,6 +113,7 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
         "hover": hover_handle.map(|h| h.hex()),
         "focusLayer": focus_layer,
         "focusBlock": focus_block,
+        "layiso": layiso,
         "properties": properties(doc, &state.selection),
         "layers": layers,
         "layersTruncated": layers_truncated,
@@ -200,7 +202,16 @@ fn quick(doc: &aad_engine::doc::Drawing, selection: &[Handle]) -> Value {
         }
     }
     let mut fields = Vec::new();
-    if count == 1 {
+    let openings: Vec<_> = ents
+        .iter()
+        .filter_map(|entity| match &entity.kind {
+            EntityKind::Insert(insert) if insert.is_opening() => Some(insert),
+            _ => None,
+        })
+        .collect();
+    if !openings.is_empty() && openings.len() == ents.len() {
+        opening_fields(&mut fields, doc, &openings, count == 1);
+    } else if count == 1 {
         match &first.kind {
             EntityKind::Line(line) => {
                 let delta = line.b.xy() - line.a.xy();
@@ -230,7 +241,7 @@ fn quick(doc: &aad_engine::doc::Drawing, selection: &[Handle]) -> Value {
                 text_field(&mut fields, "text", "Contents", &text.contents);
                 number_field(&mut fields, "height", "Text height", text.height);
             }
-            EntityKind::Insert(insert) => {
+            EntityKind::Insert(insert) if !insert.is_opening() => {
                 fields.push(json!({ "label": "Name", "value": insert.block, "text": true }));
                 number_field(&mut fields, "rotation", "Rotation", insert.rotation.to_degrees());
                 number_field(&mut fields, "scale", "Scale", insert.scale.x);
@@ -299,6 +310,77 @@ fn shared_owned(values: impl Iterator<Item = String>) -> String {
         }
     }
     first.unwrap_or_default()
+}
+
+fn opening_fields(fields: &mut Vec<Value>, doc: &aad_engine::doc::Drawing, openings: &[&aad_engine::doc::Insert], one: bool) {
+    let kind = shared(openings.iter().map(|i| if i.attrib_value("OKIND") == Some("door") { "Door" } else { "Window" }));
+    fields.push(json!({ "label": "Kind", "value": kind }));
+    let door = openings.iter().all(|i| i.attrib_value("OKIND") == Some("door"));
+    let window = openings.iter().all(|i| i.attrib_value("OKIND") == Some("window"));
+    if door || window {
+        let choices: &[&str] = if door { &["single", "double", "sliding", "folding"] } else { &["fixed", "casement", "sliding", "ventilator"] };
+        let current = shared(openings.iter().map(|i| i.attrib_value("OTYPE").unwrap_or("")));
+        choice_field(fields, "openingType", "Type", &current, choices);
+    } else {
+        fields.push(json!({ "label": "Type", "value": "*VARIES*" }));
+    }
+    let widths: Vec<f64> = openings.iter().filter_map(|i| i.opening_width()).collect();
+    match shared_f64(&widths) {
+        Some(w) if widths.len() == openings.len() => number_field(fields, "openingWidth", "Width", w),
+        _ => varies_field(fields, "openingWidth", "Width"),
+    }
+    push_metres(fields, "sill", "Sill height (m)", openings, "OSILL");
+    let mode = shared(openings.iter().map(|i| if i.attrib_value("OLINTEL").is_some_and(|m| m.eq_ignore_ascii_case("custom")) { "custom" } else { "standard" }));
+    choice_field(fields, "lintelMode", "Lintel lock", &mode, &["standard", "custom"]);
+    let lintel = aad_engine::standard_lintel(doc);
+    if mode == "standard" {
+        let fitted: Vec<f64> = openings
+            .iter()
+            .map(|i| {
+                let sill = i.attrib_value("OSILL").and_then(|v| v.parse().ok()).filter(|n: &f64| n.is_finite()).unwrap_or(0.0);
+                lintel - sill
+            })
+            .collect();
+        match shared_f64(&fitted) {
+            Some(n) if n > 0.0 => number_field(fields, "openingHeight", "Opening height (m)", n),
+            _ => varies_field(fields, "openingHeight", "Opening height (m)"),
+        }
+    } else {
+        push_metres(fields, "openingHeight", "Opening height (m)", openings, "OHEIGHT");
+    }
+    if mode == "standard" {
+        fields.push(json!({ "label": "Head height (m)", "value": format!("{lintel:.4}") }));
+    } else if mode == "custom" {
+        push_metres(fields, "head", "Head height (m)", openings, "OHEAD");
+    } else {
+        fields.push(json!({ "label": "Head height (m)", "value": "*VARIES*" }));
+    }
+    if one {
+        if let Some(i) = openings.first() {
+            number_field(fields, "rotation", "Rotation", i.rotation.to_degrees());
+        }
+    }
+}
+
+fn push_metres(fields: &mut Vec<Value>, key: &str, label: &str, openings: &[&aad_engine::doc::Insert], tag: &str) {
+    let values: Vec<f64> = openings.iter().filter_map(|i| i.attrib_value(tag).and_then(|v| v.parse().ok())).filter(|n: &f64| n.is_finite()).collect();
+    match shared_f64(&values) {
+        Some(n) if values.len() == openings.len() => number_field(fields, key, label, n),
+        _ => varies_field(fields, key, label),
+    }
+}
+
+fn varies_field(fields: &mut Vec<Value>, key: &str, label: &str) {
+    fields.push(json!({ "key": key, "label": label, "value": "*VARIES*", "text": false }));
+}
+
+fn shared_f64(values: &[f64]) -> Option<f64> {
+    let first = *values.first()?;
+    values.iter().all(|v| (*v - first).abs() < 1e-4).then_some(first)
+}
+
+fn choice_field(fields: &mut Vec<Value>, key: &str, label: &str, value: &str, choices: &[&str]) {
+    fields.push(json!({ "key": key, "label": label, "value": value, "text": true, "choices": choices }));
 }
 
 fn number_field(fields: &mut Vec<Value>, key: &str, label: &str, value: f64) {

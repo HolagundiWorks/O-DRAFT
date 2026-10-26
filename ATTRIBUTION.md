@@ -42,6 +42,27 @@ Generated-in-code assets are original and have no file to list:
 | `packaging/macos/dmg/background.tiff` | @XusBadia | Rendered from `packaging/macos/dmg/background.svg` by `packaging/macos/dmg/generate.py` | MIT OR Apache-2.0 (same as the code: `LICENSE-MIT`, `LICENSE-APACHE`) | 1x + 2x HiDPI TIFF for the macOS DMG window; includes the app icon (see its row) and LittleCMS's built-in sRGB profile ("No copyright, use freely") |
 | `examples/apartment.dxf` | O-Draft contributors | sample drawing made with aad-cli commands | MIT OR Apache-2.0 | Original |
 | `apps/aad-cli/tests/fixtures/dwg/alloc-bomb-ac18-section-size.dwg` | AAD contributors | generated: `examples/apartment.dxf` written to DWG by AAD, then corrupted by the mutation test; no third-party content | MIT OR Apache-2.0 | Regression fixture for BUG-001 (see `apps/aad-cli/tests/fixtures/README.md`) |
+| `assets/furniture/README.md` | O-Draft contributors | catalog notes for the bundled furniture set | MIT OR Apache-2.0 | |
+| `assets/furniture/standard/catalog.json` | O-Draft contributors | index of the standard furniture DXFs | MIT OR Apache-2.0 | |
+| `assets/furniture/standard/FURN-Armchair.dxf` | Innerscene | [Armchair plan](https://www.innerscene.com/tools/library/drawings/armchair-plan-cad-block-83848260) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-BedroomSheet.dxf` | Innerscene | [Bedroom A3 sheet](https://www.innerscene.com/tools/library/drawings/bedroom-a3-sheet-cad-collection-570377a6) | CC0 1.0 | Multi-block collection |
+| `assets/furniture/standard/FURN-CoffeeTableRound.dxf` | Innerscene | [Round coffee table plan](https://www.innerscene.com/tools/library/drawings/round-coffee-table-plan-cad-block-8ababc9b) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-Cupboard.dxf` | Innerscene | [Storage cupboard plan](https://www.innerscene.com/tools/library/drawings/storage-cupboard-plan-cad-block-b8096457) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-Desk.dxf` | Innerscene | [Straight desk plan](https://www.innerscene.com/tools/library/drawings/straight-desk-plan-cad-block-37bb965b) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-DiningChair.dxf` | Innerscene | [Dining chair plan](https://www.innerscene.com/tools/library/drawings/dining-chair-plan-cad-block-5061c00f) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-DiningTable4.dxf` | Innerscene | [Round dining table four seats](https://www.innerscene.com/tools/library/drawings/round-dining-table-four-seats-plan-cad-block-192d44d3) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-DoubleBed.dxf` | Innerscene | [Double bed plan](https://www.innerscene.com/tools/library/drawings/double-bed-plan-cad-block-f2ade2fa) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-KingBed.dxf` | Innerscene | [King bed plan](https://www.innerscene.com/tools/library/drawings/king-bed-plan-cad-block-32c512e2) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-MediaCabinet.dxf` | Innerscene | [Media cabinet plan](https://www.innerscene.com/tools/library/drawings/media-cabinet-plan-cad-block-f4a09b71) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-OfficeChair.dxf` | Innerscene | [Office task chair plan](https://www.innerscene.com/tools/library/drawings/office-task-chair-plan-cad-block-3d0841c9) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-Recliner.dxf` | Innerscene | [Recliner plan](https://www.innerscene.com/tools/library/drawings/recliner-plan-cad-block-bb2d2c86) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-Sideboard.dxf` | Innerscene | [Sideboard plan](https://www.innerscene.com/tools/library/drawings/sideboard-plan-cad-block-4ba5d5b0) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-SideTable.dxf` | Innerscene | [Side table plan](https://www.innerscene.com/tools/library/drawings/side-table-plan-cad-block-34218654) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-SingleBed.dxf` | Innerscene | [Single bed plan](https://www.innerscene.com/tools/library/drawings/single-bed-plan-cad-block-59a27591) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-Sofa2.dxf` | Innerscene | [Two seat sofa plan](https://www.innerscene.com/tools/library/drawings/two-seat-sofa-plan-cad-block-510966fe) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-Sofa3.dxf` | Innerscene | [Three seat sofa plan](https://www.innerscene.com/tools/library/drawings/three-seat-sofa-plan-cad-block-4517f70b) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-VisitorChair.dxf` | Innerscene | [Visitor chair plan](https://www.innerscene.com/tools/library/drawings/visitor-chair-plan-cad-block-656d39f8) | CC0 1.0 | Plan view, 1:1 mm |
+| `assets/furniture/standard/FURN-Wardrobe2Door.dxf` | Innerscene | [Two door wardrobe plan](https://www.innerscene.com/tools/library/drawings/two-door-wardrobe-plan-cad-block-0ebd8e25) | CC0 1.0 | Plan view, 1:1 mm |
 
 ## Interface translations
 

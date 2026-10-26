@@ -31,6 +31,7 @@ internal static class CommandList
         lines.Text = text.ToString();
         lines.FontSize = Density.Font;
         Density.Name(lines, "Command list");
+        Density.Apply(lines);
         AutomationProperties.SetHeadingLevel(lines, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         _window?.Close();
         var window = new Window
@@ -50,7 +51,7 @@ internal static class CommandList
         };
         _window = window;
         ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 360, minHeightDip: 280, maxWidthDip: 720, maxHeightDip: 800);
+        ShellFit.UserResizable(window, minWidthDip: 360, minHeightDip: 280, maxWidthDip: 720, maxHeightDip: 800, persistKey: "commands");
         window.Activate();
         Native.ShowWindow(WindowNative.GetWindowHandle(window), 8);
     }

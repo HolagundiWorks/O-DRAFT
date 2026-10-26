@@ -25,12 +25,12 @@ internal static class MLeaderStyleWindow
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         Density.Name(status, "Multileader style status");
 
-        var list = new ListBox { MinHeight = 160, MinWidth = 160 };
+        var list = new ListBox { MinHeight = 160, MinWidth = Density.ManagerListWidth };
         Density.Name(list, "Multileader styles");
         var currentLabel = Density.Secondary("Current style: ?", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current multileader style");
         var setCurrent = ActionButton("Set Current");
-        var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = 140 };
+        var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
         Density.Name(newName, "New style name");
         var create = ActionButton("New");
         var arrow = Field("Arrowhead size");
@@ -41,7 +41,7 @@ internal static class MLeaderStyleWindow
         Density.Name(textStyle, "Text style");
         var propsHeading = Heading("Properties");
 
-        var left = new StackPanel { Spacing = Density.SpaceSm, Width = 200 };
+        var left = new StackPanel { Spacing = Density.SpaceSm, Width = Density.ManagerListWidth };
         left.Children.Add(Heading("Styles"));
         left.Children.Add(list);
         left.Children.Add(setCurrent);
@@ -304,36 +304,18 @@ internal static class MLeaderStyleWindow
             presenter.IsResizable = true;
         }
         ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 460, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640);
+        ShellFit.UserResizable(window, minWidthDip: 460, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640, persistKey: "mleaderstyle");
         Reload(null);
         return window;
     }
 
-    private static Button ActionButton(string label) => Density.DialogAction(label);
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
-    private static TextBox Field(string name)
-    {
-        var box = new TextBox { MinHeight = Density.ControlHeight, Width = 120 };
-        Density.Name(box, name);
-        return box;
-    }
+    private static TextBox Field(string name) => DialogLayout.Field(name);
 
-    private static FrameworkElement Labeled(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = Density.SpaceXs };
-        var text = new TextBlock { Text = label };
-        Density.Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    private static FrameworkElement Labeled(string label, FrameworkElement field) => DialogLayout.Labeled(label, field);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private static string Fmt(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 

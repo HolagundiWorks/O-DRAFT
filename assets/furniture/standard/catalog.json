@@ -1,0 +1,29 @@
+{
+  "id": "standard",
+  "name": "Standard furniture",
+  "units": "mm",
+  "licence": "CC0 1.0",
+  "attribution": "Innerscene Drawing Library (public domain / CC0). Geometry is 1:1 millimetres; verify sizes against the specified product before construction.",
+  "source": "https://www.innerscene.com/tools/library/drawings",
+  "items": [
+    { "id": "single-bed", "title": "Single bed", "file": "FURN-SingleBed.dxf", "category": "bedroom", "size_mm": "1000 × 2020", "source": "https://www.innerscene.com/tools/library/drawings/single-bed-plan-cad-block-59a27591" },
+    { "id": "double-bed", "title": "Double bed", "file": "FURN-DoubleBed.dxf", "category": "bedroom", "size_mm": "1450 × 2020", "source": "https://www.innerscene.com/tools/library/drawings/double-bed-plan-cad-block-f2ade2fa" },
+    { "id": "king-bed", "title": "King bed", "file": "FURN-KingBed.dxf", "category": "bedroom", "size_mm": "2030 × 2150", "source": "https://www.innerscene.com/tools/library/drawings/king-bed-plan-cad-block-32c512e2" },
+    { "id": "wardrobe-2", "title": "Two-door wardrobe", "file": "FURN-Wardrobe2Door.dxf", "category": "bedroom", "size_mm": "1200 × 600", "source": "https://www.innerscene.com/tools/library/drawings/two-door-wardrobe-plan-cad-block-0ebd8e25" },
+    { "id": "sofa-3", "title": "Three-seat sofa", "file": "FURN-Sofa3.dxf", "category": "living", "size_mm": "2200 × 950", "source": "https://www.innerscene.com/tools/library/drawings/three-seat-sofa-plan-cad-block-4517f70b" },
+    { "id": "sofa-2", "title": "Two-seat sofa", "file": "FURN-Sofa2.dxf", "category": "living", "size_mm": "1650 × 950", "source": "https://www.innerscene.com/tools/library/drawings/two-seat-sofa-plan-cad-block-510966fe" },
+    { "id": "armchair", "title": "Armchair", "file": "FURN-Armchair.dxf", "category": "living", "size_mm": "850 × 950", "source": "https://www.innerscene.com/tools/library/drawings/armchair-plan-cad-block-83848260" },
+    { "id": "visitor-chair", "title": "Visitor chair", "file": "FURN-VisitorChair.dxf", "category": "living", "size_mm": "480 × 500", "source": "https://www.innerscene.com/tools/library/drawings/visitor-chair-plan-cad-block-656d39f8" },
+    { "id": "recliner", "title": "Recliner", "file": "FURN-Recliner.dxf", "category": "living", "size_mm": "850 × 1430", "source": "https://www.innerscene.com/tools/library/drawings/recliner-plan-cad-block-bb2d2c86" },
+    { "id": "coffee-round", "title": "Round coffee table", "file": "FURN-CoffeeTableRound.dxf", "category": "living", "size_mm": "1100 × 1100", "source": "https://www.innerscene.com/tools/library/drawings/round-coffee-table-plan-cad-block-8ababc9b" },
+    { "id": "side-table", "title": "Side table", "file": "FURN-SideTable.dxf", "category": "living", "size_mm": "600 × 600", "source": "https://www.innerscene.com/tools/library/drawings/side-table-plan-cad-block-34218654" },
+    { "id": "sideboard", "title": "Sideboard", "file": "FURN-Sideboard.dxf", "category": "living", "size_mm": "1600 × 450", "source": "https://www.innerscene.com/tools/library/drawings/sideboard-plan-cad-block-4ba5d5b0" },
+    { "id": "media-cabinet", "title": "Media cabinet", "file": "FURN-MediaCabinet.dxf", "category": "living", "size_mm": "1600 × 450", "source": "https://www.innerscene.com/tools/library/drawings/media-cabinet-plan-cad-block-f4a09b71" },
+    { "id": "dining-4", "title": "Dining table (4 seats)", "file": "FURN-DiningTable4.dxf", "category": "dining", "size_mm": "2220 × 2220", "source": "https://www.innerscene.com/tools/library/drawings/round-dining-table-four-seats-plan-cad-block-192d44d3" },
+    { "id": "dining-chair", "title": "Dining chair", "file": "FURN-DiningChair.dxf", "category": "dining", "size_mm": "480 × 500", "source": "https://www.innerscene.com/tools/library/drawings/dining-chair-plan-cad-block-5061c00f" },
+    { "id": "desk", "title": "Straight desk", "file": "FURN-Desk.dxf", "category": "office", "size_mm": "1200 × 700", "source": "https://www.innerscene.com/tools/library/drawings/straight-desk-plan-cad-block-37bb965b" },
+    { "id": "office-chair", "title": "Office task chair", "file": "FURN-OfficeChair.dxf", "category": "office", "size_mm": "633 × 666", "source": "https://www.innerscene.com/tools/library/drawings/office-task-chair-plan-cad-block-3d0841c9" },
+    { "id": "cupboard", "title": "Storage cupboard", "file": "FURN-Cupboard.dxf", "category": "storage", "size_mm": "900 × 450", "source": "https://www.innerscene.com/tools/library/drawings/storage-cupboard-plan-cad-block-b8096457" },
+    { "id": "bedroom-sheet", "title": "Bedroom set (20 blocks)", "file": "FURN-BedroomSheet.dxf", "category": "sets", "size_mm": "A3 sheet", "note": "Insert once to load the named bedroom blocks into the drawing.", "source": "https://www.innerscene.com/tools/library/drawings/bedroom-a3-sheet-cad-collection-570377a6" }
+  ]
+}

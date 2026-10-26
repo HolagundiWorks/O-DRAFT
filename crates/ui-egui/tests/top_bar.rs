@@ -46,11 +46,11 @@ fn the_first_line_holds_the_chosen_tools_and_the_second_line_the_selectors() {
         assert!(has(&h, tool), "default first-line tool {tool}");
     }
     let first = y_of(&h, "Room Label");
-    let second = y_of(&h, "Drawing space");
+    let second = y_of(&h, "Layer");
     assert!(first < second, "the tools line is above the selectors line ({first} vs {second})");
     assert!(
-        (y_of(&h, "Layer") - second).abs() < 6.0 && (y_of(&h, "Floor") - second).abs() < 6.0,
-        "layer, floor and drawing space share the second line"
+        (y_of(&h, "Floor") - second).abs() < 6.0,
+        "layer and floor share the second line"
     );
     // The old property row is gone: no dropdown sits in the top bar area above the selectors.
     let combos_in_top_bar = h.query_all_by_role(Role::ComboBox).filter(|n| n.rect().center().y < second - 8.0).count();
@@ -61,7 +61,7 @@ fn the_first_line_holds_the_chosen_tools_and_the_second_line_the_selectors() {
 fn pro_has_no_first_line_but_keeps_the_second() {
     let h = harness(WorkspaceMode::Pro);
     assert!(!has(&h, "Room Label"), "Pro has no toolbars, so no first line");
-    assert!(has(&h, "Drawing space") && has(&h, "Floor"));
+    assert!(has(&h, "Layer") && has(&h, "Floor"));
 }
 
 #[test]

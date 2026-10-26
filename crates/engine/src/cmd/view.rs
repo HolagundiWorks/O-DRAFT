@@ -251,6 +251,10 @@ fn run_layout_set(s: &mut Session, p: &Value) -> Result<Value> {
         let l = s.doc()?.layout(name).ok_or_else(|| bad("layout.set", format!("no layout `{name}`")))?;
         Space::Paper(l.name.clone())
     };
+    // Already on this tab and not in a viewport: no-op (WinUI EnsureModelSpace re-calls this often).
+    if s.layout_space() == space && s.state()?.mspace.is_none() {
+        return ok();
+    }
     let st = s.state_mut()?;
     st.space = space.clone();
     st.mspace = None;

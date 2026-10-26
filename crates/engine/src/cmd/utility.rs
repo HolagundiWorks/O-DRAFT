@@ -1,4 +1,5 @@
-//! Utilities: CAL (architect calculator), FIND (find and replace text), MASSPROP, MEASUREGEOM.
+//! Utilities: CAL (architect calculator), FIND (find and replace text), MEASUREGEOM,
+//! radius and angle inquiry.
 
 use aad_doc::{EntityKind, Handle};
 use aad_geom::Vec2;
@@ -146,7 +147,7 @@ fn run_find(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "matches": found, "total": total, "message": msg }))
 }
 
-// ---------------- MASSPROP / MEASUREGEOM ----------------
+// ---------------- MEASUREGEOM ----------------
 
 fn run_radius(s: &mut Session, p: &Value) -> Result<Value> {
     let h = targets(s, p)?.first().copied().ok_or_else(|| bad("radius.measure", "`handle` is required"))?;

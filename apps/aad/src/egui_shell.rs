@@ -169,8 +169,6 @@ pub fn run(control_port: Option<u16>, sample: bool, files: Vec<String>) -> efram
             {
                 app.load_prefs(&prefs);
             }
-            // AORMS connect UI is removed; do not auto-restore a shared portal session.
-            app.aorms.auto_restore = false;
             app.integrated_titlebar = cfg!(target_os = "macos");
             if surface.present_mode == eframe::wgpu::PresentMode::AutoNoVsync {
                 app.frame_cap = Some(aad_ui_egui::gpu::FrameCap::new(240));

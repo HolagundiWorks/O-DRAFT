@@ -114,6 +114,13 @@ Copy-Item (Join-Path $Bin 'aad.exe') (Join-Path $Stage 'o-draft.exe')
 Copy-Item (Join-Path $Bin 'aad-cli.exe') $Stage
 # Licence texts and notices, installed beside the program (the licence page of the wizard shows LICENSE-MIT).
 foreach ($n in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'THIRD_PARTY_LICENSES.md', 'ATTRIBUTION.md') { Copy-Item (Join-Path $Root $n) $Stage }
+# Standard furniture DXF catalog (CC0 plan blocks) beside the program.
+$FurnSrc = Join-Path $Root 'assets\furniture\standard'
+if (Test-Path $FurnSrc) {
+  $FurnStage = Join-Path $Stage 'furniture\standard'
+  New-Item -ItemType Directory -Force -Path $FurnStage | Out-Null
+  Copy-Item (Join-Path $FurnSrc '*') $FurnStage -Recurse -Force
+}
 
 # ShilpiDB engine binaries (bundled sibling process — not a separate product). Prefer a local
 # shilpidb workspace build, then OSAS suite-tools, then SHILPIDB_BIN.

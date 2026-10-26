@@ -316,24 +316,13 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                 // Cap the row: the vertical separator below takes all the height it is offered, and a
                 // resizable window offers its whole previous height, so the window grew every frame (#29).
                 ui.set_max_height(avail);
-                // ----- filter tree -----
-                ui.allocate_ui_with_layout(vec2(150.0, avail), egui::Layout::top_down(egui::Align::Min), |ui| {
-                    ui.set_min_width(150.0);
-                    ui.label(RichText::new(crate::tl!("Filters")).small().color(t.text_dim));
-                    for (i, l) in ["All", "All Used Layers"].iter().enumerate() {
-                        ui.horizontal(|ui| {
-                            ui.add_space(if i == 0 { 0.0 } else { 14.0 });
-                            if ui.selectable_label(st.filter == i as u8, crate::i18n::t(l)).clicked() {
-                                st.filter = i as u8;
-                            }
-                        });
-                    }
-                    ui.add_space(8.0);
-                    if let Some((h, _)) = &vp {
+                st.filter = 0;
+                if let Some((h, _)) = &vp {
+                    ui.vertical(|ui| {
                         ui.label(RichText::new(crate::tf!("Viewport {id}", id = h.hex())).small().color(t.text_dim));
-                    }
-                });
-                ui.separator();
+                    });
+                    ui.separator();
+                }
                 // ----- the table -----
                 ui.vertical(|ui| {
                     egui::ScrollArea::both().id_salt("lpm_table").auto_shrink([false, false]).max_height(avail).show(ui, |ui| {

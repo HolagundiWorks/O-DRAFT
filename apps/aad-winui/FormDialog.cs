@@ -111,11 +111,9 @@ internal static class FormDialog
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = Density.FontBody };
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Assertive);
         Density.Name(error, "Form error");
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceMd, HorizontalAlignment = HorizontalAlignment.Right };
         var ok = Density.DialogAction("OK", primary: true);
         var cancel = Density.DialogAction("Cancel");
-        buttons.Children.Add(ok);
-        buttons.Children.Add(cancel);
+        var buttons = DialogLayout.ActionRow(ok, cancel);
         stack.Children.Add(error);
         stack.Children.Add(buttons);
 
@@ -126,7 +124,7 @@ internal static class FormDialog
         var window = new Window { Title = title, Content = page };
         ShellIcon.Apply(window, theme);
         // UserResizable avoids Adaptive SizeChanged↔Resize flicker; scroll covers tall forms.
-        ShellFit.UserResizable(window, minWidthDip: 400, minHeightDip: 320, maxWidthDip: 720, maxHeightDip: 800);
+        ShellFit.UserResizable(window, minWidthDip: 400, minHeightDip: 320, maxWidthDip: 720, maxHeightDip: 800, persistKey: "form");
         ok.Click += (_, _) =>
         {
             var preset = Collect(scalars, checks, choices, tables);

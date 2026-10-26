@@ -1,6 +1,6 @@
-//! Draw menu depth (M1/M2): every ARC and CIRCLE variant, ELLIPSE axis/arc entries, RECTANG
-//! options, DIVIDE/MEASURE, REVCLOUD, WIPEOUT, XLINE options, MLINE, spline by
-//! control vertices, CENTERMARK and CENTERLINE. Each has a JSON form and a prompt sequence.
+//! Draw menu depth (M1/M2): every ARC and CIRCLE variant, ELLIPSE axis/arc entries,
+//! DIVIDE/MEASURE, REVCLOUD, WIPEOUT, MLINE, spline by control vertices. Each has a JSON form
+//! and a prompt sequence.
 
 use aad_doc::{EntityKind, Handle, Point, RayLine, Wipeout};
 use aad_geom::{Arc, Circle, Ellipse, Line, PolyVertex, Polyline, Spline, TAU, Vec2, norm_angle, shoelace};
@@ -2069,10 +2069,6 @@ impl Interactive for SplineCvM {
         vec![EntityKind::Spline(Spline::from_control(pts, self.degree.unwrap_or(3)))]
     }
 }
-
-// =====================================================================================
-// CENTERMARK / CENTERLINE
-// =====================================================================================
 
 #[cfg(test)]
 #[path = "draw2_tests.rs"]

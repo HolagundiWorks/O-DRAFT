@@ -14,7 +14,7 @@ namespace Aad.WinUi;
 /// <summary>Format / Modify &gt; Hatch Editor? ? pattern library with AutoCAD-style swatches.</summary>
 internal static class HatchWindow
 {
-    private const double SwatchDip = 72;
+    private const double SwatchDip = Density.HatchSwatch;
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -37,9 +37,9 @@ internal static class HatchWindow
         Density.Name(grid, "Hatch patterns");
         var selectionLabel = Density.Secondary("Selection: ?", TextWrapping.Wrap);
         Density.Name(selectionLabel, "Hatch selection");
-        var scale = new TextBox { MinHeight = Density.ControlHeight, Width = 100 };
+        var scale = new TextBox { MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
         Density.Name(scale, "Hatch scale");
-        var angle = new TextBox { MinHeight = Density.ControlHeight, Width = 100 };
+        var angle = new TextBox { MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
         Density.Name(angle, "Hatch angle");
         var apply = ActionButton("Apply to selection");
         var setDefaults = ActionButton("Set as defaults");
@@ -47,15 +47,14 @@ internal static class HatchWindow
         var scaleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm };
         scaleRow.Children.Add(new TextBlock { Text = "Scale", VerticalAlignment = VerticalAlignment.Center, FontSize = Density.FontBody });
         scaleRow.Children.Add(scale);
-        scaleRow.Children.Add(new TextBlock { Text = "Angle", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), FontSize = Density.FontBody });
+        scaleRow.Children.Add(new TextBlock { Text = "Angle", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(Density.SpaceLg, 0, 0, 0), FontSize = Density.FontBody });
         scaleRow.Children.Add(angle);
 
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm, HorizontalAlignment = HorizontalAlignment.Right };
         actions.Children.Add(apply);
         actions.Children.Add(setDefaults);
 
         var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, MaxWidth = 560 };
-        root.Children.Add(Heading("Hatch Editor"));
         root.Children.Add(selectionLabel);
         root.Children.Add(grid);
         root.Children.Add(scaleRow);
@@ -291,14 +290,7 @@ internal static class HatchWindow
         return window;
     }
 
-    private static Button ActionButton(string label) => Density.DialogAction(label);
-
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
     private static FrameworkElement BuildTile(string name, string description, JsonElement preview)
     {

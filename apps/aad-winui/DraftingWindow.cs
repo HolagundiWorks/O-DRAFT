@@ -157,9 +157,8 @@ internal sealed class DraftingWindow : Window
 
     private static TextBlock Heading(string text)
     {
-        var block = Density.SectionHeading(text);
-        block.Margin = new Thickness(0, 8, 0, 0);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
+        var block = DialogLayout.Heading(text);
+        block.Margin = new Thickness(0, Density.SpaceLg, 0, 0);
         return block;
     }
 }

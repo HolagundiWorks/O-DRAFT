@@ -27,7 +27,7 @@ internal static class PageSetupWindow
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         Density.Name(status, "Page setup status");
 
-        var list = new ListBox { MinHeight = 180, MinWidth = 160 };
+        var list = new ListBox { MinHeight = 180, MinWidth = Density.ManagerListWidth };
         Density.Name(list, "Layouts");
         var paper = new ComboBox { MinWidth = 200, MinHeight = Density.ControlHeight };
         Density.Name(paper, "Paper size");
@@ -43,7 +43,7 @@ internal static class PageSetupWindow
         Density.Name(plotArea, "Plot area");
         var fit = new CheckBox { Content = "Fit to paper", MinHeight = Density.ControlHeight, IsChecked = true };
         Density.Name(fit, "Fit to paper");
-        var scale = new TextBox { MinHeight = Density.ControlHeight, Width = 120 };
+        var scale = new TextBox { MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
         Density.Name(scale, "Scale");
         var nearest = Density.Secondary("", TextWrapping.Wrap);
         Density.Name(nearest, "Nearest scale");
@@ -55,7 +55,7 @@ internal static class PageSetupWindow
         Density.Name(sizeLabel, "Paper dimensions");
         var propsHeading = Heading("Page setup");
 
-        var left = new StackPanel { Spacing = Density.SpaceSm, Width = 180 };
+        var left = new StackPanel { Spacing = Density.SpaceSm, Width = Density.ManagerListWidth };
         left.Children.Add(Heading("Layouts"));
         left.Children.Add(list);
 
@@ -308,27 +308,14 @@ internal static class PageSetupWindow
             presenter.IsResizable = true;
         }
         ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 480, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640);
+        ShellFit.UserResizable(window, minWidthDip: 480, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640, persistKey: "pagesetup");
         Reload(null);
         return window;
     }
 
-    private static FrameworkElement Labeled(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = Density.SpaceXs };
-        var text = new TextBlock { Text = label };
-        Density.Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    private static FrameworkElement Labeled(string label, FrameworkElement field) => DialogLayout.Labeled(label, field);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private sealed class State
     {

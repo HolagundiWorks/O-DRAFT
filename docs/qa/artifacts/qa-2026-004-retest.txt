@@ -1,0 +1,18 @@
+QA-2026-004 retest — 2026-10-26
+
+Root cause
+  PollEscapeCancel returned early when focus was ComboBox without closing the dropdown.
+  When the ComboBox flyout focused a list item (not ComboBox), Escape fell through to
+  CancelCommand and left the dropdown open.
+
+Fix
+  MainWindow.CloseOpenComboBoxes() closes LayerBox / SpaceBox / FloorBox / UnitsBox when
+  IsDropDownOpen. Called from OnShellKey Escape and PollEscapeCancel before CAD cancel.
+
+Visual evidence
+  Code path reviewed and rebuilt into WinUI Debug x64 (2026-10-26).
+  Computer-use clicks on LayerBox did not reliably open the WinUI ComboBox flyout
+  (canvas HWND / focus), so Escape-dismiss was not re-shot live. Fix is deterministic:
+  CloseOpenComboBoxes sets IsDropDownOpen=false before CancelCommand.
+
+Status: fixed (code + rebuild); live Escape dismiss still recommended once

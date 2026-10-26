@@ -27,6 +27,7 @@
     <Manifest Include="$(ApplicationManifest)" />
     <Content Include="..\..\assets\app-icon\aad.ico" Link="aad.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\assets\app-icon\aad-256.png" Link="aad-256.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\furniture\standard\**\*" Link="furniture\standard\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CopyHost" AfterTargets="Build">
     <PropertyGroup>

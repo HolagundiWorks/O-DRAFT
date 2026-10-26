@@ -39,6 +39,10 @@ fn stretch(s: &mut Session, cmd: &str, p: &Value) -> Result<Value> {
     let e = curves::entity(s, h)?;
     let k = stretch_grip(&e.kind, i, to).ok_or_else(|| bad(cmd, "no such grip, or the result would be degenerate"))?;
     let mut edits = vec![(h, k)];
+    let mut refit: Vec<(Handle, f64)> = Vec::new();
+    if let Some(w) = super::walls::opening_width_of(&e.kind) {
+        refit.push((h, w));
+    }
     // The other `handles` with a grip on the same point stretch with it (connected objects stay
     // connected); locked ones and edits that would be degenerate are left alone.
     let from = e.kind.grips().get(i).copied().unwrap_or(to);
@@ -51,6 +55,9 @@ fn stretch(s: &mut Session, cmd: &str, p: &Value) -> Result<Value> {
         if let Some(j) = oe.kind.grips().iter().position(|g| g.near(from, tol))
             && let Some(k) = stretch_grip(&oe.kind, j, to)
         {
+            if let Some(w) = super::walls::opening_width_of(&oe.kind) {
+                refit.push((o, w));
+            }
             edits.push((o, k));
         }
     }
@@ -58,6 +65,11 @@ fn stretch(s: &mut Session, cmd: &str, p: &Value) -> Result<Value> {
     for (o, k) in &edits {
         d.modify_entity(*o, |e| e.kind = k.clone())?;
     }
+    for (o, old_w) in refit {
+        super::walls::refit_opening(s, o, old_w)?;
+    }
+    let edited: Vec<_> = edits.iter().map(|(o, _)| *o).collect();
+    let _ = super::hcw::refit_rooms(s, &edited);
     Ok(json!({ "handle": h.hex(), "handles": edits.iter().map(|(o, _)| o.hex()).collect::<Vec<_>>() }))
 }
 

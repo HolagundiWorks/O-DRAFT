@@ -63,6 +63,48 @@ fn insert(app: &mut CadApp, name: &str) {
     }
 }
 
+/// INSERT a furniture DXF from the bundled standard set (`name=path` so the block is named cleanly).
+fn insert_furniture_file(app: &mut CadApp, block_name: &str, path: &std::path::Path) {
+    let path = path.to_string_lossy();
+    let token = format!("{block_name}={path}");
+    app.start("insert");
+    if let Err(e) = app.session.input(Input::Text(token)) {
+        app.session.echo(e.to_string());
+    }
+}
+
+fn furniture_section(app: &mut CadApp, ui: &mut egui::Ui) {
+    let t = Tokens::get();
+    let Some(cat) = crate::furniture::standard() else {
+        return;
+    };
+    ui.add_space(8.0);
+    ui.separator();
+    ui.label(egui::RichText::new(crate::tl!("Standard furniture")).strong());
+    ui.label(egui::RichText::new(crate::tl!("Plan blocks · millimetres · CC0")).small().color(t.text_dim));
+    let mut insert_path: Option<(String, std::path::PathBuf)> = None;
+    let mut last_cat = String::new();
+    for (item, path) in &cat.items {
+        if item.category != last_cat {
+            last_cat = item.category.clone();
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(last_cat.to_ascii_uppercase()).small().strong().color(t.text_dim));
+        }
+        let size = item.size_mm.as_deref().unwrap_or("");
+        let label = if size.is_empty() {
+            item.title.clone()
+        } else {
+            format!("{} · {} mm", item.title, size)
+        };
+        if ui.button(&label).on_hover_text(item.note.as_deref().unwrap_or("Insert this block (asks for the insertion point)")).clicked() {
+            insert_path = Some((item.file.trim_end_matches(".dxf").trim_end_matches(".DXF").to_string(), path.clone()));
+        }
+    }
+    if let Some((name, path)) = insert_path {
+        insert_furniture_file(app, &name, &path);
+    }
+}
+
 pub(crate) fn blocks_section(app: &mut CadApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
     ui.add_space(6.0);
@@ -174,6 +216,7 @@ pub(crate) fn blocks_section(app: &mut CadApp, ui: &mut egui::Ui) {
     }
     ui.add_space(8.0);
     ui.label(egui::RichText::new(crate::tl!("External references are not supported.")).small().color(t.text_faint));
+    furniture_section(app, ui);
     ui.data_mut(|data| match &selected {
         Some(n) => {
             data.insert_temp(id, n.clone());

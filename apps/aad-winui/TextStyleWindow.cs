@@ -35,12 +35,12 @@ internal static class TextStyleWindow
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         Density.Name(status, "Text style status");
 
-        var list = new ListBox { MinHeight = 160, MinWidth = 160 };
+        var list = new ListBox { MinHeight = 160, MinWidth = Density.ManagerListWidth };
         Density.Name(list, "Text styles");
         var currentLabel = Density.Secondary("Current style: ?", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current text style");
         var setCurrent = ActionButton("Set Current");
-        var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = 140 };
+        var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
         Density.Name(newName, "New style name");
         var create = ActionButton("New");
         var font = new ComboBox { IsEditable = true, MinWidth = 200, MinHeight = Density.ControlHeight };
@@ -50,7 +50,7 @@ internal static class TextStyleWindow
         var oblique = FieldBox("Oblique angle (degrees)");
         var propsHeading = Heading("Properties");
 
-        var left = new StackPanel { Spacing = Density.SpaceSm, Width = 200 };
+        var left = new StackPanel { Spacing = Density.SpaceSm, Width = Density.ManagerListWidth };
         left.Children.Add(Heading("Styles"));
         left.Children.Add(list);
         left.Children.Add(setCurrent);
@@ -336,36 +336,18 @@ internal static class TextStyleWindow
             presenter.IsResizable = true;
         }
         ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 480, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640);
+        ShellFit.UserResizable(window, minWidthDip: 480, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640, persistKey: "textstyle");
         Reload(null);
         return window;
     }
 
-    private static Button ActionButton(string label) => Density.DialogAction(label);
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
-    private static TextBox FieldBox(string name)
-    {
-        var box = new TextBox { MinHeight = Density.ControlHeight, Width = 120 };
-        Density.Name(box, name);
-        return box;
-    }
+    private static TextBox FieldBox(string name) => DialogLayout.Field(name);
 
-    private static FrameworkElement Labeled(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = Density.SpaceXs };
-        var text = new TextBlock { Text = label };
-        Density.Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    private static FrameworkElement Labeled(string label, FrameworkElement field) => DialogLayout.Labeled(label, field);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private static string Fmt(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 

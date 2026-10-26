@@ -21,7 +21,7 @@ Crate `aad-aorms` (layer 3, native only; the web build compiles it to "not avail
 | `aorms.open {projectOfficeId}` | Pulls the project's details (title, owner, architect, address, project id) and, when the project's take-off holds levels, the floors (floor-to-floor, slab, beam depth; ceiling and lintel are kept or derived). Links the drawing to the project. |
 | `aorms.pull` | The same, for the linked project. |
 | `aorms.drawings` | Lists the project's current drawings on the portal. |
-| `aorms.apply {projectOfficeId, seed, settings}` | The drawing half of a pull whose network half ran elsewhere (the dialog fetches on a worker thread); one undo step. |
+| `aorms.apply {projectOfficeId, seed, settings}` | The drawing half of a pull whose network half ran elsewhere (scripts / MCP / control channel); one undo step. |
 
 Rules: portal data reaches the drawing only on `aorms.open` / `aorms.pull`, only project details and floors, never drawn geometry; the password is used once and never stored, logged or returned; every server answer is treated as untrusted (size caps, defensive parsing, no panics).
 
@@ -38,8 +38,8 @@ The OS store (`KeyringStore`) is behind the cargo feature `keyring-store` (engin
 ## Tested
 
 * `cargo test -p aad-aorms` (25 tests: contract handling, restore without stealing a session, rotation, busy/offline/refused refresh, hostile answers, mapping) and `cargo test -p aad-engine aorms` (12 tests: commands against a scripted server, no geometry changed, hostile parameters, signed-out behaviour).
-* `cargo test -p aad-ui-egui --test aorms_ui` (15 tests: engine helpers still work; connect UI is gone — no AORMS menu, menu/typed commands do not open a dialog; JSON `aorms.*` still runs; password leaves the field at once on a scripted sign-in; preferences hold no secret).
 * `crates/engine/examples/aorms_smoke.rs` runs the commands against a real server: signed in as `aad`, listed projects, pulled a bound project's details and floors into a scratch drawing, signed out (2026-10-11, a local AORMS dev server).
+* There is no egui or WinUI connect UI; shells do not restore a portal session on start.
 
 **Not verified:** the Windows credential store against a real shared login with another AORMS desktop app.
 

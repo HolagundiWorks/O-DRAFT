@@ -224,7 +224,6 @@ dependencies = [
 name = "aad-ui-egui"
 version = "0.6.0"
 dependencies = [
- "aad-aorms",
  "aad-color",
  "aad-doc",
  "aad-engine",

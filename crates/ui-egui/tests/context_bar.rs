@@ -56,7 +56,7 @@ fn geometry(h: &Harness<'_, CadApp>) -> String {
 fn both_workspaces_show_the_context_bar_and_pro_hides_the_toolbars() {
     for mode in [WorkspaceMode::Classic, WorkspaceMode::Pro] {
         let h = harness(app(mode));
-        assert!(has(&h, "Layer") && has(&h, "Floor") && has(&h, "Drawing space"), "{mode:?}: the bar's three controls");
+        assert!(has(&h, "Layer") && has(&h, "Floor"), "{mode:?}: the bar's layer and floor controls");
         assert!(has(&h, "A-WALL"), "{mode:?}: the current layer is named");
         assert_eq!(has(&h, "Line"), mode == WorkspaceMode::Classic, "{mode:?}: the left toolbars are Classic only");
     }

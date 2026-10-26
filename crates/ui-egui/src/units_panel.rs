@@ -118,8 +118,16 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
                 ui.selectable_value(&mut paper, p.to_string(), p);
             }
         });
-        if ui.button(crate::tl!("Size annotation")).on_hover_text(crate::tl!("Text 2.5 mm, arrows 2.5 mm printed at this scale")).clicked() {
+        if ui
+            .button(crate::tl!("Size annotation"))
+            .on_hover_text(crate::tl!("Apply ISO text and arrow heights for the selected paper at this scale"))
+            .clicked()
+        {
             let r = app.run("plot.config", json!({ "scale": text, "paper": paper }));
+            say(app, r);
+        }
+        if ui.button(crate::tl!("Apply paper")).on_hover_text(crate::tl!("Update page size and annotation sizes; keep the current scale when set")).clicked() {
+            let r = app.run("plot.config", json!({ "paper": paper }));
             say(app, r);
         }
     });

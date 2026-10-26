@@ -41,7 +41,9 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Format", "Layer Tools", "Change to Current Layer"])
             .params("{handles?}")
             .interactive(|_| Ok(Box::new(SelectRun::new("laycur", "LAYCUR")))),
-        CommandSpec::new("layiso", "Isolate Layer", run_layiso).menu(&["Format", "Layer Tools", "Isolate Layer"]).params("{handles?}"),
+        CommandSpec::new("layiso", "Isolate Layer", run_layiso)
+            .menu(&["Format", "Layer Tools", "Isolate Layer"])
+            .params("{handles?, name?, names?: [string]} (name/names isolate by layer without a pick)"),
         CommandSpec::new("layuniso", "Unisolate Layer", run_layuniso).menu(&["Format", "Layer Tools", "Unisolate Layer"]),
         CommandSpec::new("layfrz", "Freeze Layer", |s, p| set_obj_layers(s, p, |l| l.frozen = true))
             .menu(&["Format", "Layer Tools", "Freeze Layer"])
@@ -297,17 +299,24 @@ fn repoint(store: &mut aad_doc::EntityStore, old: &str, new: &str) {
 
 fn run_current(s: &mut Session, p: &Value) -> Result<Value> {
     let name = str_param(p, "name").ok_or_else(|| bad("layer.current", "`name` is required"))?.to_string();
+    let n = {
+        let d = s.doc()?;
+        let l = d.layer(&name).ok_or_else(|| bad("layer.current", format!("no layer `{name}`")))?;
+        // A layer nothing can be drawn on is not offered as the current one, and choosing a layer never
+        // thaws or unlocks it as a side effect.
+        if l.frozen {
+            return Err(bad("layer.current", format!("layer `{}` is frozen: thaw it first", l.name)));
+        }
+        if l.locked {
+            return Err(bad("layer.current", format!("layer `{}` is locked: unlock it first", l.name)));
+        }
+        // Already current: do not copy-on-write the drawing (shell chrome re-selects this often).
+        if l.name.eq_ignore_ascii_case(&d.header.str("CLAYER", "0")) {
+            return ok();
+        }
+        l.name.clone()
+    };
     let d = s.doc_mut()?;
-    let l = d.layer_mut(&name).ok_or_else(|| bad("layer.current", format!("no layer `{name}`")))?;
-    // A layer nothing can be drawn on is not offered as the current one, and choosing a layer never
-    // thaws or unlocks it as a side effect.
-    if l.frozen {
-        return Err(bad("layer.current", format!("layer `{}` is frozen: thaw it first", l.name)));
-    }
-    if l.locked {
-        return Err(bad("layer.current", format!("layer `{}` is locked: unlock it first", l.name)));
-    }
-    let n = l.name.clone();
     prev_push(d);
     d.header.set_str("CLAYER", &n);
     ok()
@@ -351,6 +360,29 @@ fn obj_layers(s: &Session, p: &Value) -> Result<Vec<String>> {
     Ok(v)
 }
 
+/// Layer names from `name` / `names`, else from selected (or param) object handles.
+fn named_or_obj_layers(s: &Session, p: &Value) -> Result<Vec<String>> {
+    let mut v: Vec<String> = Vec::new();
+    if let Some(name) = str_param(p, "name") {
+        if !name.is_empty() {
+            v.push(name.to_string());
+        }
+    }
+    if let Some(arr) = p.get("names").and_then(Value::as_array) {
+        for item in arr {
+            if let Some(n) = item.as_str().filter(|s| !s.is_empty()) {
+                v.push(n.to_string());
+            }
+        }
+    }
+    if v.is_empty() {
+        return obj_layers(s, p);
+    }
+    v.sort();
+    v.dedup();
+    Ok(v)
+}
+
 fn run_laymcur(s: &mut Session, p: &Value) -> Result<Value> {
     let ls = obj_layers(s, p)?;
     let l = ls.first().cloned().ok_or_else(|| bad("laymcur", "select an object"))?;
@@ -380,12 +412,16 @@ fn run_laycur(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn run_layiso(s: &mut Session, p: &Value) -> Result<Value> {
-    let keep = obj_layers(s, p)?;
+    let keep = named_or_obj_layers(s, p)?;
     if keep.is_empty() {
-        return Err(bad("layiso", "select objects on the layers to isolate"));
+        return Err(bad("layiso", "give `name` / `names`, or select objects on the layers to isolate"));
     }
     let d = s.doc_mut()?;
     prev_push(d);
+    // Re-isolating must restore the pre-iso table first, or the snapshot would be the thinned one.
+    if let Ok(prior) = serde_json::from_str::<Vec<Layer>>(&d.header.str("AAD_LAYISO", "")) {
+        d.layers = prior;
+    }
     d.header.set_str("AAD_LAYISO", &serde_json::to_string(&d.layers).unwrap_or_default());
     for l in &mut d.layers {
         if !keep.iter().any(|k| k.eq_ignore_ascii_case(&l.name)) {
@@ -618,6 +654,37 @@ mod tests {
         // A valid colour-only edit of the current layer still applies.
         s.execute("layer.set", &json!({ "name": "0", "color": 3 })).unwrap();
         assert_ne!(s.doc().unwrap().layer("0").unwrap(), &before);
+    }
+
+    #[test]
+    fn making_the_current_layer_again_does_not_dirty_the_drawing() {
+        let mut s = Session::new();
+        assert!(!s.state().unwrap().is_dirty());
+        s.execute("layer.current", &json!({ "name": "0" })).unwrap();
+        assert!(!s.state().unwrap().is_dirty(), "re-selecting CLAYER must not copy-on-write");
+        s.execute("layer.new", &json!({ "name": "A" })).unwrap();
+        assert!(s.state().unwrap().is_dirty());
+        // Snapshot as saved so the next check is about layer.current alone.
+        let st = s.state_mut().unwrap();
+        st.saved = st.doc.clone();
+        assert!(!s.state().unwrap().is_dirty());
+        s.execute("layer.current", &json!({ "name": "0" })).unwrap();
+        assert!(!s.state().unwrap().is_dirty());
+        s.execute("layer.current", &json!({ "name": "A" })).unwrap();
+        assert!(s.state().unwrap().is_dirty());
+        assert_eq!(s.doc().unwrap().header.str("CLAYER", ""), "A");
+    }
+
+    #[test]
+    fn chrome_reselects_do_not_dirty_a_new_imperial_drawing() {
+        let mut s = Session::new();
+        assert!(!s.state().unwrap().is_dirty());
+        s.execute("layer.current", &json!({ "name": "0" })).unwrap();
+        s.execute("floor.current", &json!({})).unwrap();
+        s.execute("floor.current", &json!({ "name": "Ground" })).unwrap();
+        s.execute("drawing.units", &json!({ "units": "in", "mode": "metadata" })).unwrap();
+        s.execute("layout.set", &json!({ "name": "Model" })).unwrap();
+        assert!(!s.state().unwrap().is_dirty(), "shell chrome must not mark a blank drawing dirty");
     }
 
     #[test]

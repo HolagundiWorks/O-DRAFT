@@ -58,6 +58,15 @@ pub(crate) fn floors(d: &Drawing) -> Vec<Value> {
     }
 }
 
+/// Lintel height in metres for the active floor, or 2.1 when the floor has none.
+pub(crate) fn standard_lintel(d: &Drawing) -> f64 {
+    let list = floors(d);
+    let chosen = get(d, "activeFloor");
+    let want = chosen.as_str().unwrap_or("");
+    let floor = list.iter().find(|f| f["name"].as_str() == Some(want)).unwrap_or(&list[0]);
+    floor["lintel"].as_f64().filter(|n| n.is_finite() && *n > 0.0).unwrap_or(2.1)
+}
+
 fn num(v: &Value, key: &str, default: f64) -> f64 {
     v.get(key).and_then(Value::as_f64).filter(|x| x.is_finite()).unwrap_or(default)
 }

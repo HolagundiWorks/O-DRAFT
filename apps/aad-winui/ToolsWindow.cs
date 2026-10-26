@@ -59,7 +59,7 @@ internal sealed class ToolsWindow : Window
         Content = new ScrollViewer { Content = root };
         Density.Apply(root);
         ShellIcon.Apply(this, theme);
-        ShellFit.UserResizable(this, minWidthDip: 260, minHeightDip: 320, maxWidthDip: 400, maxHeightDip: 640);
+        ShellFit.UserResizable(this, minWidthDip: 260, minHeightDip: 320, maxWidthDip: 400, maxHeightDip: 640, persistKey: "tools");
     }
 
     public static readonly (string Id, string Label)[] Fonts =
@@ -79,12 +79,7 @@ internal sealed class ToolsWindow : Window
         return window;
     }
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private sealed class FontChoice(string id, string label)
     {

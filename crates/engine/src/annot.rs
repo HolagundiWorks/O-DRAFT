@@ -246,6 +246,59 @@ impl Default for PrintedSizes {
     }
 }
 
+/// ISO 3098 / ISO 128 printed text hierarchy for a sheet size: small (notes), medium (dimensions
+/// and body), large (titles). Heights are millimetres on paper.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TextRankMm {
+    pub small: f64,
+    pub medium: f64,
+    pub large: f64,
+    pub arrow: f64,
+}
+
+/// Recommended printed text and arrow sizes for an ISO A-series sheet (landscape).
+pub fn text_rank_for_paper(name: &str) -> TextRankMm {
+    match name.trim().to_ascii_uppercase().as_str() {
+        "A0" => TextRankMm { small: 3.5, medium: 5.0, large: 7.0, arrow: 3.5 },
+        "A1" => TextRankMm { small: 2.5, medium: 3.5, large: 5.0, arrow: 2.5 },
+        "A2" => TextRankMm { small: 2.5, medium: 3.5, large: 5.0, arrow: 2.5 },
+        "A3" => TextRankMm { small: 1.8, medium: 2.5, large: 3.5, arrow: 2.5 },
+        "A4" => TextRankMm { small: 1.8, medium: 2.5, large: 3.5, arrow: 1.8 },
+        _ => TextRankMm { small: 1.8, medium: 2.5, large: 3.5, arrow: 2.5 },
+    }
+}
+
+/// ISO name for a sheet when it matches A0–A4, else `None`.
+pub fn paper_iso_name(paper: Paper) -> Option<&'static str> {
+    for name in ["A0", "A1", "A2", "A3", "A4"] {
+        if let Some(p) = Paper::named(name)
+            && ((p.width - paper.width).abs() < 0.5 && (p.height - paper.height).abs() < 0.5
+                || (p.width - paper.height).abs() < 0.5 && (p.height - paper.width).abs() < 0.5)
+        {
+            return Some(name);
+        }
+    }
+    None
+}
+
+/// Map a Small / Medium / Large rank to printed millimetres for the drawing's configured paper.
+pub fn printed_mm_for_rank(d: &Drawing, rank: &str) -> Option<f64> {
+    let name = match d.header.str("AADOBER", "").as_str() {
+        s if !s.is_empty() => s.to_string(),
+        _ => {
+            let (w, h) = (d.header.f64("AADOBERW", 0.0), d.header.f64("AADOBERH", 0.0));
+            paper_iso_name(Paper { width: w, height: h }).unwrap_or("A1").to_string()
+        }
+    };
+    let r = text_rank_for_paper(&name);
+    match rank.trim().to_ascii_lowercase().as_str() {
+        "small" | "s" => Some(r.small),
+        "medium" | "m" | "med" => Some(r.medium),
+        "large" | "l" | "lg" => Some(r.large),
+        _ => None,
+    }
+}
+
 pub fn sizes(printed: PrintedSizes, scale: PlotScale, drawn: Unit) -> AnnotationSizes {
     let k = scale.du_per_paper_mm(drawn);
     AnnotationSizes {

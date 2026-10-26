@@ -70,7 +70,7 @@ internal static class PlotStyleWindow
         layoutRow.Children.Add(useLayout);
         layoutRow.Children.Add(displayStyles);
 
-        var left = new StackPanel { Spacing = Density.SpaceSm, Width = 200 };
+        var left = new StackPanel { Spacing = Density.SpaceSm, Width = Density.ManagerListWidth };
         left.Children.Add(Heading("Styles"));
         left.Children.Add(styles);
 
@@ -455,24 +455,11 @@ internal static class PlotStyleWindow
         return window;
     }
 
-    private static Button ActionButton(string label) => Density.DialogAction(label);
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
-    private static FrameworkElement Labeled(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = Density.SpaceXs };
-        var text = new TextBlock { Text = label };
-        Density.Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    private static FrameworkElement Labeled(string label, FrameworkElement field) => DialogLayout.Labeled(label, field);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private sealed class State
     {

@@ -26,7 +26,7 @@ internal sealed class PomodoroWindow : Window
         Title = "Pomodoro";
         AutomationProperties.SetLiveSetting(_label, AutomationLiveSetting.Polite);
         Density.Name(_label, "Remaining time");
-        var toggle = Action("Start");
+        var toggle = DialogLayout.Action("Start");
         toggle.Click += (_, _) =>
         {
             Toggle();
@@ -34,7 +34,7 @@ internal sealed class PomodoroWindow : Window
             Density.Name(toggle, _running ? "Pause" : "Start");
             Show();
         };
-        var reset = Action("Reset");
+        var reset = DialogLayout.Action("Reset");
         reset.Click += (_, _) =>
         {
             Reset();
@@ -42,10 +42,10 @@ internal sealed class PomodoroWindow : Window
             Density.Name(toggle, "Start");
             Show();
         };
-        var shorter = Action("−5");
+        var shorter = DialogLayout.Action("−5");
         Density.Name(shorter, "Shorten by five minutes");
         shorter.Click += (_, _) => SetMinutes(Minutes() - StepMinutes);
-        var longer = Action("+5");
+        var longer = DialogLayout.Action("+5");
         Density.Name(longer, "Lengthen by five minutes");
         longer.Click += (_, _) => SetMinutes(Minutes() + StepMinutes);
         var row = new StackPanel
@@ -61,7 +61,7 @@ internal sealed class PomodoroWindow : Window
         Density.Apply(root);
         _label.FontSize = 22;
         ShellIcon.Apply(this, theme);
-        ShellFit.ToContent(this, minWidthDip: 260, minHeightDip: 120, maxWidthDip: 360, maxHeightDip: 220);
+        ShellFit.ToContent(this, minWidthDip: 320, minHeightDip: 120, maxWidthDip: 420, maxHeightDip: 220);
         _timer.Tick += (_, _) =>
         {
             Tick(1);
@@ -74,13 +74,6 @@ internal sealed class PomodoroWindow : Window
         };
         Closed += (_, _) => _timer.Stop();
         Show();
-    }
-
-    private static Button Action(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight, MinWidth = 48 };
-        Density.Name(button, label);
-        return button;
     }
 
     public static PomodoroWindow Show(Window owner)

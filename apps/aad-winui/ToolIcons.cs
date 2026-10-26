@@ -162,6 +162,22 @@ internal static partial class ToolIcons
                 pen.FillRect(6, 11, 12, 9, gold);
                 pen.Arc(15, 9, 4, 0, 180, gold);
                 break;
+            case "isolate":
+                // One lit layer strip among dimmed ones.
+                for (var k = 0; k < 3; k++)
+                {
+                    var y = 5.0 + k * 5;
+                    var brush = k == 1 ? pen.AccentBrush : dim;
+                    pen.Stroke(true, brush, (3, y + 2), (12, y - 2), (21, y + 2), (12, y + 6));
+                }
+                break;
+            case "unisolate":
+                for (var k = 0; k < 3; k++)
+                {
+                    var y = 5.0 + k * 5;
+                    pen.Stroke(true, pen.AccentBrush, (3, y + 2), (12, y - 2), (21, y + 2), (12, y + 6));
+                }
+                break;
             case "print":
                 pen.Box(4, 9, 16, 8, pen.BaseBrush);
                 pen.Box(7, 4, 10, 5, pen.BaseBrush);

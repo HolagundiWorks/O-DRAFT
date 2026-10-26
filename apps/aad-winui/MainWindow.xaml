@@ -18,7 +18,7 @@
             Background="{ThemeResource SurfaceBrush}"
             FontSize="{StaticResource FontSizeBody}"
             AutomationProperties.Name="Menu" />
-        <!-- Context strip under the menu: Layer | Floor, then architecture tools. -->
+        <!-- Context strip under the menu: Layer | Space | Floor, then architecture tools. -->
         <Border
             x:Name="ArchBarHost"
             Grid.Row="1"
@@ -129,11 +129,12 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="ContextBar" Spacing="{StaticResource SpaceXs}">
-                        <TextBlock Text="Drawing space" FontSize="{StaticResource FontSizeCaption}" Foreground="{ThemeResource TextSecondaryBrush}" />
-                        <ComboBox x:Name="SpaceBox" HorizontalAlignment="Stretch" MinHeight="{StaticResource ControlHeight}" PlaceholderText="No saved drawing space" SelectionChanged="OnSpacePicked" AutomationProperties.Name="Drawing space" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" VerticalAlignment="Top">
+                    <StackPanel
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="{StaticResource SpaceSm}"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Right">
                         <Button x:Name="FloatLeftButton" Style="{StaticResource IconButtonStyle}" Click="OnFloat" AutomationProperties.Name="Float side panels" ToolTipService.ToolTip="Float side panels">
                             <local:DrawnIcon Kind="float" Width="{StaticResource IconSize}" Height="{StaticResource IconSize}" />
                         </Button>
@@ -363,6 +364,15 @@
                     SelectionChanged="OnUnitsPicked"
                     AutomationProperties.Name="Drafting units"
                     ToolTipService.ToolTip="Drafting units. Geometry is stored in these units; scale at plot." />
+                <ComboBox
+                    x:Name="PaperBox"
+                    MinWidth="72"
+                    MinHeight="{StaticResource ControlHeight}"
+                    FontSize="{StaticResource FontSizeBody}"
+                    PlaceholderText="Paper"
+                    SelectionChanged="OnPaperPicked"
+                    AutomationProperties.Name="Page size"
+                    ToolTipService.ToolTip="ISO page size (A0–A4). Updates dimension text and arrow sizes to printable standards." />
 
                 <Button x:Name="LayersButton" Click="OnLayers" AutomationProperties.Name="Open layer manager" ToolTipService.ToolTip="Layers" Style="{StaticResource IconButtonStyle}">
                     <local:DrawnIcon Kind="layers" />

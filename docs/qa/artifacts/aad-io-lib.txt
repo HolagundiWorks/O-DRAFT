@@ -1,0 +1,112 @@
+﻿cargo :     Blocking waiting for file lock on package cache
+At line:1 char:1
++ cargo test -p aad-io --lib -- --test-threads=8 2>&1 | Out-File -FileP ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Blocking wa...n package cache:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Blocking waiting for file lock on package cache
+   Compiling num-traits v0.2.19
+   Compiling thiserror-impl v2.0.21
+   Compiling serde v1.0.229
+   Compiling bytemuck v1.25.2
+   Compiling regex-syntax v0.8.11
+   Compiling font-types v0.12.6
+   Compiling tiny-skia-path v0.11.4
+   Compiling aad-geom v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\geom)
+   Compiling aad-color v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\color)
+   Compiling tinytemplate v1.2.1
+   Compiling ciborium v0.2.2
+   Compiling read-fonts v0.44.0
+   Compiling tiny-skia v0.11.4
+   Compiling earcutr v0.5.0
+   Compiling regex-automata v0.4.18
+   Compiling thiserror v2.0.21
+   Compiling aad-doc v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\doc)
+   Compiling acadrust v0.6.3
+   Compiling aad-dxf v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\dxf)
+   Compiling lopdf v0.45.0
+   Compiling regex v1.13.1
+   Compiling criterion v0.5.1
+   Compiling skrifa v0.47.0
+   Compiling aad-fonts v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\fonts)
+   Compiling aad-render v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\render)
+   Compiling aad-dwg v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\dwg)
+   Compiling aad-io v0.6.0 (D:\Work Development\Repos\O-DRAFT\crates\io)
+    Finished `test` profile [optimized + debuginfo] target(s) in 2m 14s
+     Running unittests src\lib.rs 
+(C:\Users\holag\AppData\Local\Temp\odraft-cargo-target\debug\deps\aad_io-07deca97b896fc77.exe)
+
+running 56 tests
+test dxf_ext::tests::every_dimvar_has_a_code ... ok
+test dxf_ext::tests::arrow_names ... ok
+test pdfread::tests::bad_input_is_an_error_not_a_panic ... ok
+test pdfread::tests::a_hand_made_page_gives_its_paths_in_points ... ok
+test pdfread::tests::a_form_that_draws_itself_ends ... ok
+test tests::block_definition_properties_and_constant_attdefs_roundtrip ... ok
+test tests::attdef_prompt_survives_dxf_roundtrip ... ok
+test tests::autocad_header_dim_variables_are_not_overrides ... ok
+test tests::dimstyle_roundtrips_every_field ... ok
+test tests::dwg_roundtrip_keeps_non_ascii_text ... ok
+test tests::dimension_text_rotation_roundtrips ... ok
+test tests::dxf_roundtrips_page_setup ... ok
+test tests::dxf_roundtrip_preserves_entities ... ok
+test tests::entity_transparency_roundtrips_as_group_440 ... ok
+test tests::gradient_falls_back_to_xdata_and_native_groups_win ... ok
+test tests::gradient_hatch_roundtrips_through_dxf ... ok
+test tests::gradient_hatch_roundtrips_through_dwg ... ok
+test tests::hostile_export_window_is_an_error ... ok
+test tests::hostile_dxf_does_not_panic ... ok
+test tests::dimension_overrides_roundtrip_as_dstyle_xdata ... ok
+test tests::dimension_associativity_roundtrips ... ok
+test tests::extension_sample_roundtrips_and_can_be_exported ... ok
+test tests::layer_transparency_and_description_roundtrip ... ok
+test tests::arc_length_dimension_keeps_its_kind_and_centre_on_roundtrip ... ok
+test tests::long_gradient_name_is_cut_only_in_xdata ... ok
+test tests::mirrored_2d_polyline_extrusion_flips_x_and_bulge ... ok
+test tests::mirrored_ellipse_extrusion_reverses_parameters ... ok
+test tests::mirrored_hatch_extrusion_flips_boundary ... ok
+test tests::mirrored_insert_extrusion_maps_to_negative_x_scale ... ok
+test tests::mirrored_mtext_extrusion_keeps_its_footprint ... ok
+test tests::dwg_roundtrip_keeps_extension_data ... ok
+test tests::mirrored_text_extrusion_keeps_its_footprint ... FAILED
+test tests::layer_states_roundtrip ... ok
+test tests::mleader_is_written_as_leader_and_mtext ... ok
+test tests::non_ascii_text_is_escaped_for_r2000_and_roundtrips ... ok
+test tests::lwpolyline_elevation_roundtrips ... ok
+test tests::hostile_gradient_groups_never_panic ... ok
+test tests::project_data_roundtrips_through_dxf ... ok
+test tests::reads_r12_style_polyline_and_paper_flag ... ok
+test tests::reads_utf8_and_code_page_text ... ok
+test tests::second_roundtrip_is_stable ... ok
+test tests::pdf_layout_one_to_one_with_viewport ... ok
+test tests::tables_roundtrip_with_title_header_and_merges ... ok
+test tests::text_style_flags_roundtrip ... ok
+test tests::user_block_arrowheads_are_referenced_not_regenerated ... ok
+test tests::pdf_model_fitted_to_sheet ... ok
+test tests::viewport_frozen_layers_roundtrip ... ok
+test tests::wipeout_boundary_keeps_its_orientation ... ok
+test tests::viewport_layer_colors_roundtrip ... ok
+test tests::wipeout_survives_dxf_roundtrip ... ok
+test tests::svg_and_png_export ... ok
+test tests::pdf_hostile_options_and_empty ... ok
+test tests::oversized_dwg_and_dxf_are_rejected_early ... ok
+test tests::image_export_frames_window ... ok
+test tests::hostile_extension_data_never_panics ... ok
+test tests::ac1024_dwg_with_many_entities_opens ... ok
+
+failures:
+
+---- tests::mirrored_text_extrusion_keeps_its_footprint stdout ----
+
+thread 'tests::mirrored_text_extrusion_keeps_its_footprint' (18960) panicked at crates\io\src\tests.rs:1681:5:
+drawn left of (10,5): Bounds2 { min: Vec2 { x: 8.275464435146443, y: 5.0 }, max: Vec2 { x: 9.928178521617852, y: 6.000011157601116 } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::mirrored_text_extrusion_keeps_its_footprint
+
+test result: FAILED. 55 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+error: test failed, to rerun pass `-p aad-io --lib`

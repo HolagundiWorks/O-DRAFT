@@ -3,8 +3,11 @@
 //! * `wall.draw` draws the two faces of a wall (and the end caps) as lines on `A-WALL` along a
 //!   centre line given by points or by selected lines and polylines, with mitred corners.
 //! * `wall.door` and `wall.window` cut an opening in the wall lines at a point and place a block
-//!   (`DOOR-…`, `WIN-…`) that holds the frame, leaf and swing or glass lines and a deduction line on
-//!   `MEASURE-DEDUCT`, so take-off and the opening schedule see it.
+//!   (`AADOPEN-…`) that holds the frame, leaf and swing or glass lines and a deduction line on
+//!   `MEASURE-DEDUCT`, so take-off and the opening schedule see it. Each opening keeps its own
+//!   block. Width grips and the properties panel (`openingType`, `openingWidth`, `openingHeight`,
+//!   `sill`, `lintelMode`, `head`) rebuild that symbol; plan sizes are drawing units, and sill /
+//!   height / head are entered in drawing units (stored as metres on the insert).
 //! * `wall.clean` erases zero-length and duplicate lines and joins lines that overlap on one line.
 
 use std::sync::Arc;
@@ -29,15 +32,15 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("wall.draw", "Draw Wall", run_wall)
             .menu(&["Architecture", "Walls and Openings", "Draw Wall"])
             .alias(&["wall", "hcwwall"])
-            .params("{points?: [[x,y],...] | handles?: [lines, polylines], thickness? (drawing units, default 230 mm), closed?: bool, layer?: default A-WALL} → {lines}"),
+            .params("{points?: [[x,y],...] | handles?: [lines, polylines], thickness? (drawing units; default ≈230 mm), closed?: bool, layer?: default A-WALL} → {lines}"),
         CommandSpec::new("wall.door", "Door", run_door)
             .menu(&["Architecture", "Walls and Openings", "Door"])
             .alias(&["door", "hcwdoor"])
-            .params("{at: [x,y], angle?: degrees (default: the nearest wall line), width? | name? (schedule entry), thickness?, swing?: left|right, side?: up|down, layer?, deduct?: bool} → {block, cut}"),
+            .params("{at: [x,y], angle?: degrees (default: the nearest wall line), width? (drawing units; default ≈900 mm) | name? (schedule entry), thickness? (drawing units), swing?: left|right, side?: up|down, openingType?: single|double|sliding|folding, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units, custom), layer?, deduct?: bool} → {block, cut}"),
         CommandSpec::new("wall.window", "Window", run_window)
             .menu(&["Architecture", "Walls and Openings", "Window"])
             .alias(&["window", "hcwwindow"])
-            .params("{at: [x,y], angle?, width? | name?, thickness?, layer?, deduct?: bool} → {block, cut}"),
+            .params("{at: [x,y], angle?, width? (drawing units; default ≈1200 mm) | name?, thickness? (drawing units), openingType?: fixed|casement|sliding|ventilator, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units), layer?, deduct?: bool} → {block, cut}"),
         CommandSpec::new("wall.clean", "Clean Lines", run_clean)
             .menu(&["Architecture", "Walls and Openings", "Clean Lines"])
             .alias(&["hcwclean"])
@@ -236,6 +239,397 @@ fn push(d: &mut Drawing, b: &mut Block, layer: &str, kind: EntityKind) {
     b.entities.push(Entity { handle: h, common: Common { layer: layer.into(), ..Common::default() }, kind });
 }
 
+const DOOR_TYPES: &[&str] = &["single", "double", "sliding", "folding"];
+const WINDOW_TYPES: &[&str] = &["fixed", "casement", "sliding", "ventilator"];
+
+fn type_list(door: bool) -> &'static [&'static str] {
+    if door { DOOR_TYPES } else { WINDOW_TYPES }
+}
+
+fn canonical_type(door: bool, raw: &str) -> Option<&'static str> {
+    type_list(door).iter().copied().find(|t| t.eq_ignore_ascii_case(raw.trim()))
+}
+
+fn lintel_mode_name(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "standard" | "standard lintel" => Some("standard"),
+        "custom" | "custom height" => Some("custom"),
+        _ => None,
+    }
+}
+
+fn plain(v: f64) -> String {
+    let mut s = format!("{v:.6}");
+    if s.contains('.') {
+        while s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+    }
+    if s.is_empty() || s == "-" { "0".into() } else { s }
+}
+
+fn num_flex(p: &Value, key: &str) -> Option<f64> {
+    let v = p.get(key)?;
+    v.as_f64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())).filter(|n| n.is_finite())
+}
+
+fn parse_attr(i: &Insert, tag: &str) -> Option<f64> {
+    i.attrib_value(tag).and_then(|v| v.parse().ok()).filter(|n: &f64| n.is_finite())
+}
+
+struct Opening {
+    door: bool,
+    otype: String,
+    width: f64,
+    thick: f64,
+    height: f64,
+    sill: f64,
+    mode: String,
+    head: f64,
+    deduct: bool,
+}
+
+fn read_opening(i: &Insert) -> Result<Opening> {
+    let door = i.attrib_value("OKIND") == Some("door");
+    let fallback = if door { "single" } else { "fixed" };
+    let otype = canonical_type(door, i.attrib_value("OTYPE").unwrap_or(fallback)).unwrap_or(fallback).to_string();
+    let width = i.opening_width().ok_or_else(|| bad("properties.set", "the opening has no width"))?;
+    let thick = parse_attr(i, "OTHICK").filter(|t| *t > 0.0).unwrap_or(width * 0.2);
+    let sill = parse_attr(i, "OSILL").filter(|s| *s >= 0.0).unwrap_or(0.0);
+    let height = parse_attr(i, "OHEIGHT").filter(|h| *h > 0.0).unwrap_or(2.1);
+    let mode = if i.attrib_value("OLINTEL").is_some_and(|m| m.eq_ignore_ascii_case("custom")) { "custom" } else { "standard" };
+    let head = parse_attr(i, "OHEAD").unwrap_or(sill + height);
+    let deduct = i.attrib_value("ODEDUCT") != Some("0");
+    Ok(Opening { door, otype, width, thick, height, sill, mode: mode.into(), head, deduct })
+}
+
+fn store_params(i: &mut Insert, op: &Opening) {
+    i.set_attrib("OKIND", if op.door { "door" } else { "window" });
+    i.set_attrib("OTYPE", &op.otype);
+    i.set_attrib("OWIDTH", &plain(op.width));
+    i.set_attrib("OTHICK", &plain(op.thick));
+    i.set_attrib("OHEIGHT", &plain(op.height));
+    i.set_attrib("OSILL", &plain(op.sill));
+    i.set_attrib("OLINTEL", &op.mode);
+    i.set_attrib("OHEAD", &plain(op.head));
+    i.set_attrib("ODEDUCT", if op.deduct { "1" } else { "0" });
+}
+
+/// Metres per drawing unit (imperial inch default when unset).
+fn metres_per_du(s: &Session) -> f64 {
+    s.doc().ok().and_then(ua::drawing_unit).map_or(0.0254, |u| u.metres())
+}
+
+/// Apply a properties edit. Under a standard lintel, height and sill share the floor head.
+/// `to_m` converts drawing-unit sill / height / head into metres for storage.
+fn apply_opening(op: &mut Opening, p: &Value, standard: f64, cmd: &str, to_m: f64) -> Result<()> {
+    if let Some(t) = str_param(p, "openingType") {
+        let kind = if op.door { "door" } else { "window" };
+        op.otype = canonical_type(op.door, t)
+            .ok_or_else(|| bad(cmd, format!("type `{t}` is not a {kind} type ({})", type_list(op.door).join(", "))))?
+            .to_string();
+    }
+    if p.get("openingWidth").is_some() {
+        let w = num_flex(p, "openingWidth").ok_or_else(|| bad(cmd, "width must be a number"))?;
+        if !(w.is_finite() && w > 0.0) {
+            return Err(bad(cmd, "width must be positive"));
+        }
+        op.width = w;
+    }
+    let set_height = p.get("openingHeight").is_some();
+    let set_sill = p.get("sill").is_some();
+    let set_head = p.get("head").is_some();
+    if set_sill {
+        let sill = num_flex(p, "sill").ok_or_else(|| bad(cmd, "sill must be a number (drawing units)"))?;
+        if !(sill.is_finite() && sill >= 0.0) {
+            return Err(bad(cmd, "sill must be zero or positive"));
+        }
+        op.sill = sill * to_m;
+    }
+    if set_height {
+        let h = num_flex(p, "openingHeight").ok_or_else(|| bad(cmd, "opening height must be a number (drawing units)"))?;
+        if !(h.is_finite() && h > 0.0) {
+            return Err(bad(cmd, "opening height must be positive"));
+        }
+        op.height = h * to_m;
+    }
+    if set_head {
+        let h = num_flex(p, "head").ok_or_else(|| bad(cmd, "head must be a number (drawing units)"))?;
+        op.head = h * to_m;
+    }
+    if let Some(mode) = str_param(p, "lintelMode") {
+        op.mode = lintel_mode_name(mode).ok_or_else(|| bad(cmd, "lintel must be standard or custom"))?.to_string();
+    }
+    if op.mode == "standard" {
+        if set_height && set_sill && (op.sill + op.height - standard).abs() > 1e-3 {
+            return Err(bad(cmd, "with a standard lintel, sill plus opening height must meet the lintel"));
+        } else if set_height && !set_sill {
+            op.sill = standard - op.height;
+        } else {
+            op.height = standard - op.sill;
+        }
+        if op.sill < -1e-6 || op.height <= 1e-6 {
+            return Err(bad(cmd, "under the standard lintel, the sill and the opening height have to fit below it"));
+        }
+        op.sill = op.sill.max(0.0);
+        op.head = standard;
+        op.height = standard - op.sill;
+    } else {
+        if !set_head && op.head + 1e-6 < op.sill + op.height {
+            op.head = op.sill + op.height;
+        }
+        if !(op.head.is_finite() && op.head > op.sill) {
+            return Err(bad(cmd, "custom head must be above the sill"));
+        }
+        if op.sill + op.height > op.head + 1e-3 {
+            return Err(bad(cmd, "sill plus opening height rises above the custom head"));
+        }
+    }
+    Ok(())
+}
+
+fn arc_at(center: Vec2, radius: f64, start: f64, end: f64) -> EntityKind {
+    EntityKind::Arc(aad_doc::Arc { center: Vec3::new(center.x, center.y, 0.0), radius, start, end })
+}
+
+/// Replace the opening's block with plan geometry for its type and width.
+fn write_symbol(d: &mut Drawing, name: &str, door: bool, otype: &str, width: f64, thick: f64, deduct: bool) {
+    let mut b = Block::new(name);
+    let (hw, ht) = (width / 2.0, thick / 2.0);
+    let layer = if door { DOOR } else { WINDOW };
+    push(d, &mut b, layer, line(Vec2::new(-hw, -ht), Vec2::new(-hw, ht)));
+    push(d, &mut b, layer, line(Vec2::new(hw, -ht), Vec2::new(hw, ht)));
+    let quarter = std::f64::consts::FRAC_PI_2;
+    match (door, otype) {
+        (true, "double") => {
+            let leaf = hw.max(1e-6);
+            push(d, &mut b, DOOR, line(Vec2::new(-hw, ht), Vec2::new(-hw, ht + leaf)));
+            push(d, &mut b, DOOR, arc_at(Vec2::new(-hw, ht), leaf, 0.0, quarter));
+            push(d, &mut b, DOOR, line(Vec2::new(hw, ht), Vec2::new(hw, ht + leaf)));
+            push(d, &mut b, DOOR, arc_at(Vec2::new(hw, ht), leaf, quarter, std::f64::consts::PI));
+        }
+        (true, "sliding") => {
+            let y1 = ht * 0.35;
+            let y2 = -ht * 0.35;
+            push(d, &mut b, DOOR, line(Vec2::new(-hw, y1), Vec2::new(hw * 0.15, y1)));
+            push(d, &mut b, DOOR, line(Vec2::new(-hw * 0.15, y2), Vec2::new(hw, y2)));
+        }
+        (true, "folding") => {
+            let out = width * 0.35;
+            push(d, &mut b, DOOR, line(Vec2::new(-hw, ht), Vec2::new(-hw * 0.45, ht + out)));
+            push(d, &mut b, DOOR, line(Vec2::new(-hw * 0.45, ht + out), Vec2::new(0.0, ht)));
+            push(d, &mut b, DOOR, line(Vec2::new(hw, ht), Vec2::new(hw * 0.45, ht + out)));
+            push(d, &mut b, DOOR, line(Vec2::new(hw * 0.45, ht + out), Vec2::new(0.0, ht)));
+        }
+        (true, _) => {
+            push(d, &mut b, DOOR, line(Vec2::new(-hw, ht), Vec2::new(-hw, ht + width)));
+            push(d, &mut b, DOOR, arc_at(Vec2::new(-hw, ht), width, 0.0, quarter));
+        }
+        (false, "casement") => {
+            push(d, &mut b, WINDOW, line(Vec2::new(-hw, -ht), Vec2::new(hw, -ht)));
+            push(d, &mut b, WINDOW, line(Vec2::new(-hw, ht), Vec2::new(hw, ht)));
+            push(d, &mut b, WINDOW, line(Vec2::new(-hw, ht), Vec2::new(-hw, ht + width)));
+            push(d, &mut b, WINDOW, arc_at(Vec2::new(-hw, ht), width, 0.0, quarter));
+        }
+        (false, "sliding") => {
+            push(d, &mut b, WINDOW, line(Vec2::new(-hw, -ht), Vec2::new(hw, -ht)));
+            push(d, &mut b, WINDOW, line(Vec2::new(-hw, ht), Vec2::new(hw, ht)));
+            push(d, &mut b, WINDOW, line(Vec2::new(0.0, -ht), Vec2::new(0.0, ht)));
+            push(d, &mut b, WINDOW, line(Vec2::new(-hw, 0.0), Vec2::new(0.0, 0.0)));
+            push(d, &mut b, WINDOW, line(Vec2::new(0.0, ht * 0.35), Vec2::new(hw, ht * 0.35)));
+        }
+        (false, "ventilator") => {
+            for v in [-ht, 0.0, ht] {
+                push(d, &mut b, WINDOW, line(Vec2::new(-hw, v), Vec2::new(hw, v)));
+            }
+            let r = (width * 0.45).max(ht);
+            push(d, &mut b, WINDOW, arc_at(Vec2::new(-hw, ht), r, 0.0, quarter));
+        }
+        (false, _) => {
+            for v in [-ht, -ht / 3.0, ht / 3.0, ht] {
+                push(d, &mut b, WINDOW, line(Vec2::new(-hw, v), Vec2::new(hw, v)));
+            }
+        }
+    }
+    if deduct {
+        d.ensure_layer(DEDUCT);
+        push(d, &mut b, DEDUCT, line(Vec2::new(-hw, 0.0), Vec2::new(hw, 0.0)));
+    }
+    d.blocks.insert(name.to_string(), Arc::new(b));
+}
+
+fn block_refs(d: &Drawing, name: &str) -> usize {
+    let mut n = 0usize;
+    let mut scan = |store: &aad_doc::EntityStore| {
+        for e in store.iter() {
+            if let EntityKind::Insert(i) = &e.kind
+                && i.block.eq_ignore_ascii_case(name)
+            {
+                n += 1;
+            }
+        }
+    };
+    scan(&d.model);
+    for lay in &d.layouts {
+        scan(&lay.entities);
+    }
+    n
+}
+
+fn exclusive_name(s: &mut Session, h: Handle, current: &str) -> Result<String> {
+    let refs = block_refs(s.doc()?, current);
+    if current.starts_with("AADOPEN-") && refs <= 1 {
+        return Ok(current.to_string());
+    }
+    let name = format!("AADOPEN-{}", h.hex());
+    s.doc_mut()?.modify_entity(h, |e| {
+        if let EntityKind::Insert(i) = &mut e.kind {
+            i.block.clone_from(&name);
+        }
+    })?;
+    Ok(name)
+}
+
+fn opening_corners(ins: &Insert, width: f64, thick: f64) -> [Vec2; 4] {
+    let hw = width / 2.0;
+    let ht = thick / 2.0;
+    let m = ins.transform(Vec2::ZERO);
+    [Vec2::new(-hw, -ht), Vec2::new(-hw, ht), Vec2::new(hw, -ht), Vec2::new(hw, ht)].map(|p| m.apply(p))
+}
+
+fn nearest_corner(pts: &[Vec2; 4], p: Vec2, tol: f64) -> Option<usize> {
+    let mut best: Option<(usize, f64)> = None;
+    for (i, q) in pts.iter().enumerate() {
+        let dist = q.dist(p);
+        if dist <= tol && best.is_none_or(|(_, bd)| dist < bd) {
+            best = Some((i, dist));
+        }
+    }
+    best.map(|(i, _)| i)
+}
+
+/// Move wall-line ends that sit on the old jambs out to the new width.
+fn shift_jambs(s: &mut Session, ins: &Insert, old_w: f64, new_w: f64, thick: f64) -> Result<()> {
+    if (old_w - new_w).abs() < 1e-6 {
+        return Ok(());
+    }
+    let old_pts = opening_corners(ins, old_w, thick);
+    let new_pts = opening_corners(ins, new_w, thick);
+    let tol = (thick * 1e-3).max(1e-4);
+    let mut edits: Vec<(Handle, Vec2, Vec2)> = Vec::new();
+    let consider = |edits: &mut Vec<(Handle, Vec2, Vec2)>, h: Handle, a: Vec2, b: Vec2| {
+        let mut a2 = a;
+        let mut b2 = b;
+        let mut moved = false;
+        if let Some(i) = nearest_corner(&old_pts, a, tol) {
+            a2 = new_pts[i];
+            moved = true;
+        }
+        if let Some(i) = nearest_corner(&old_pts, b, tol) {
+            b2 = new_pts[i];
+            moved = true;
+        }
+        if moved {
+            edits.push((h, a2, b2));
+        }
+    };
+    {
+        let d = s.doc()?;
+        for e in d.model.iter() {
+            if let EntityKind::Line(l) = &e.kind {
+                consider(&mut edits, e.handle, l.a.xy(), l.b.xy());
+            }
+        }
+        for lay in &d.layouts {
+            for e in lay.entities.iter() {
+                if let EntityKind::Line(l) = &e.kind {
+                    consider(&mut edits, e.handle, l.a.xy(), l.b.xy());
+                }
+            }
+        }
+    }
+    let d = s.doc_mut()?;
+    for (h, a, b) in edits {
+        d.modify_entity(h, |e| {
+            if let EntityKind::Line(l) = &mut e.kind {
+                l.a = v3(a);
+                l.b = v3(b);
+            }
+        })?;
+    }
+    Ok(())
+}
+
+fn commit_opening(s: &mut Session, h: Handle, block: &str, old_w: f64, op: &Opening) -> Result<()> {
+    let insert = {
+        let e = s.doc()?.entity(h).ok_or_else(|| bad("properties.set", "no such opening"))?;
+        let EntityKind::Insert(i) = &e.kind else { return Err(bad("properties.set", "no such opening")) };
+        i.clone()
+    };
+    s.doc_mut()?.modify_entity(h, |e| {
+        if let EntityKind::Insert(i) = &mut e.kind {
+            store_params(i, op);
+        }
+    })?;
+    let name = exclusive_name(s, h, block)?;
+    write_symbol(s.doc_mut()?, &name, op.door, &op.otype, op.width, op.thick, op.deduct);
+    shift_jambs(s, &insert, old_w, op.width, op.thick)
+}
+
+/// Rebuild an opening after a width grip. `old_width` is the plan width before the grip moved.
+pub(crate) fn refit_opening(s: &mut Session, h: Handle, old_width: f64) -> Result<()> {
+    let (block, op) = {
+        let e = s.doc()?.entity(h).ok_or_else(|| bad("grip.stretch", "no such opening"))?;
+        let EntityKind::Insert(i) = &e.kind else { return Ok(()) };
+        if !i.is_opening() {
+            return Ok(());
+        }
+        (i.block.clone(), read_opening(i)?)
+    };
+    if (op.width - old_width).abs() < 1e-6 {
+        return Ok(());
+    }
+    commit_opening(s, h, &block, old_width, &op)
+}
+
+/// Properties-panel edit of one or more dynamic doors or windows.
+pub(crate) fn edit_openings(s: &mut Session, hs: &[Handle], p: &Value) -> Result<Value> {
+    if hs.is_empty() {
+        return Err(bad("properties.set", "nothing selected"));
+    }
+    let standard = super::project::standard_lintel(s.doc()?);
+    let to_m = metres_per_du(s);
+    let mut plan = Vec::new();
+    for h in hs {
+        let e = s.doc()?.entity(*h).ok_or_else(|| bad("properties.set", "no such object"))?;
+        let EntityKind::Insert(i) = &e.kind else {
+            return Err(bad("properties.set", "opening properties apply to a door or a window"));
+        };
+        if !i.is_opening() {
+            return Err(bad("properties.set", "opening properties apply to a door or a window"));
+        }
+        let mut op = read_opening(i)?;
+        let old_w = op.width;
+        let block = i.block.clone();
+        apply_opening(&mut op, p, standard, "properties.set", to_m)?;
+        plan.push((*h, block, old_w, op));
+    }
+    for (h, block, old_w, op) in &plan {
+        commit_opening(s, *h, block, *old_w, op)?;
+    }
+    Ok(json!({ "changed": plan.len() }))
+}
+
+pub(crate) fn opening_width_of(kind: &EntityKind) -> Option<f64> {
+    match kind {
+        EntityKind::Insert(i) => i.opening_width(),
+        _ => None,
+    }
+}
+
 fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
     let at = point_req(cmd, p, "at")?;
     let mm = per_mm(s);
@@ -248,7 +642,8 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
     if str_param(p, "name").is_some() && entry.is_none() {
         return Err(bad(cmd, "no such entry in the opening schedule"));
     }
-    let to_du = |m: f64| m / s.doc().ok().and_then(ua::drawing_unit).map_or(0.001, |u| u.metres());
+    let to_m = metres_per_du(s);
+    let to_du = |m: f64| m / to_m;
     let width = match (p.get("width").and_then(Value::as_f64), &entry) {
         (Some(w), _) => w,
         (None, Some(e)) => to_du(e["length"].as_f64().unwrap_or(0.9)),
@@ -270,48 +665,55 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
         let (lo, hi) = faces.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), f| (l.min(*f), h.max(*f)));
         if hi > lo { hi - lo } else { 230.0 * mm }
     });
-    // The block, named by kind, entry or width.
-    let tag = match &entry {
-        Some(e) => e["name"].as_str().unwrap_or("X").to_string(),
-        None => format!("{}", (width / mm).round()),
+    let standard = super::project::standard_lintel(s.doc()?);
+    let mut op = Opening {
+        door,
+        otype: (if door { "single" } else { "casement" }).into(),
+        width,
+        thick,
+        height: if door { standard } else { 1.2 },
+        sill: if door { 0.0 } else { 0.9 },
+        mode: "standard".into(),
+        head: standard,
+        deduct: bool_or(p, "deduct", true),
     };
-    let block = format!("{}-{tag}-{}", if door { "DOOR" } else { "WIN" }, (thick / mm).round());
-    if s.doc()?.block(&block).is_none() {
-        let d = s.doc_mut()?;
-        let mut b = Block::new(&block);
-        let (hw, ht) = (width / 2.0, thick / 2.0);
-        let (jamb_layer, glass) = if door { (DOOR, false) } else { (WINDOW, true) };
-        push(d, &mut b, jamb_layer, line(Vec2::new(-hw, -ht), Vec2::new(-hw, ht)));
-        push(d, &mut b, jamb_layer, line(Vec2::new(hw, -ht), Vec2::new(hw, ht)));
-        if door {
-            // Leaf perpendicular to the wall at the hinge side, and its swing.
-            push(d, &mut b, DOOR, line(Vec2::new(-hw, ht), Vec2::new(-hw, ht + width)));
-            let arc = aad_doc::Arc { center: Vec3::new(-hw, ht, 0.0), radius: width, start: 0.0, end: std::f64::consts::FRAC_PI_2 };
-            push(d, &mut b, DOOR, EntityKind::Arc(arc));
-        } else if glass {
-            for v in [-ht, -ht / 3.0, ht / 3.0, ht] {
-                push(d, &mut b, WINDOW, line(Vec2::new(-hw, v), Vec2::new(hw, v)));
-            }
+    if let Some(e) = &entry {
+        if !door && e["kind"].as_str().is_some_and(|k| k.eq_ignore_ascii_case("ventilator")) {
+            op.otype = "ventilator".into();
         }
-        if bool_or(p, "deduct", true) {
-            d.ensure_layer(DEDUCT);
-            push(d, &mut b, DEDUCT, line(Vec2::new(-hw, 0.0), Vec2::new(hw, 0.0)));
+        if let Some(t) = e["type"].as_str().and_then(|t| canonical_type(door, t)) {
+            op.otype = t.into();
         }
-        d.blocks.insert(block.clone(), Arc::new(b));
+        if let Some(sl) = e["sill"].as_f64().filter(|n| n.is_finite() && *n >= 0.0) {
+            op.sill = sl;
+        }
+        if let Some(hgt) = e["height"].as_f64().filter(|n| n.is_finite() && *n > 0.0) {
+            op.height = hgt;
+        }
+        if let Some(l) = e["lintel"].as_f64().filter(|n| n.is_finite() && (*n - standard).abs() > 1e-3) {
+            op.mode = "custom".into();
+            op.head = l;
+        }
     }
+    apply_opening(&mut op, p, standard, cmd, to_m)?;
+    let token = s.doc_mut()?.new_handle();
+    let block = format!("AADOPEN-{}", token.hex());
+    write_symbol(s.doc_mut()?, &block, op.door, &op.otype, op.width, op.thick, op.deduct);
     // Insert: mirrored for a right-hand swing, turned half a turn to swing to the other side.
     let mut rot = angle;
     if str_param(p, "side") == Some("down") {
         rot += std::f64::consts::PI;
     }
     let sx = if door && str_param(p, "swing") == Some("right") { -1.0 } else { 1.0 };
-    let ins = EntityKind::Insert(Insert {
+    let mut placed = Insert {
         block: block.clone(),
         insert: v3(at),
         scale: Vec3::new(sx, 1.0, 1.0),
         rotation: rot,
         ..Insert::default()
-    });
+    };
+    store_params(&mut placed, &op);
+    let ins = EntityKind::Insert(placed);
     let space = s.space();
     let mut common = s.current_common();
     common.layer = (if door { DOOR } else { WINDOW }).to_string();
@@ -330,7 +732,18 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
             }
         }
     }
-    Ok(json!({ "block": block, "handle": h.hex(), "cut": cut, "thickness": thick, "width": width }))
+    Ok(json!({
+        "block": block,
+        "handle": h.hex(),
+        "cut": cut,
+        "thickness": op.thick,
+        "width": op.width,
+        "openingType": op.otype,
+        "sill": to_du(op.sill),
+        "openingHeight": to_du(op.height),
+        "lintelMode": op.mode,
+        "head": to_du(op.head),
+    }))
 }
 
 fn run_door(s: &mut Session, p: &Value) -> Result<Value> {
@@ -419,4 +832,101 @@ fn run_clean(s: &mut Session, p: &Value) -> Result<Value> {
         })?;
     }
     Ok(json!({ "erased": erased.len(), "joined": joined }))
+}
+
+#[cfg(test)]
+mod tests {
+    use aad_doc::{EntityKind, Handle};
+    use serde_json::json;
+
+    use crate::Session;
+
+    fn place_wall(s: &mut Session) {
+        s.execute("drawing.units", &json!({ "units": "mm", "mode": "metadata" })).unwrap();
+        s.execute("wall.draw", &json!({ "points": [[0.0, 0.0], [4000.0, 0.0]], "thickness": 200.0 })).unwrap();
+    }
+
+    #[test]
+    fn door_jamb_grip_widens_the_symbol_and_the_wall() {
+        let mut s = Session::new();
+        place_wall(&mut s);
+        let placed = s
+            .execute(
+                "wall.door",
+                &json!({
+                    "at": [2000.0, 0.0], "angle": 0.0, "width": 900.0, "thickness": 200.0,
+                    "openingType": "single", "sill": 0.0, "openingHeight": 2100.0, "lintelMode": "standard"
+                }),
+            )
+            .unwrap();
+        let hex = placed["handle"].as_str().unwrap();
+        let h = Handle::parse_hex(hex).unwrap();
+        s.execute("grip.stretch", &json!({ "handle": hex, "index": 2, "to": [2600.0, 0.0] })).unwrap();
+        let doc = s.doc().unwrap();
+        let kind = &doc.entity(h).unwrap().kind;
+        let EntityKind::Insert(i) = kind else {
+            assert!(false, "door is an insert");
+            return;
+        };
+        let w: f64 = i.attrib_value("OWIDTH").unwrap().parse().unwrap();
+        assert!((w - 1200.0).abs() < 1e-3, "{w}");
+        assert!((i.attrib_value("OHEIGHT").unwrap().parse::<f64>().unwrap() - 2.1).abs() < 1e-6);
+        let leaf = doc.block(&i.block).unwrap().entities.iter().filter_map(|e| match &e.kind {
+            EntityKind::Line(l) => Some(l.a.xy().dist(l.b.xy())),
+            _ => None,
+        }).fold(0.0_f64, f64::max);
+        assert!((leaf - 1200.0).abs() < 1e-3, "{leaf}");
+        let xs: Vec<f64> = doc
+            .model
+            .iter()
+            .filter(|e| e.common.layer.eq_ignore_ascii_case("A-WALL"))
+            .filter_map(|e| match &e.kind {
+                EntityKind::Line(l) => Some([l.a.x, l.b.x]),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        assert!(xs.iter().any(|x| (*x - 1400.0).abs() < 1e-2), "{xs:?}");
+        assert!(xs.iter().any(|x| (*x - 2600.0).abs() < 1e-2), "{xs:?}");
+    }
+
+    #[test]
+    fn window_properties_edit_type_sill_and_lintel_lock() {
+        let mut s = Session::new();
+        place_wall(&mut s);
+        let placed = s
+            .execute("wall.window", &json!({ "at": [2000.0, 0.0], "angle": 0.0, "width": 1200.0, "thickness": 200.0 }))
+            .unwrap();
+        assert_eq!(placed["openingType"], "casement");
+        assert_eq!(placed["lintelMode"], "standard");
+        assert!((placed["sill"].as_f64().unwrap() - 900.0).abs() < 1e-6);
+        assert!((placed["openingHeight"].as_f64().unwrap() - 1200.0).abs() < 1e-6);
+        let hex = placed["handle"].as_str().unwrap();
+        let h = Handle::parse_hex(hex).unwrap();
+        s.execute(
+            "properties.set",
+            &json!({ "handles": [hex], "openingType": "sliding", "lintelMode": "custom", "head": 2400.0, "sill": 800.0, "openingHeight": 1400.0 }),
+        )
+        .unwrap();
+        let doc = s.doc().unwrap();
+        let EntityKind::Insert(i) = &doc.entity(h).unwrap().kind else {
+            assert!(false, "window is an insert");
+            return;
+        };
+        assert_eq!(i.attrib_value("OTYPE"), Some("sliding"));
+        assert_eq!(i.attrib_value("OLINTEL"), Some("custom"));
+        assert!((i.attrib_value("OSILL").unwrap().parse::<f64>().unwrap() - 0.8).abs() < 1e-6);
+        assert!((i.attrib_value("OHEIGHT").unwrap().parse::<f64>().unwrap() - 1.4).abs() < 1e-6);
+        assert!((i.attrib_value("OHEAD").unwrap().parse::<f64>().unwrap() - 2.4).abs() < 1e-6);
+        let arcs = doc.block(&i.block).unwrap().entities.iter().filter(|e| matches!(e.kind, EntityKind::Arc(_))).count();
+        assert_eq!(arcs, 0, "a sliding window has no swing arc");
+        let err = s.execute("properties.set", &json!({ "handles": [hex], "lintelMode": "standard", "sill": 0.0, "openingHeight": 3000.0 }));
+        assert!(err.is_err(), "a 3 m opening does not fit a 2.1 m lintel");
+        s.execute("properties.set", &json!({ "handles": [hex], "lintelMode": "standard", "sill": 300.0 })).unwrap();
+        let doc = s.doc().unwrap();
+        let EntityKind::Insert(i) = &doc.entity(h).unwrap().kind else { return };
+        assert_eq!(i.attrib_value("OLINTEL"), Some("standard"));
+        assert!((i.attrib_value("OHEIGHT").unwrap().parse::<f64>().unwrap() - 1.8).abs() < 1e-6);
+        assert!((i.attrib_value("OHEAD").unwrap().parse::<f64>().unwrap() - 2.1).abs() < 1e-6);
+    }
 }

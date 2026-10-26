@@ -146,8 +146,6 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             layer_selector(app, ui, &mut actions);
             ui.separator();
             floor_selector(app, ui, &mut actions);
-            ui.separator();
-            space_selector(app, ui, &mut actions);
             // Panels: pinned (always shown) or auto-hide (collapse when the pointer is away).
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(8.0);
@@ -253,6 +251,7 @@ fn floor_selector(app: &mut CadApp, ui: &mut egui::Ui, actions: &mut Vec<Action>
     });
 }
 
+#[allow(dead_code)]
 fn space_selector(app: &mut CadApp, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
     ui.label(RichText::new(crate::tl!("Drawing space")).weak().small());
     let s = &app.ctx_bar;

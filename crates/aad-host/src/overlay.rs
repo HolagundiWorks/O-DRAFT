@@ -535,11 +535,12 @@ fn add_tip(list: &mut DisplayList, at: Vec2, scale: f64, text: &str, paper: Rgb)
     if !at.is_finite() || !scale.is_finite() || scale <= 0.0 || text.is_empty() {
         return;
     }
-    // Match WinUI body text (~12 DIP), Segoe UI — not the legacy SHX stroke face.
-    let height = 12.0 / scale;
+    // Half of the previous 12 DIP body size, filled (not stroked outlines).
+    let height = 6.0 / scale;
     let shaped = aad_fonts::shape_line(&tip_font(), text, height, 1.0, 0.0);
-    let pad = 4.0 / scale;
-    let origin = Vec2::new(at.x + 18.0 / scale, at.y + 28.0 / scale);
+    let pad = 2.0 / scale;
+    // Sit clear of the crosshair: baseline above the cursor, glyphs grow upward.
+    let origin = Vec2::new(at.x + 12.0 / scale, at.y + 14.0 / scale);
     let x0 = origin.x - pad;
     let y0 = origin.y - pad;
     let x1 = origin.x + shaped.width + pad;
@@ -567,10 +568,32 @@ fn add_ui_text(list: &mut DisplayList, at: Vec2, height: f64, text: &str, color:
 }
 
 fn add_shaped(list: &mut DisplayList, at: Vec2, shaped: &aad_fonts::Shaped, color: Rgb) {
-    for stroke in shaped.outlines() {
+    for stroke in &shaped.strokes {
         let pts: Vec<Vec2> = stroke.iter().map(|point| at + *point).collect();
         add_poly(list, &pts, color, true);
     }
+    for glyph in &shaped.glyphs {
+        let local = aad_render::triangulate_outline(glyph);
+        if local.len() < 3 {
+            for contour in glyph {
+                let pts: Vec<Vec2> = contour.iter().map(|point| at + *point).collect();
+                add_poly(list, &pts, color, true);
+            }
+            continue;
+        }
+        let world: Vec<Vec2> = local.into_iter().map(|point| at + point).collect();
+        add_tris(list, &world, color);
+    }
+}
+
+fn add_tris(list: &mut DisplayList, pts: &[Vec2], color: Rgb) {
+    if pts.len() < 3 {
+        return;
+    }
+    let Ok(start) = u32::try_from(list.tris.len()) else { return };
+    let Ok(len) = u32::try_from(pts.len()) else { return };
+    list.tris.extend_from_slice(pts);
+    list.prims.push(DPrim { handle: Handle(0), color, aci7: false, lw: 0.0, kind: Kind::Tris, start, len });
 }
 
 fn add_mask(list: &mut DisplayList, corners: &[Vec2; 4]) {

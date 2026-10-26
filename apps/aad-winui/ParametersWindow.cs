@@ -197,26 +197,16 @@ internal static class ParametersWindow
         root.RequestedTheme = theme;
         Density.Apply(root);
         ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 380, minHeightDip: 420, maxWidthDip: 560, maxHeightDip: 720);
+        ShellFit.UserResizable(window, minWidthDip: 380, minHeightDip: 420, maxWidthDip: 560, maxHeightDip: 720, persistKey: "parameters");
         Load();
         window.Activate();
         Native.ShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(window), 8);
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = Density.DialogAction(label);
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level1);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private sealed class WallRow(string id, string label)
     {

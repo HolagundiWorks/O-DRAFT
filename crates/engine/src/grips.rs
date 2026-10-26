@@ -194,15 +194,30 @@ pub fn stretch_grip(kind: &EntityKind, index: usize, to: Vec2) -> Option<EntityK
             r.dir = d.to3(0.0);
         }
         EntityKind::Insert(i) => {
-            if index == 0 {
+            if i.is_opening() {
+                if index == 0 {
+                    return Some(translated(kind, delta));
+                }
+                if index > 2 {
+                    return None;
+                }
+                let sign = if i.scale.x < 0.0 { -1.0 } else { 1.0 };
+                let u = Vec2::new(i.rotation.cos(), i.rotation.sin()) * sign;
+                let half = (to - i.insert.xy()).dot(u).abs();
+                if !(half.is_finite() && half * 2.0 >= 1e-4) {
+                    return None;
+                }
+                i.set_attrib("OWIDTH", &plain_number(half * 2.0));
+            } else if index == 0 {
                 return Some(translated(kind, delta));
-            }
-            let a = i.attribs.get_mut(index - 1)?;
-            let ip = a.text.insert.xy() + delta;
-            set_xy(&mut a.text.insert, ip);
-            if let Some(al) = &mut a.text.align_pt {
-                let q = al.xy() + delta;
-                set_xy(al, q);
+            } else {
+                let a = i.attribs.get_mut(index - 1)?;
+                let ip = a.text.insert.xy() + delta;
+                set_xy(&mut a.text.insert, ip);
+                if let Some(al) = &mut a.text.align_pt {
+                    let q = al.xy() + delta;
+                    set_xy(al, q);
+                }
             }
         }
         EntityKind::Dimension(d) => {
@@ -267,6 +282,19 @@ pub fn stretch_grip(kind: &EntityKind, index: usize, to: Vec2) -> Option<EntityK
         EntityKind::Unknown(_) => return None,
     }
     Some(k)
+}
+
+fn plain_number(v: f64) -> String {
+    let mut s = format!("{v:.6}");
+    if s.contains('.') {
+        while s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+    }
+    if s.is_empty() || s == "-" { "0".into() } else { s }
 }
 
 fn shift_params(e: &mut aad_doc::Ellipse, by: f64) {

@@ -24,6 +24,13 @@
     <x:Double x:Key="DividerThickness">1</x:Double>
     <x:Double x:Key="SplitterWidth">4</x:Double>
     <x:Double x:Key="SidePanelWidth">240</x:Double>
+    <x:Double x:Key="ManagerListWidth">180</x:Double>
+    <GridLength x:Key="ManagerListColumnWidth">180</GridLength>
+    <x:Double x:Key="FieldWidth">120</x:Double>
+    <x:Double x:Key="DialogActionMinWidth">72</x:Double>
+    <x:Double x:Key="HatchSwatch">56</x:Double>
+    <x:Double x:Key="LayerStateComboWidth">140</x:Double>
+    <x:Double x:Key="SearchFieldWidth">160</x:Double>
     <x:Double x:Key="CornerRadiusSm">2</x:Double>
     <x:Double x:Key="CornerRadiusMd">2</x:Double>
     <Thickness x:Key="BorderThicknessNone">0</Thickness>

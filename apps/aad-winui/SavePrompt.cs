@@ -29,24 +29,7 @@ internal static class SavePrompt
         var save = Density.DialogAction("Save", primary: true);
         var discard = Density.DialogAction("Don't save");
         var cancel = Density.DialogAction("Cancel");
-        // Equal columns fill the row — no empty left gutter from right-only packing.
-        foreach (var button in new[] { save, discard, cancel })
-        {
-            button.HorizontalAlignment = HorizontalAlignment.Stretch;
-            button.MinWidth = 0;
-            button.Margin = new Thickness(0);
-        }
-
-        var actions = new Grid { ColumnSpacing = Density.SpaceSm };
-        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetColumn(save, 0);
-        Grid.SetColumn(discard, 1);
-        Grid.SetColumn(cancel, 2);
-        actions.Children.Add(save);
-        actions.Children.Add(discard);
-        actions.Children.Add(cancel);
+        var actions = DialogLayout.ActionRow(save, discard, cancel);
 
         var stack = new StackPanel
         {

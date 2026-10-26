@@ -100,7 +100,7 @@ internal static class UnitsWindow
         return window;
     }
 
-    private static Button ActionButton(string label) => Density.DialogAction(label);
+    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
     private static ComboBox Combo(IEnumerable<string> items, string selected)
     {
@@ -150,12 +150,7 @@ internal static class UnitsWindow
         }
     }
 
-    private static TextBlock Heading(string text)
-    {
-        var block = Density.SectionHeading(text);
-        AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        return block;
-    }
+    private static TextBlock Heading(string text) => DialogLayout.Heading(text);
 
     private static TextBlock Note(string text) => Density.Secondary(text, TextWrapping.Wrap);
 }

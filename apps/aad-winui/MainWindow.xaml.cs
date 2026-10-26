@@ -286,6 +286,10 @@ public sealed partial class MainWindow : Window
                 UpdateDyn();
                 return;
             }
+            if (CloseOpenComboBoxes())
+            {
+                return;
+            }
             if (!CanvasMenu.Dismiss())
             {
                 CancelCommand();
@@ -485,11 +489,18 @@ public sealed partial class MainWindow : Window
                     _escapeHeld = true;
                     return;
                 }
-                if (focused is ComboBox)
+                // Combo flyouts often focus a list item, not the ComboBox ? close open dropdowns first.
+                if (focused is ComboBox || CloseOpenComboBoxes())
                 {
+                    CloseOpenComboBoxes();
                     _escapeHeld = true;
                     return;
                 }
+            }
+            else if (CloseOpenComboBoxes())
+            {
+                _escapeHeld = true;
+                return;
             }
             if (!CanvasMenu.Dismiss())
             {
@@ -497,6 +508,21 @@ public sealed partial class MainWindow : Window
             }
         }
         _escapeHeld = down;
+    }
+
+    /// <summary>Closes arch-bar / status ComboBox dropdowns. Escape must dismiss these before CAD cancel.</summary>
+    private bool CloseOpenComboBoxes()
+    {
+        var closed = false;
+        foreach (var box in new ComboBox?[] { LayerBox, FloorBox, UnitsBox, PaperBox })
+        {
+            if (box is { IsDropDownOpen: true })
+            {
+                box.IsDropDownOpen = false;
+                closed = true;
+            }
+        }
+        return closed;
     }
 
     private void OnMenuCommand(object sender, RoutedEventArgs e)
@@ -2780,7 +2806,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         // Include hover so Properties / Layer / Blocks update on rollover, not only on pick.
-        var key = snapshot.Uid + ":" + snapshot.Revision + ":" + snapshot.Selection + ":" + (snapshot.Hover ?? "") + ":" + (snapshot.FocusLayer ?? "") + ":" + (snapshot.FocusBlock ?? "");
+        var key = snapshot.Uid + ":" + snapshot.Revision + ":" + snapshot.Selection + ":" + (snapshot.Hover ?? "") + ":" + (snapshot.FocusLayer ?? "") + ":" + (snapshot.FocusBlock ?? "") + ":" + snapshot.Layiso;
         if (key == _panelKey)
         {
             return;
@@ -2915,6 +2941,7 @@ public sealed partial class MainWindow : Window
     }
 
     private static readonly string[] DraftingUnitChoices = ["mm", "cm", "m", "in", "ft"];
+    private static readonly string[] PaperChoices = ["A0", "A1", "A2", "A3", "A4"];
 
     private void EnsureUnitsBox()
     {
@@ -2928,6 +2955,52 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void EnsurePaperBox()
+    {
+        if (PaperBox.Items.Count > 0)
+        {
+            return;
+        }
+        foreach (var paper in PaperChoices)
+        {
+            PaperBox.Items.Add(paper);
+        }
+    }
+
+    private void SyncPaperSize()
+    {
+        EnsurePaperBox();
+        if (PaperBox.SelectedItem != null)
+        {
+            return;
+        }
+        _filling = true;
+        PaperBox.SelectedItem = "A1";
+        PaperBox.PlaceholderText = null;
+        _filling = false;
+    }
+
+    private void OnPaperPicked(object sender, SelectionChangedEventArgs e)
+    {
+        if (_filling || _host == IntPtr.Zero || PaperBox.SelectedItem is not string paper || paper.Length == 0)
+        {
+            return;
+        }
+        // Prefer keeping the drawing's scale; fall back to 1:100 when none is set yet.
+        var body = new Dictionary<string, object> { ["paper"] = paper, ["apply"] = true };
+        if (Native.Execute(_host, "plot.config", JsonSerializer.Serialize(body)) != 0)
+        {
+            body["scale"] = "1:100";
+            if (Native.Execute(_host, "plot.config", JsonSerializer.Serialize(body)) != 0)
+            {
+                Status.Text = Native.LastError(_host);
+                AfterCommand();
+                return;
+            }
+        }
+        AfterCommand();
+    }
+
     private void SyncDraftingUnits(string chromeLabel)
     {
         EnsureUnitsBox();
@@ -2935,10 +3008,14 @@ public sealed partial class MainWindow : Window
         _filling = true;
         if (unit.Length > 0 && DraftingUnitChoices.Contains(unit, StringComparer.OrdinalIgnoreCase))
         {
-            UnitsBox.SelectedItem = DraftingUnitChoices.First(u => u.Equals(unit, StringComparison.OrdinalIgnoreCase));
+            var choice = DraftingUnitChoices.First(u => u.Equals(unit, StringComparison.OrdinalIgnoreCase));
+            if (!Equals(UnitsBox.SelectedItem, choice))
+            {
+                UnitsBox.SelectedItem = choice;
+            }
             UnitsBox.PlaceholderText = null;
         }
-        else
+        else if (UnitsBox.SelectedItem != null || UnitsBox.PlaceholderText != (string.IsNullOrEmpty(chromeLabel) ? "units?" : chromeLabel))
         {
             UnitsBox.SelectedItem = null;
             UnitsBox.PlaceholderText = string.IsNullOrEmpty(chromeLabel) ? "units?" : chromeLabel;
@@ -3156,24 +3233,20 @@ public sealed partial class MainWindow : Window
 
     private void OpenLayers()
     {
+        // Full properties (colour, linetype, filters, states) live in the manager window.
+        // The side-panel Layer tab stays the compact lock / freeze / isolate list.
         EnsureLayers();
         if (_layersWindow == null)
         {
             return;
         }
-        if (_mergeLayers)
-        {
-            _leftCollapsed = false;
-            ApplyColumns();
-            _layersWindow.Reload("");
-            return;
-        }
         _layersWindow.AttachBody();
+        _layersWindow.ShowMerged(false);
         _layersWindow.Reload("");
         PresentToolWindow(_layersWindow);
     }
 
-    private void OnMergeLayers(object sender, RoutedEventArgs e) => SetLayerMerge(!_mergeLayers, showWindow: _mergeLayers);
+    private void OnMergeLayers(object sender, RoutedEventArgs e) => DockLayersToSidePanel();
 
     private void EnsureLayers()
     {
@@ -3182,7 +3255,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         _layersWindow = new LayerManagerWindow(Content as FrameworkElement, _host, AfterCommand);
-        _layersWindow.MergeRequested += (_, _) => SetLayerMerge(!_mergeLayers, showWindow: _mergeLayers);
+        _layersWindow.MergeRequested += (_, _) => DockLayersToSidePanel();
         _layersWindow.AppWindow.Closing += (_, args) =>
         {
             if (_shellClosing)
@@ -3190,15 +3263,22 @@ public sealed partial class MainWindow : Window
                 return;
             }
             args.Cancel = true;
-            SetLayerMerge(true, showWindow: false);
+            _layersWindow.Conceal();
         };
         _layersWindow.Closed += (_, _) => _layersWindow = null;
     }
 
-    private void SetLayerMerge(bool merge, bool showWindow)
+    /// <summary>Hide the Layer Manager window and show the compact Layer side tab (never embeds the manager).</summary>
+    private void DockLayersToSidePanel()
     {
-        _mergeLayers = merge;
-        ApplyLayerHost(showWindow);
+        _mergeLayers = false;
+        EnsureLayers();
+        _layersWindow?.AttachBody();
+        _layersWindow?.ShowMerged(false);
+        _layersWindow?.Conceal();
+        _leftCollapsed = false;
+        ShowSidePanel(SideTab.Layers);
+        ApplyColumns();
         SaveShell();
     }
 
@@ -3213,32 +3293,17 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        _layersWindow.ShowMerged(_mergeLayers);
-        if (_mergeLayers)
+        // Side panel always uses LayersPanel; never host the full manager UI there.
+        if (_layersWindow.Body().Parent is Panel slot && ReferenceEquals(slot, LayersSlot))
         {
-            if (_leftWidth < 480)
-            {
-                // Wide enough for the layer table, but never more than about a third of a small window.
-                _leftWidth = Math.Min(520, Math.Max(380, Math.Round((Content as FrameworkElement)?.ActualWidth * 0.34 ?? 520)));
-            }
-            _leftCollapsed = false;
-            _layersWindow.DetachBody();
-            if (!LayersSlot.Children.Contains(_layersWindow.Body()))
-            {
-                LayersSlot.Children.Add(_layersWindow.Body());
-            }
-            _layersWindow.Conceal();
-            _layersWindow.Reload("");
-            Density.Apply(_layersWindow.Body());
+            slot.Children.Remove(_layersWindow.Body());
         }
-        else
+        _layersWindow.AttachBody();
+        _layersWindow.ShowMerged(false);
+        if (showWindow)
         {
-            _layersWindow.AttachBody();
-            if (showWindow)
-            {
-                _layersWindow.Reload("");
-                PresentToolWindow(_layersWindow);
-            }
+            _layersWindow.Reload("");
+            PresentToolWindow(_layersWindow);
         }
         ApplyColumns();
     }
@@ -3422,6 +3487,27 @@ public sealed partial class MainWindow : Window
                     {
                         continue;
                     }
+                    if (key is "height" or "textHeight")
+                    {
+                        AddTextSizeField(handles, key, label, value);
+                        continue;
+                    }
+                    if (row.TryGetProperty("choices", out var choiceValues) && choiceValues.ValueKind == JsonValueKind.Array && key.Length > 0)
+                    {
+                        var names = new List<string>();
+                        foreach (var choice in choiceValues.EnumerateArray())
+                        {
+                            if (choice.ValueKind == JsonValueKind.String && choice.GetString() is string name && name.Length > 0)
+                            {
+                                names.Add(name);
+                            }
+                        }
+                        if (names.Count > 0)
+                        {
+                            AddChoice(label, names, value, picked => CommitChoice(handles, key, picked));
+                            continue;
+                        }
+                    }
                     if (key.Length == 0)
                     {
                         PropertiesPanel.Children.Add(FieldLabel(label));
@@ -3517,6 +3603,83 @@ public sealed partial class MainWindow : Window
         };
         PropertiesPanel.Children.Add(FieldLabel(label));
         PropertiesPanel.Children.Add(box);
+    }
+
+    private void AddTextSizeField(List<string> handles, string key, string label, string currentHeight)
+    {
+        PropertiesPanel.Children.Add(FieldLabel(string.IsNullOrEmpty(label) ? "Text size" : label));
+        var rank = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MinHeight = Density.ControlHeight,
+        };
+        AutomationProperties.SetName(rank, "Text size");
+        foreach (var (tag, title) in new (string, string)[]
+        {
+            ("small", "Small"),
+            ("medium", "Medium"),
+            ("large", "Large"),
+            ("custom", "Custom"),
+        })
+        {
+            rank.Items.Add(new ComboBoxItem { Content = title, Tag = tag });
+        }
+        rank.SelectedIndex = 3;
+        var custom = new TextBox
+        {
+            Text = currentHeight,
+            Tag = currentHeight,
+            MinHeight = Density.ControlHeight,
+            PlaceholderText = "Drawing units",
+        };
+        AutomationProperties.SetName(custom, "Custom text height");
+        void CommitRank()
+        {
+            if (_filling || rank.SelectedItem is not ComboBoxItem item || item.Tag is not string tag)
+            {
+                return;
+            }
+            if (tag == "custom")
+            {
+                custom.Visibility = Visibility.Visible;
+                return;
+            }
+            custom.Visibility = Visibility.Collapsed;
+            RunProp("properties.set", new Dictionary<string, object> { ["handles"] = handles, ["textSize"] = tag });
+        }
+        void CommitCustom()
+        {
+            if (_filling || custom.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+            var text = custom.Text?.Trim() ?? "";
+            if (text.Length == 0 || text == custom.Tag as string)
+            {
+                return;
+            }
+            if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var height)
+                || !double.IsFinite(height)
+                || height <= 0)
+            {
+                Status.Text = "Text height must be a positive number";
+                return;
+            }
+            custom.Tag = text;
+            RunProp("properties.set", new Dictionary<string, object> { ["handles"] = handles, [key] = height });
+        }
+        rank.SelectionChanged += (_, _) => CommitRank();
+        custom.LostFocus += (_, _) => CommitCustom();
+        custom.KeyDown += (_, args) =>
+        {
+            if (args.Key == Windows.System.VirtualKey.Enter)
+            {
+                CommitCustom();
+                args.Handled = true;
+            }
+        };
+        PropertiesPanel.Children.Add(rank);
+        PropertiesPanel.Children.Add(custom);
     }
 
     private void RunProp(string command, Dictionary<string, object> values)
@@ -3616,6 +3779,8 @@ public sealed partial class MainWindow : Window
         {
             LayersPanel.Children.Add(Heading("Layer"));
         }
+        LayersPanel.Children.Add(FieldLabel("Lock, freeze and isolate only. Colour and linetype are in Layer Manager."));
+        LayersPanel.Children.Add(LayerPanelActions());
         LayersPanel.Children.Add(LayerHeader());
         // Put the focused layer first so selection/hover is visible without scrolling.
         var ordered = snapshot.Layers
@@ -3625,7 +3790,7 @@ public sealed partial class MainWindow : Window
             .ToList();
         for (var i = 0; i < ordered.Count; i++)
         {
-            LayersPanel.Children.Add(LayerLine(ordered[i].layer, i));
+            LayersPanel.Children.Add(LayerLine(ordered[i].layer, i, snapshot.Layiso));
         }
         if (snapshot.LayersTruncated)
         {
@@ -3633,17 +3798,170 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private UIElement LayerPanelActions()
+    {
+        var stack = new StackPanel { Spacing = Density.SpaceSm };
+        var manager = new Button
+        {
+            Content = "Layer Manager?",
+            MinHeight = Density.ControlHeight,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        Density.Name(manager, "Open layer manager");
+        ToolTipService.SetToolTip(manager, "Colour, linetype, lineweight and layer states");
+        manager.Click += (_, _) => OpenLayers();
+        stack.Children.Add(manager);
+
+        stack.Children.Add(FieldLabel("Layer set"));
+        var spaceBox = new ComboBox
+        {
+            MinHeight = Density.ControlHeight,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            PlaceholderText = "No saved layer set",
+        };
+        AutomationProperties.SetName(spaceBox, "Layer set");
+        ToolTipService.SetToolTip(spaceBox, "Activate a saved layer set (visible, frozen and locked layers)");
+        FillLayerSetCombo(spaceBox);
+        spaceBox.SelectionChanged += (_, _) =>
+        {
+            if (_filling || spaceBox.SelectedItem is not ComboBoxItem picked || picked.Tag is not string id || id.Length == 0)
+            {
+                return;
+            }
+            RunLayer("space.activate", new Dictionary<string, object> { ["id"] = id });
+        };
+        stack.Children.Add(spaceBox);
+
+        var saveRow = new Grid { ColumnSpacing = Density.SpaceSm };
+        saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        saveRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var nameBox = new TextBox
+        {
+            MinHeight = Density.ControlHeight,
+            PlaceholderText = "New set name",
+        };
+        AutomationProperties.SetName(nameBox, "New layer set name");
+        var createSet = new Button
+        {
+            Content = "Create",
+            MinHeight = Density.ControlHeight,
+            MinWidth = 72,
+        };
+        Density.Name(createSet, "Create layer set from current layers");
+        ToolTipService.SetToolTip(createSet, "Save the current layer visibility as a named layer set");
+        createSet.Click += (_, _) =>
+        {
+            var name = (nameBox.Text ?? "").Trim();
+            if (name.Length == 0)
+            {
+                Status.Text = "Enter a name for the layer set";
+                return;
+            }
+            RunLayer("space.save", new Dictionary<string, object> { ["name"] = name, ["activate"] = true });
+            nameBox.Text = "";
+            FillLayerSetCombo(spaceBox);
+        };
+        Grid.SetColumn(nameBox, 0);
+        Grid.SetColumn(createSet, 1);
+        saveRow.Children.Add(nameBox);
+        saveRow.Children.Add(createSet);
+        stack.Children.Add(saveRow);
+
+        stack.Children.Add(FieldLabel("Architecture layers"));
+        var setRow = new Grid { ColumnSpacing = Density.SpaceSm };
+        setRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        setRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var setBox = new ComboBox
+        {
+            MinHeight = Density.ControlHeight,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            PlaceholderText = "Which set",
+        };
+        foreach (var (tag, label) in new (string, string)[]
+        {
+            ("standard", "Standard"),
+            ("permit", "Permit"),
+            ("presentation", "Presentation"),
+            ("both", "Standard + Permit"),
+            ("all", "All sets"),
+        })
+        {
+            setBox.Items.Add(new ComboBoxItem { Content = label, Tag = tag });
+        }
+        setBox.SelectedIndex = 0;
+        AutomationProperties.SetName(setBox, "Architectural layer set to create");
+        var archCreate = new Button
+        {
+            Content = "Add",
+            MinHeight = Density.ControlHeight,
+            MinWidth = 72,
+        };
+        Density.Name(archCreate, "Create architectural layer set");
+        ToolTipService.SetToolTip(archCreate, "Create the selected architectural layer set");
+        archCreate.Click += (_, _) =>
+        {
+            var set = setBox.SelectedItem is ComboBoxItem item && item.Tag is string tag ? tag : "standard";
+            RunLayer("hcwlayers", new Dictionary<string, object> { ["set"] = set });
+        };
+        Grid.SetColumn(setBox, 0);
+        Grid.SetColumn(archCreate, 1);
+        setRow.Children.Add(setBox);
+        setRow.Children.Add(archCreate);
+        stack.Children.Add(setRow);
+        return stack;
+    }
+
+    private void FillLayerSetCombo(ComboBox box)
+    {
+        var names = new List<(string, string)>();
+        string? active = null;
+        if (_host != IntPtr.Zero && Native.Execute(_host, "space.list", "{}") == 0)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(Native.ReadResult(_host));
+                active = doc.RootElement.TryGetProperty("active", out var value) && value.ValueKind == JsonValueKind.String
+                    ? value.GetString()
+                    : null;
+                if (doc.RootElement.TryGetProperty("spaces", out var spaces))
+                {
+                    foreach (var space in spaces.EnumerateArray())
+                    {
+                        var id = space.TryGetProperty("id", out var ident) ? ident.GetString() ?? "" : "";
+                        var name = space.TryGetProperty("name", out var label) ? label.GetString() ?? id : id;
+                        if (id.Length > 0)
+                        {
+                            names.Add((id, name));
+                        }
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+        var was = _filling;
+        _filling = true;
+        FillCombo(box, names, active);
+        if (names.Count == 0)
+        {
+            box.PlaceholderText = "No saved layer set";
+            box.SelectedIndex = -1;
+        }
+        _filling = was;
+    }
+
     private static Grid LayerHeader()
     {
         var header = LayerGrid();
-        LayerCell(header, 0, "Status");
-        LayerCell(header, 1, "Name");
-        LayerCell(header, 2, "On");
-        LayerCell(header, 3, "Lock");
+        LayerCell(header, 0, "Name");
+        LayerCell(header, 1, "Lock");
+        LayerCell(header, 2, "Freeze");
+        LayerCell(header, 3, "Isolate");
         return header;
     }
 
-    private Grid LayerLine(LayerRow layer, int index)
+    private Grid LayerLine(LayerRow layer, int index, bool layiso)
     {
         var name = layer.Name;
         var grid = LayerGrid();
@@ -3655,9 +3973,6 @@ public sealed partial class MainWindow : Window
                 : index % 2 == 1
                     ? Density.ZebraFill()
                     : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        var status = layer.Current ? "check" : "layers";
-        var statusTip = layer.Current ? "Current layer " + name : "Make " + name + " the current layer";
-        Put(grid, 0, LayerIcon(status, statusTip, () => RunLayer("layer.current", new Dictionary<string, object> { ["name"] = name })));
         var label = new Button
         {
             Content = new TextBlock { Text = name, FontSize = Density.FontBody, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center },
@@ -3672,13 +3987,28 @@ public sealed partial class MainWindow : Window
         };
         AutomationProperties.SetName(label, "Layer " + name);
         label.Click += (_, _) => RunLayer("layer.current", new Dictionary<string, object> { ["name"] = name });
-        Put(grid, 1, label);
-        var onKind = layer.On ? "bulb" : "bulb-off";
-        var onTip = (layer.On ? "Turn off layer " : "Turn on layer ") + name;
-        Put(grid, 2, LayerIcon(onKind, onTip, () => RunLayer("layer.set", new Dictionary<string, object> { ["name"] = name, ["on"] = !layer.On })));
+        Put(grid, 0, label);
         var lockKind = layer.Locked ? "lock" : "unlock";
         var lockTip = (layer.Locked ? "Unlock layer " : "Lock layer ") + name;
-        Put(grid, 3, LayerIcon(lockKind, lockTip, () => RunLayer("layer.set", new Dictionary<string, object> { ["name"] = name, ["locked"] = !layer.Locked })));
+        Put(grid, 1, LayerIcon(lockKind, lockTip, () => RunLayer("layer.set", new Dictionary<string, object> { ["name"] = name, ["locked"] = !layer.Locked })));
+        var freezeKind = layer.Frozen ? "snowflake" : "sun";
+        var freezeTip = (layer.Frozen ? "Thaw layer " : "Freeze layer ") + name;
+        Put(grid, 2, LayerIcon(freezeKind, freezeTip, () => RunLayer("layer.set", new Dictionary<string, object> { ["name"] = name, ["frozen"] = !layer.Frozen })));
+        // When isolation is on and this layer is still visible, the control restores all layers.
+        var isolatedHere = layiso && layer.On;
+        var isoKind = isolatedHere ? "unisolate" : "isolate";
+        var isoTip = isolatedHere ? "Unisolate layers" : "Isolate layer " + name;
+        Put(grid, 3, LayerIcon(isoKind, isoTip, () =>
+        {
+            if (isolatedHere)
+            {
+                RunLayer("layuniso", new Dictionary<string, object>());
+            }
+            else
+            {
+                RunLayer("layiso", new Dictionary<string, object> { ["name"] = name });
+            }
+        }));
         Density.Apply(grid);
         return grid;
     }
@@ -3686,8 +4016,8 @@ public sealed partial class MainWindow : Window
     private static Grid LayerGrid()
     {
         var grid = new Grid { MinHeight = Density.ControlHeight };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Density.MinTarget) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Density.MinTarget) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Density.MinTarget) });
         return grid;
@@ -3734,6 +4064,7 @@ public sealed partial class MainWindow : Window
     private void FillBlocks(PanelSnapshot snapshot)
     {
         BlocksPanel.Children.Clear();
+        AddFurnitureCatalog();
         // Canvas selection/hover wins over the last clicked list row.
         if (!string.IsNullOrEmpty(snapshot.FocusBlock))
         {
@@ -3849,6 +4180,48 @@ public sealed partial class MainWindow : Window
         RefreshPanels();
     }
 
+    /// <summary>Standard furniture set from <c>furniture/standard</c> (CC0 plan DXFs).</summary>
+    private void AddFurnitureCatalog()
+    {
+        var entries = FurnitureCatalog.Load();
+        if (entries.Count == 0)
+            return;
+        BlocksPanel.Children.Add(Heading(FurnitureCatalog.Name));
+        BlocksPanel.Children.Add(FieldLabel("Plan blocks · millimetres · CC0 (Innerscene)"));
+        string? lastCat = null;
+        foreach (var entry in entries)
+        {
+            if (!string.Equals(lastCat, entry.Item.Category, StringComparison.Ordinal))
+            {
+                lastCat = entry.Item.Category;
+                BlocksPanel.Children.Add(FieldLabel(lastCat.ToUpperInvariant()));
+            }
+            var label = string.IsNullOrEmpty(entry.Item.SizeMm)
+                ? entry.Item.Title
+                : entry.Item.Title + " · " + entry.Item.SizeMm + " mm";
+            var btn = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = Density.ControlHeight };
+            Density.Name(btn, "Insert furniture " + entry.Item.Title);
+            var path = entry.Path;
+            var blockName = System.IO.Path.GetFileNameWithoutExtension(entry.Item.File);
+            btn.Click += (_, _) => InsertFurnitureFile(blockName, path);
+            BlocksPanel.Children.Add(btn);
+        }
+        BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+    }
+
+    private void InsertFurnitureFile(string blockName, string path)
+    {
+        if (_host == IntPtr.Zero || Native.CommandLine(_host, "insert") != 0)
+        {
+            History.Text = Native.LastError(_host);
+            return;
+        }
+        Native.CommandLine(_host, blockName + "=" + path);
+        _panelKey = "";
+        RefreshChrome();
+        RefreshPanels();
+    }
+
     private void SelectBlockReferences(BlockRow block)
     {
         if (_host == IntPtr.Zero || block.Handles.Count == 0)
@@ -3950,7 +4323,7 @@ public sealed partial class MainWindow : Window
             var current = snapshot.Layers.FirstOrDefault(layer => layer.Current)?.Name;
             FillCombo(LayerBox, snapshot.Layers.Select(layer => (layer.Name, layer.Name)), current);
             FillFloor();
-            FillSpaces();
+            SyncPaperSize();
         }
         finally
         {
@@ -3988,73 +4361,50 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void FillSpaces()
-    {
-        if (Native.Execute(_host, "space.list", "{}") != 0)
-        {
-            SpaceBox.IsEnabled = false;
-            return;
-        }
-        try
-        {
-            using var doc = JsonDocument.Parse(Native.ReadResult(_host));
-            var active = doc.RootElement.TryGetProperty("active", out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-            var names = new List<(string, string)>();
-            if (doc.RootElement.TryGetProperty("spaces", out var spaces))
-            {
-                foreach (var space in spaces.EnumerateArray())
-                {
-                    var id = space.TryGetProperty("id", out var ident) ? ident.GetString() ?? "" : "";
-                    var name = space.TryGetProperty("name", out var label) ? label.GetString() ?? id : id;
-                    if (id.Length > 0)
-                    {
-                        names.Add((id, name));
-                    }
-                }
-            }
-            // active is a space id (or null when none is applied). Model/paper live in the layout tabs.
-            FillCombo(SpaceBox, names, active);
-            if (names.Count == 0)
-            {
-                SpaceBox.PlaceholderText = "No saved drawing space";
-            }
-            else if (string.IsNullOrEmpty(active) || SpaceBox.SelectedItem == null)
-            {
-                SpaceBox.PlaceholderText = "None";
-                SpaceBox.SelectedIndex = -1;
-            }
-        }
-        catch (JsonException)
-        {
-            SpaceBox.IsEnabled = false;
-            SpaceBox.PlaceholderText = "No saved drawing space";
-        }
-    }
-
     private static void FillCombo(ComboBox box, IEnumerable<(string Tag, string Label)> items, string? selected)
     {
-        box.Items.Clear();
-        foreach (var (tag, label) in items)
+        var list = items.ToList();
+        var sameCount = box.Items.Count == list.Count;
+        var sameItems = sameCount;
+        if (sameItems)
         {
-            box.Items.Add(new ComboBoxItem { Content = label, Tag = tag });
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (box.Items[i] is not ComboBoxItem existing || existing.Tag as string != list[i].Tag)
+                {
+                    sameItems = false;
+                    break;
+                }
+            }
+        }
+        if (!sameItems)
+        {
+            box.Items.Clear();
+            foreach (var (tag, label) in list)
+            {
+                box.Items.Add(new ComboBoxItem { Content = label, Tag = tag });
+            }
         }
         box.IsEnabled = box.Items.Count > 0;
+        var want = -1;
         for (var i = 0; i < box.Items.Count; i++)
         {
             if (box.Items[i] is ComboBoxItem item && item.Tag is string tag && tag.Equals(selected, StringComparison.OrdinalIgnoreCase))
             {
-                box.SelectedIndex = i;
-                return;
+                want = i;
+                break;
             }
         }
-        box.SelectedIndex = -1;
+        // Avoid SelectionChanged ? layer.current / floor.current when chrome already matches.
+        if (box.SelectedIndex != want)
+        {
+            box.SelectedIndex = want;
+        }
     }
 
     private void OnLayerPicked(object sender, SelectionChangedEventArgs e) => PickContext(LayerBox, "layer.current", "name");
 
     private void OnFloorPicked(object sender, SelectionChangedEventArgs e) => PickContext(FloorBox, "floor.current", "name");
-
-    private void OnSpacePicked(object sender, SelectionChangedEventArgs e) => PickContext(SpaceBox, "space.activate", "id");
 
     private void PickContext(ComboBox box, string command, string key)
     {
@@ -4456,7 +4806,8 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(WorkspaceButton, _classic ? "Classic" : "Pro");
         AutomationProperties.SetName(WorkspaceButton, _classic ? "Classic workspace" : "Pro workspace");
         _leftIdleSince = DateTime.UtcNow;
-        _mergeLayers = true;
+        // Compact Layer side tab only; full manager opens as a window (never merge filters into the dock).
+        _mergeLayers = false;
         _ucs = prefs.Ucs;
         _barDx = prefs.BarDx;
         _barDy = prefs.BarDy;
@@ -4544,19 +4895,6 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetName(SideRail, label + ". Move the pointer here to open the side panel.");
     }
 
-    /// <summary>When the panel is open, only the selected tab is visible (no other tab headers).</summary>
-    private void ApplySelectedSideTabOnly()
-    {
-        var current = SideTabs.SelectedItem as TabViewItem ?? PropertiesTab;
-        if (!ReferenceEquals(SideTabs.SelectedItem, current))
-        {
-            SideTabs.SelectedItem = current;
-        }
-        PropertiesTab.Visibility = ReferenceEquals(current, PropertiesTab) ? Visibility.Visible : Visibility.Collapsed;
-        LayersTab.Visibility = ReferenceEquals(current, LayersTab) ? Visibility.Visible : Visibility.Collapsed;
-        BlocksTab.Visibility = ReferenceEquals(current, BlocksTab) ? Visibility.Visible : Visibility.Collapsed;
-    }
-
     private void OnSideRailTapped(object sender, TappedRoutedEventArgs e)
     {
         var tab = SideTabs.SelectedItem switch
@@ -4597,18 +4935,13 @@ public sealed partial class MainWindow : Window
         {
             ApplySideRailLabel();
         }
-        else
-        {
-            ApplySelectedSideTabOnly();
-        }
         LeftSplitterColumn.Width = leftOpen && _leftFloat == null ? new GridLength(8) : new GridLength(0);
         LeftSplitter.Visibility = leftOpen && _leftFloat == null ? Visibility.Visible : Visibility.Collapsed;
         SideTabs.Visibility = leftOpen && _leftFloat == null ? Visibility.Visible : Visibility.Collapsed;
-        ContextBar.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
         PinLeftButton.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
         FloatLeftButton.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
         LeftColumn.Background = leftOpen ? null : StripBrush();
-        LayersHost.Visibility = !_mergeLayers ? Visibility.Visible : Visibility.Collapsed;
+        LayersHost.Visibility = Visibility.Visible;
     }
 
     /// Unpinned panels stay open while the pointer is over them or a field in them has focus,
@@ -4741,12 +5074,10 @@ public sealed partial class MainWindow : Window
             SideTab.Blocks => BlocksTab,
             _ => PropertiesTab,
         };
-        // Make the chosen tab visible before selecting it (others stay collapsed).
-        PropertiesTab.Visibility = ReferenceEquals(item, PropertiesTab) ? Visibility.Visible : Visibility.Collapsed;
-        LayersTab.Visibility = ReferenceEquals(item, LayersTab) ? Visibility.Visible : Visibility.Collapsed;
-        BlocksTab.Visibility = ReferenceEquals(item, BlocksTab) ? Visibility.Visible : Visibility.Collapsed;
+        PropertiesTab.Visibility = Visibility.Visible;
+        LayersTab.Visibility = Visibility.Visible;
+        BlocksTab.Visibility = Visibility.Visible;
         SideTabs.SelectedItem = item;
-        ApplySelectedSideTabOnly();
     }
 
     private void CheckItem(MenuBarItem menu, string label, Func<bool> read, Action<bool> write)
@@ -4797,14 +5128,7 @@ public sealed partial class MainWindow : Window
     {
         if (sender is Button button && button.Tag as string == "layers")
         {
-            if (_mergeLayers)
-            {
-                SetLayerMerge(false, showWindow: true);
-            }
-            else
-            {
-                OpenLayers();
-            }
+            OpenLayers();
             return;
         }
         FloatLeft();
@@ -4826,6 +5150,7 @@ public sealed partial class MainWindow : Window
         host.Children.Add(SideTabs);
         window.Content = host;
         ShellIcon.Apply(window, ShellChrome.ThemeOf(this));
+        ShellFit.UserResizable(window, minWidthDip: 240, minHeightDip: 280, maxWidthDip: 480, maxHeightDip: 900, persistKey: "panels");
         window.Closed += (_, _) =>
         {
             if (SideTabs.Parent is Panel floated)
@@ -5002,13 +5327,7 @@ public sealed partial class MainWindow : Window
             FontSize = Density.FontBody,
         };
         Density.Name(text, text.Text);
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = Density.SpaceMd,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Children = { clear, cancel },
-        };
+        var buttons = DialogLayout.ActionRow(clear, cancel);
         var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, Children = { text, buttons } };
         var theme = ShellChrome.ThemeOf(this);
         root.RequestedTheme = theme;
@@ -5361,6 +5680,7 @@ public sealed partial class MainWindow : Window
         public string? Hover { get; set; }
         public string FocusLayer { get; set; } = "";
         public string FocusBlock { get; set; } = "";
+        public bool Layiso { get; set; }
         public List<PropertyRow> Properties { get; set; } = new();
         public List<LayerRow> Layers { get; set; } = new();
         public bool LayersTruncated { get; set; }

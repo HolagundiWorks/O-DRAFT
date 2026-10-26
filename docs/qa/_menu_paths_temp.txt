@@ -1,0 +1,384 @@
+﻿            Architecture > AQC Bridge > Export for AQC
+            Architecture > AQC Bridge > Import from AQC
+            Architecture > Building Permission > Area Statement
+            Architecture > Building Permission > Check Before AutoPlan
+            Architecture > Building Permission > Copy to AP- Layers
+            Architecture > Building Permission > Layer Legend
+            Architecture > Building Permission > Layer Report (CSV)
+            Architecture > Building Permission > Start (Metres > Layers > Styles)
+            Architecture > Building Permission > Title Block
+            Architecture > Electrical > Check Wiring
+            Architecture > Electrical > Map Blocks
+            Architecture > Electrical > Number Blocks
+            Architecture > Electrical > Schedule
+            Architecture > Electrical > Update
+            Architecture > Electrical > Wiring Layers
+            Architecture > Floors > Activate Floor
+            Architecture > Floors > Current Floor
+            Architecture > Floors > Declare Floor Region
+            Architecture > Floors > Export Floor Drawing
+            Architecture > Floors > Floor as Xref
+            Architecture > Floors > Floor List
+            Architecture > Floors > Floor Regions
+            Architecture > Floors > Floor Visibility
+            Architecture > Floors > Refresh Floor Regions
+            Architecture > Floors > Viewport Floors
+            Architecture > Levels and Sections > Elevation Marker
+            Architecture > Levels and Sections > Level Mark
+            Architecture > Levels and Sections > Level Schedule
+            Architecture > Levels and Sections > Section Marker
+            Architecture > Parametric > Commit
+            Architecture > Parametric > Component Library
+            Architecture > Parametric > Graph,
+            Architecture > Parametric > New Wall
+            Architecture > Parametric > Preview
+            Architecture > Parametric > Publish to Library
+            Architecture > Parametric > Status
+            Architecture > Parametric > Take-off Facts
+            Architecture > Project > Beam Depths
+            Architecture > Project > Building Levels
+            Architecture > Project > Company File Details
+            Architecture > Project > Floors and Heights
+            Architecture > Project > Project Details
+            Architecture > Rooms and Areas > Polyline Area Table
+            Architecture > Rooms and Areas > Rename Room Label
+            Architecture > Rooms and Areas > Room Area
+            Architecture > Rooms and Areas > Room Area Total
+            Architecture > Rooms and Areas > Room Label
+            Architecture > Rooms and Areas > Room Label Audit
+            Architecture > Rooms and Areas > Room Label Settings...
+            Architecture > Rooms and Areas > Room Log (CSV)
+            Architecture > Rooms and Areas > Room Rectangle Check
+            Architecture > Sheets > Apply Sheet Template
+            Architecture > Sheets > Save Sheet Template
+            Architecture > Sheets > Sheet Fields
+            Architecture > Sheets > Title Block
+            Architecture > Sheets > Title Plate
+            Architecture > Standard Layers > Find Non-Standard Layers
+            Architecture > Standard Layers > Find Property Overrides
+            Architecture > Standard Layers > Layer Legend
+            Architecture > Standard Layers > Layer Schedule (CSV)
+            Architecture > Standard Layers > Layer Table
+            Architecture > Standard Layers > Lock by Prefix
+            Architecture > Standard Layers > Move to Standard Layer
+            Architecture > Standard Layers > Reset to Standard
+            Architecture > Standard Layers > Unlock by Prefix
+            Architecture > Structure > Axis Grid
+            Architecture > Structure > Column Schedule
+            Architecture > Structure > Generate Lintel
+            Architecture > Structure > Handrail
+            Architecture > Structure > Lift Shaft
+            Architecture > Structure > Place Columns
+            Architecture > Structure > Stair
+            Architecture > Symbols > North Arrow
+            Architecture > Symbols > Slope Arrow
+            Architecture > Take-off > Annotated Drawing (PDF)
+            Architecture > Take-off > Attach PDF Underlay
+            Architecture > Take-off > Bill
+            Architecture > Take-off > Calibrate PDF Underlay
+            Architecture > Take-off > Clear Labels
+            Architecture > Take-off > Columns
+            Architecture > Take-off > Export CSV
+            Architecture > Take-off > List
+            Architecture > Take-off > Rates
+            Architecture > Take-off > Record in ShilpiDB
+            Architecture > Take-off > Remove PDF Underlay
+            Architecture > Take-off > Restore Tables
+            Architecture > Take-off > Start
+            Architecture > Take-off > Wall Paint
+            Architecture > Text Tools > Align Text
+            Architecture > Text Tools > Audit Text Colours
+            Architecture > Text Tools > Copy and Increment Text
+            Architecture > Text Tools > Delete Area Text
+            Architecture > Text Tools > Export Text to CSV
+            Architecture > Text Tools > Find Duplicate Text
+            Architecture > Text Tools > Fix Overlapping Text
+            Architecture > Text Tools > Fix Overlapping Text (Horizontal)
+            Architecture > VH Layers > Create VH Layer Set
+            Architecture > Walls and Openings > Clean Lines
+            Architecture > Walls and Openings > Door
+            Architecture > Walls and Openings > Draw Wall
+            Architecture > Walls and Openings > Window
+            Dimension > Align Text > Angle
+            Dimension > Align Text > Center
+            Dimension > Aligned
+            Dimension > Angular
+            Dimension > Baseline
+            Dimension > Continue
+            Dimension > Diameter
+            Dimension > Dimension
+            Dimension > Linear
+            Dimension > Multileader
+            Dimension > Override
+            Dimension > Quick Dimension
+            Dimension > Radius
+            Dimension > Reassociate Dimensions
+            Dimension > Update
+            Draw > Arc > 3 Points
+            Draw > Arc > Center > Start > Angle
+            Draw > Arc > Center > Start > End
+            Draw > Arc > Center > Start > Length
+            Draw > Arc > Continue
+            Draw > Arc > Start > Center > Angle
+            Draw > Arc > Start > Center > End
+            Draw > Arc > Start > Center > Length
+            Draw > Arc > Start > End > Angle
+            Draw > Arc > Start > End > Direction
+            Draw > Arc > Start > End > Radius
+            Draw > Block > Define Attributes...
+            Draw > Block > Make...
+            Draw > Circle > 2 Points
+            Draw > Circle > 3 Points
+            Draw > Circle > Center > Diameter
+            Draw > Circle > Center > Radius
+            Draw > Circle > Tan > Tan > Radius
+            Draw > Circle > Tan > Tan > Tan
+            Draw > Construction Line
+            Draw > Ellipse > Arc
+            Draw > Ellipse > Axis > End
+            Draw > Ellipse > Center
+            Draw > Line
+            Draw > Multiline
+            Draw > Point > Divide
+            Draw > Point > Measure
+            Draw > Point > Multiple Point
+            Draw > Point > Single Point
+            Draw > Polygon
+            Draw > Polyline
+            Draw > Ray
+            Draw > Rectangle
+            Draw > Revision Cloud > Freehand
+            Draw > Revision Cloud > Polygonal
+            Draw > Revision Cloud > Rectangular
+            Draw > Spline > Control Vertices
+            Draw > Spline > Fit Points
+            Draw > Text > Multiline Text...
+            Draw > Text > Single Line Text
+            Draw > Wipeout
+            Edit > Copy
+            Edit > Copy with Base Point
+            Edit > Cut
+            Edit > Deselect All
+            Edit > Filter...
+            Edit > Paste
+            Edit > Paste as Block
+            Edit > Paste to Original Coordinates
+            Edit > Quick Select...
+            Edit > Select
+            Edit > Select Similar
+            Edit > Undo Multiple
+            File > Batch Plot
+            File > Drawing Utilities > Audit
+            File > Drawing Utilities > Recover...
+            File > Export > ShilpiDB (.vdb)…
+            File > Export to PDF...
+            File > Export...
+            File > Import > ShilpiDB (.vdb)…
+            File > New Drawing...
+            File > New Project
+            File > Open Project
+            File > Open...
+            File > Page Setup Manager...
+            File > Plot Styles...
+            File > Print...
+            File > Save As...
+            File > ShilpiDB > Connect…
+            File > ShilpiDB > Convert / Push to ShilpiDB
+            File > ShilpiDB > Disconnect
+            File > ShilpiDB > Pull into drawing
+            File > ShilpiDB > Push drawing
+            File > ShilpiDB > Sidecar on save
+            File > ShilpiDB > Status
+            Format > Architectural Layer Set
+            Format > Dimension Style...
+            Format > Drawing Space
+            Format > Drawing Space > Activate
+            Format > Drawing Space > Capture from Layers
+            Format > Drawing Space > Delete
+            Format > Drawing Space > Details
+            Format > Drawing Space > Duplicate
+            Format > Drawing Space > Edit
+            Format > Drawing Space > Preview
+            Format > Drawing Space > Save
+            Format > Drawing Space > Show > Thaw and Unlock All
+            Format > Drawing Space > Status
+            Format > Hatch Editor...
+            Format > Layer States > Delete
+            Format > Layer States > List
+            Format > Layer States > Rename
+            Format > Layer States > Restore
+            Format > Layer Tools > Change to Current Layer
+            Format > Layer Tools > Delete Layer
+            Format > Layer Tools > Freeze Layer
+            Format > Layer Tools > Isolate Layer
+            Format > Layer Tools > Layer Delete
+            Format > Layer Tools > Layer Merge
+            Format > Layer Tools > Layer Off
+            Format > Layer Tools > Layer Translate
+            Format > Layer Tools > Layer Walk
+            Format > Layer Tools > Lock Layer
+            Format > Layer Tools > Make Current
+            Format > Layer Tools > Make Object's Layer Current
+            Format > Layer Tools > Map Layers
+            Format > Layer Tools > New Layer
+            Format > Layer Tools > Thaw All Layers
+            Format > Layer Tools > Turn All Layers On
+            Format > Layer Tools > Unlock Layer
+            Format > Layers
+            Format > Legend > Block Description…
+            Format > Legend > Edit Legend Entries…
+            Format > Legend > Layer Legend
+            Format > Legend > Symbol Legend
+            Format > Multileader Style...
+            Format > Notes > Apply Notes
+            Format > Notes > Edit Notes…
+            Format > Notes > List Notes
+            Format > Notes > Standard Notes
+            Format > Opening Schedule > Draw Opening Schedule
+            Format > Opening Schedule > Edit…
+            Format > Opening Schedule > Standard Openings
+            Format > Opening Schedule > Update Schedule
+            Format > Plot Style...
+            Format > Rename...
+            Format > Text Style...
+            Format > Units... > Insertion Units
+            Insert > Block > Edit Text
+            Insert > Block > List
+            Insert > Block > List Text
+            Insert > Block...
+            Insert > External Reference > Attach
+            Insert > External Reference > Bind
+            Insert > External Reference > Detach
+            Insert > External Reference > List
+            Insert > External Reference > Reload
+            Insert > Layout > New Layout
+            Modify > Align
+            Modify > Array > Path Array
+            Modify > Array > Polar Array
+            Modify > Array > Rectangular Array
+            Modify > Break
+            Modify > Chamfer
+            Modify > Change Space
+            Modify > Clip > Xref / Block
+            Modify > Copy
+            Modify > Erase
+            Modify > Explode
+            Modify > Extend
+            Modify > Fillet
+            Modify > Flatten Objects
+            Modify > Join
+            Modify > Lengthen
+            Modify > Match Properties
+            Modify > Mirror
+            Modify > Move
+            Modify > Object > Attribute > Block Attribute Manager...
+            Modify > Object > Edit Text...
+            Modify > Object > Hatch Editor...
+            Modify > Object > Polyline
+            Modify > Object > Spline
+            Modify > Offset
+            Modify > Rotate
+            Modify > Scale
+            Modify > Stretch
+            Modify > Trim
+            Tools > Attribute Extraction...
+            Tools > AutoLISP
+            Tools > Block Editor > Close
+            Tools > Block Editor > Open
+            Tools > Block Editor > Save
+            Tools > Count
+            Tools > Data Extraction...
+            Tools > Design Center
+            Tools > Drafting Settings...
+            Tools > Draw Order > Bring to Front
+            Tools > Draw Order > Send to Back
+            Tools > Drawing Compare...
+            Tools > Edit Reference
+            Tools > Fonts > List Presets
+            Tools > Fonts > Migrate
+            Tools > Fonts > Resolve Roles
+            Tools > Fonts > Roll Back Migration
+            Tools > Fonts > Scan Drawing
+            Tools > Group
+            Tools > Inquiry > Area
+            Tools > Inquiry > Distance
+            Tools > Inquiry > ID Point
+            Tools > Inquiry > Inspect Drawing
+            Tools > Inquiry > List
+            Tools > Inquiry > Measure Geometry
+            Tools > Inquiry > Query Entities
+            Tools > Inquiry > Set Variable
+            Tools > Macro
+            Tools > Run Script...
+            Tools > Spatial > Describe
+            Tools > Spatial > Nearest
+            Tools > Spatial > Overview
+            Tools > Spatial > Query Window
+            Tools > Ungroup
+            Tools > Validate
+            View > Layout > Switch
+            View > Pan > Realtime
+            View > Viewports > Add
+            View > Viewports > Clip
+            View > Viewports > List
+            View > Viewports > Remove
+            View > Zoom > Extents
+            View > Zoom > Previous
+            View > Zoom > Realtime
+            View > Zoom > Window
+        CommandSpec::new(angle.measure > Angle > run_angle)Tools > Inquiry > Angle.params({vertex > p1 > p2} | {h1 > h2}).noundo(),
+        CommandSpec::new(base > Base > run_base)Draw > Block > Base.params({at: [x,y]}),
+        CommandSpec::new(boundary > Boundary... > run_boundary)Draw > Boundary....alias(&[bo > bpoly]).params({points: [[x,y]]}).interactive(|_| Ok(Box::new(BoundaryM { region: false }))),
+        CommandSpec::new(breakatpoint > Break At Point > run_breakat)Modify > Break At Point.params({handle > at}),
+        CommandSpec::new(close > Close > run_close)File > Close.key(Cmd+W).params({index?}).noundo(),
+        CommandSpec::new(closeall > Close All > run_closeall)File > Close All.enabled(always).noundo(),
+        CommandSpec::new(color > Color... > run_color)Format > Color....alias(&[col > colour]).params({color: \ByLayer\ | \red\ | 1..255 | \r,g,b\}),
+        CommandSpec::new(ddptype > Point Style... > run_ptype)Format > Point Style....params({pdmode > pdsize}),
+        CommandSpec::new(dimstyle.dimension > Dimension Style... > run_dimstyle)Dimension > Dimension Style....params(same as `dimstyle`),
+        CommandSpec::new(dimtedit.home > Home > |s > p| run_tedit(s > p > home))Dimension > Align Text > Home.params({handles?}),
+        CommandSpec::new(dimtedit.left > Left > |s > p| run_tedit(s > p > left))Dimension > Align Text > Left.params({handles?}),
+        CommandSpec::new(dimtedit.right > Right > |s > p| run_tedit(s > p > right))Dimension > Align Text > Right.params({handles?}),
+        CommandSpec::new(erase.selection > Clear > run_clear)Edit > Clear.key(Delete).enabled(has_selection).params({}),
+        CommandSpec::new(find > Find... > run_find)Edit > Find....params({find > replace? > matchCase?: bool > wholeWord?: bool}),
+        CommandSpec::new(hatch > Hatch... > run_hatch)Draw > Hatch....alias(&[h > bh > -hatch]).params({points?: [[x,y]] (internal points) | handles?: [hex] (closed objects) > pattern?: \ANSI31\ > scale? > angle? (degrees) > associative?}).interactive(|s| Ok(Box::new(HatchM::new(s > false)))),
+        CommandSpec::new(layerp > Previous Layer > run_layerp)Format > Layer Tools > Previous Layer,
+        CommandSpec::new(layerstate.save > Save Layer State > run_state_save)Format > Layer States Manager....params({name}),
+        CommandSpec::new(laymch > Layer Match > run_laymch)Format > Layer Tools > Layer Match.params({handles? > layer}),
+        CommandSpec::new(layuniso > Unisolate Layer > run_layuniso)Format > Layer Tools > Unisolate Layer,
+        CommandSpec::new(limits > Drawing Limits > run_limits)Format > Drawing Limits.params({min: [x,y] > max: [x,y]}),
+        CommandSpec::new(linetype > Linetype... > run_linetype)Format > Linetype....alias(&[lt > ltype]).params({current?: name > load?: name | \*\}),
+        CommandSpec::new(lweight > Lineweight... > run_lweight)Format > Lineweight....alias(&[lw > lineweight]).params({lineweight: mm | ByLayer}),
+        CommandSpec::new(overkill > Delete Duplicate Objects > run_overkill)Modify > Delete Duplicate Objects.params({handles?}),
+        CommandSpec::new(pan.down > Pan Down > |s > _| pan_frac(s > Vec2::new(0.0 > -0.25)))View > Pan > Down.noundo().transparent(),
+        CommandSpec::new(pan.left > Pan Left > |s > _| pan_frac(s > Vec2::new(-0.25 > 0.0)))View > Pan > Left.noundo().transparent(),
+        CommandSpec::new(pan.right > Pan Right > |s > _| pan_frac(s > Vec2::new(0.25 > 0.0)))View > Pan > Right.noundo().transparent(),
+        CommandSpec::new(pan.up > Pan Up > |s > _| pan_frac(s > Vec2::new(0.0 > 0.25)))View > Pan > Up.noundo().transparent(),
+        CommandSpec::new(properties > Properties > run_get)Modify > Properties.alias(&[pr > props > ch]).params({handles?} → properties of the selection).noundo(),
+        CommandSpec::new(qsave > Save > run_qsave_reporting)File > Save.key(Cmd+S).alias(&[save]).params({path?}).noundo(),
+        CommandSpec::new(radius.measure > Radius > run_radius)Tools > Inquiry > Radius.params({handle}).noundo(),
+        CommandSpec::new(redo > Redo > run_redo)Edit > Redo.key(Cmd+Shift+Z).alias(&[mredo]).params({count?: n}).noundo(),
+        CommandSpec::new(region > Region > run_region)Draw > Region.alias(&[reg]).params({handles?}),
+        CommandSpec::new(selectall > Select All > run_selectall)Edit > Select All.key(Cmd+A).alias(&[ai_selall]).noundo(),
+        CommandSpec::new(status > Status > run_status)Tools > Inquiry > Status.noundo(),
+        CommandSpec::new(takeoff.area > Area > run_area)Architecture > Take-off > Area.alias(&[marea > mare]).params(p),
+        CommandSpec::new(takeoff.beams > Beams and Lintels > run_beams)Architecture > Take-off > Beams.alias(&[mbml]).params(p),
+        CommandSpec::new(takeoff.brick > Brickwork > run_brick)Architecture > Take-off > Brickwork.alias(&[mbrk]).params(p),
+        CommandSpec::new(takeoff.ceiling > Ceiling > run_ceiling)Architecture > Take-off > Ceiling.alias(&[mceil]).params(p),
+        CommandSpec::new(takeoff.floor > Floor > run_floor)Architecture > Take-off > Floor.alias(&[mfloor]).params(p),
+        CommandSpec::new(takeoff.linear > Linear > run_linear)Architecture > Take-off > Linear.alias(&[mlin]).params(p),
+        CommandSpec::new(takeoff.rects > Rectangles > run_rects)Architecture > Take-off > Rectangles.alias(&[mrec]).params(p),
+        CommandSpec::new(takeoff.slab > Slab > run_slab)Architecture > Take-off > Slab.alias(&[mslab > mslb]).params(p),
+        CommandSpec::new(time > Time > run_time)Tools > Inquiry > Time.noundo(),
+        CommandSpec::new(u > Undo > run_u)Edit > Undo.key(Cmd+Z).params({}).noundo(),
+        CommandSpec::new(underlay.list > List PDF Underlays > run_list)Architecture > Take-off > List PDF Underlays.params({} → {underlays: [{layer > file > page > scale > calibrated > entities}]}).noundo(),
+        CommandSpec::new(units > Units... > run_units)Format > Units....alias(&[un]).params({lunits?: 1..5 > luprec?: 0..8 > aunits?: 0..4 > auprec?: 0..8 > insunits?}),
+        CommandSpec::new(zoom.all > Zoom All > |s > _| zoom(s > &json!({mode:all})))View > Zoom > All.noundo().transparent(),
+        CommandSpec::new(zoom.in > Zoom In > |s > _| zoom(s > &json!({mode:in})))View > Zoom > In.noundo().transparent(),
+        CommandSpec::new(zoom.out > Zoom Out > |s > _| zoom(s > &json!({mode:out})))View > Zoom > Out.noundo().transparent(),
+        Modify > Object > Attribute > Global
+        Modify > Object > Attribute > Single...
+        Modify > Object > Attribute > Synchronize Attributes
+        View > Redraw
+        View > Regen
+        View > Regen All
+        View > Zoom > Object

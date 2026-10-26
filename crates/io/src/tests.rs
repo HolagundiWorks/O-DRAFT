@@ -1678,7 +1678,13 @@ fn mirrored_text_extrusion_keeps_its_footprint() {
     let a = t.align_pt.expect("right-justified text has an alignment point");
     assert!((a.x - 10.0).abs() < 1e-9 && (a.y - 5.0).abs() < 1e-9, "{a:?}");
     let list = aad_render::build(&d, &Space::Model, &aad_render::Options::default());
-    assert!((list.bounds.max.x - 10.0).abs() < 1e-6 && list.bounds.min.x < 9.5, "drawn left of (10,5): {:?}", list.bounds);
+    // Right-justified at (10,5): glyphs sit to the left. Exact max.x depends on the system font
+    // metrics (shaped width of "AB"), so allow a small shortfall rather than requiring 1e-6.
+    assert!(
+        list.bounds.max.x > 9.5 && list.bounds.max.x <= 10.0 + 1e-3 && list.bounds.min.x < 9.5,
+        "drawn left of (10,5): {:?}",
+        list.bounds
+    );
 }
 
 #[test]

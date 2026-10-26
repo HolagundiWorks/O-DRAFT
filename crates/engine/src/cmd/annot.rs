@@ -22,7 +22,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("display.units", "Display Units", run_display_units)
             .params("{units: mm|cm|m|in|ft|ftin} → {display, drawing, factor} (dimension text only; geometry is not changed)"),
         CommandSpec::new("plot.config", "Plot Configuration", run_plot_config)
-            .params("{scale: \"1:100\" | 100, paper: A0..A4 | [width, height] mm, textMm?: 2.5, arrowMm?: 2.5, apply?: bool (default true)} → {sizes}"),
+            .params("{scale?: \"1:100\" | 100 (kept when omitted and already set), paper: A0..A4 | [width, height] mm, textMm?: (default: ISO medium for the paper), arrowMm?: (default: ISO arrow for the paper), apply?: bool (default true)} → {sizes, printedMm}"),
         CommandSpec::new("plot.validate", "Validate Plot Layout", run_plot_validate)
             .params("{marginMm?: 10, minTextMm?: 1.8, maxTextMm?: 12} → {fits, extentMm, printableMm, warnings}")
             .noundo(),
@@ -52,7 +52,11 @@ fn run_drawing_units(s: &mut Session, p: &Value) -> Result<Value> {
     let mut r = json!({ "units": new.name(), "mode": mode });
     match mode {
         "metadata" => {
-            if old.is_some_and(|o| o != new) && !s.doc()?.model.is_empty() {
+            // Same unit already set: skip copy-on-write (shell chrome re-applies this often).
+            if old == Some(new) {
+                return Ok(r);
+            }
+            if old.is_some() && !s.doc()?.model.is_empty() {
                 r["warning"] = json!("the unit setting changed but no geometry was scaled: existing objects now read as the new unit");
             }
         }
@@ -106,11 +110,16 @@ fn run_plot_config(s: &mut Session, p: &Value) -> Result<Value> {
     let scale = match p.get("scale") {
         Some(Value::String(t)) => PlotScale::parse(t),
         Some(v) => v.as_f64().map(PlotScale).filter(|c| c.0 > 0.0 && c.0.is_finite()),
-        None => None,
+        None => configured(s).map(|(sc, _)| sc),
     }
     .ok_or_else(|| bad("plot.config", "`scale` must be like \"1:100\" or a denominator"))?;
     let paper = paper_of(p, "plot.config")?;
-    let printed = PrintedSizes { text_mm: f64_or(p, "textMm", 2.5), arrow_mm: f64_or(p, "arrowMm", 2.5) };
+    let iso = annot::paper_iso_name(paper).unwrap_or("");
+    let rank = annot::text_rank_for_paper(if iso.is_empty() { "A1" } else { iso });
+    let printed = PrintedSizes {
+        text_mm: f64_or(p, "textMm", rank.medium),
+        arrow_mm: f64_or(p, "arrowMm", rank.arrow),
+    };
     if !(printed.text_mm.is_finite() && printed.text_mm > 0.0 && printed.arrow_mm.is_finite() && printed.arrow_mm > 0.0) {
         return Err(bad("plot.config", "`textMm` and `arrowMm` must be positive"));
     }
@@ -122,11 +131,19 @@ fn run_plot_config(s: &mut Session, p: &Value) -> Result<Value> {
         d.header.set_f64("AADPLOTSCALE", scale.0);
         d.header.set_f64("AADPAPERW", paper.width);
         d.header.set_f64("AADPAPERH", paper.height);
+        if !iso.is_empty() {
+            d.header.set_str("AADOBER", iso);
+        }
+        d.header.set_f64("AADTEXTS", rank.small);
+        d.header.set_f64("AADTEXTM", rank.medium);
+        d.header.set_f64("AADTEXTL", rank.large);
     }
     Ok(json!({
         "scale": scale.label(),
+        "paper": if iso.is_empty() { Value::Null } else { json!(iso) },
         "paperMm": [paper.width, paper.height],
         "drawingUnit": drawn.name(),
+        "printedMm": { "small": rank.small, "medium": rank.medium, "large": rank.large, "arrow": rank.arrow, "text": printed.text_mm },
         "sizes": {
             "textHeight": sizes.text_height, "arrowSize": sizes.arrow_size, "extOffset": sizes.ext_offset,
             "extExtend": sizes.ext_extend, "textGap": sizes.text_gap, "baselineSpacing": sizes.baseline_spacing,
@@ -134,6 +151,7 @@ fn run_plot_config(s: &mut Session, p: &Value) -> Result<Value> {
         "applied": bool_or(p, "apply", true),
     }))
 }
+
 
 fn configured(s: &Session) -> Option<(PlotScale, Paper)> {
     let h = &s.doc().ok()?.header;

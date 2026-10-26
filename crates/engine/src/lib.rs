@@ -45,6 +45,11 @@ pub use aad_doc as doc;
 pub use aad_geom as geom;
 pub use aad_render as render;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
+
+/// Lintel height, in metres, of the active floor. Drawings with no floors use 2.1 m.
+pub fn standard_lintel(doc: &doc::Drawing) -> f64 {
+    cmd::project::standard_lintel(doc)
+}
 pub use prompt::{Accept, Input, Interactive, Prompt, Step};
 
 /// Drawn cursor in the drawing area (AutoCAD: crosshairs, pickbox, or both).
