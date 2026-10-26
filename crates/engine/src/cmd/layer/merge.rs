@@ -72,7 +72,7 @@ fn resolve_sources(d: &Drawing, cmd: &str, names: &[String], delete: bool) -> Re
 /// definitions (an attached xref's blocks are left alone; they come from its file).
 /// `f` gets each store with objects on the `set` layers and returns how many it changed.
 fn for_each_store(d: &mut Drawing, set: &HashSet<String>, mut f: impl FnMut(&mut EntityStore) -> usize) -> usize {
-    let mut n = f(&mut d.model);
+    let mut n: usize = d.model_stores_mut().map(&mut f).sum();
     for layout in &mut d.layouts {
         n += f(&mut layout.entities);
     }

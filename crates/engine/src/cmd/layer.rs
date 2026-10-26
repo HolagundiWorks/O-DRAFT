@@ -133,7 +133,11 @@ fn run_list(s: &mut Session, _p: &Value) -> Result<Value> {
 /// Lower-case names of layers that have objects on them (model, layouts and block definitions).
 pub fn used_layers(d: &aad_doc::Drawing) -> std::collections::HashSet<String> {
     let mut set = std::collections::HashSet::new();
-    let ents = d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())).chain(d.blocks.values().flat_map(|b| b.entities.iter()));
+    let ents = d
+        .model_stores()
+        .flat_map(|s| s.iter())
+        .chain(d.layouts.iter().flat_map(|l| l.entities.iter()))
+        .chain(d.blocks.values().flat_map(|b| b.entities.iter()));
     for e in ents.take(5_000_000) {
         if !set.contains(&e.common.layer.to_ascii_lowercase()) {
             set.insert(e.common.layer.to_ascii_lowercase());
@@ -273,7 +277,9 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(nn) = new_name {
         l.name = nn.clone();
         // Re-point entities in model space, every layout and every block definition.
-        repoint(&mut d.model, &old, &nn);
+        for store in d.model_stores_mut() {
+            repoint(store, &old, &nn);
+        }
         for layout in &mut d.layouts {
             repoint(&mut layout.entities, &old, &nn);
         }
@@ -341,7 +347,7 @@ fn run_delete(s: &mut Session, p: &Value) -> Result<Value> {
     if name == "0" || name.eq_ignore_ascii_case("Defpoints") || d.header.str("CLAYER", "0").eq_ignore_ascii_case(&name) {
         return Err(bad("layer.delete", "cannot delete layer 0, Defpoints or the current layer"));
     }
-    let used = d.model.iter().any(|e| e.common.layer.eq_ignore_ascii_case(&name))
+    let used = d.model_stores().flat_map(|s| s.iter()).any(|e| e.common.layer.eq_ignore_ascii_case(&name))
         || d.layouts.iter().any(|l| l.entities.iter().any(|e| e.common.layer.eq_ignore_ascii_case(&name)))
         || d.blocks.values().any(|b| b.entities.iter().any(|e| e.common.layer.eq_ignore_ascii_case(&name)));
     if used {

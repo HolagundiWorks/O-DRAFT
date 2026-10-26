@@ -102,14 +102,18 @@ fn json_key(kind: Kind) -> &'static str {
 }
 
 fn entities(d: &Drawing) -> impl Iterator<Item = &std::sync::Arc<aad_doc::Entity>> {
-    d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())).chain(d.blocks.values().flat_map(|b| b.entities.iter())).take(5_000_000)
+    d.model_stores()
+        .flat_map(|s| s.iter())
+        .chain(d.layouts.iter().flat_map(|l| l.entities.iter()))
+        .chain(d.blocks.values().flat_map(|b| b.entities.iter()))
+        .take(5_000_000)
 }
 
 /// Upper-case names of blocks reachable from model space, the layouts and dimensions.
 fn used_blocks(d: &Drawing) -> HashSet<String> {
     let mut used = HashSet::new();
     let mut frontier: Vec<String> = Vec::new();
-    for e in d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())) {
+    for e in d.model_stores().flat_map(|s| s.iter()).chain(d.layouts.iter().flat_map(|l| l.entities.iter())) {
         match &e.kind {
             EntityKind::Insert(i) => frontier.push(i.block.clone()),
             EntityKind::Dimension(dm) => frontier.extend(dm.block.clone()),
@@ -261,8 +265,8 @@ fn degenerate(d: &Drawing, kind: Kind) -> Vec<Handle> {
         EntityKind::MText(t) => t.contents.trim().is_empty(),
         _ => false,
     };
-    d.model
-        .iter()
+    d.model_stores()
+        .flat_map(|s| s.iter())
         .chain(d.layouts.iter().flat_map(|l| l.entities.iter()))
         .filter(|e| if kind == Kind::ZeroLength { zero(&e.kind) } else { empty(&e.kind) })
         .map(|e| e.handle)

@@ -1,7 +1,7 @@
 # Levels and sheet sets
 
-**Status: planned.** Nothing on this page is implemented unless the "Roadmap" table marks a phase
-done. Capability matrix: [status.md](status.md). Source: the implementation plan "Level model spaces
+**Status: Phase 1 in progress.** Only what the "Phase 1 progress" section lists is implemented and
+tested; everything else on this page is planned. Capability matrix: [status.md](status.md). Source: the implementation plan "Level model spaces
 and sheet sets" (2026-10-26), taken as the decision record below.
 
 Summary: keep one drawing file, but split its single model space into named **levels** (each its own
@@ -150,6 +150,30 @@ rendering work). Each phase ends with `cargo xtask ci` and its named tests, and 
 | 3. Sheet sets | `SheetSet`, per-level annotation stores, `sheetset.*`, `protect.rs` reference locking, annotation layer prefixes, left rail, annotation tool strip | In a sheet view a level object edit is refused naming the level; annotation of two sets on one level does not collide; presets create their spaces |
 | 4. Layouts and exchange | `Viewport.level/sheet_set/traces`, `viewport.set`, layout tessellation per store, `AAD_VP` data, Export for exchange | One layout holds the Electrical and Plumbing First-floor plans side by side and round-trips |
 | 5. Migration and polish | `level.import/export`, `project.merge`, take-off level ids, layer "Show for" filter, shortcuts, new-drawing and `project.setup` flow, egui tabs, memory load test (20 levels) | A floor project merges into one file in one undo step; docs and status complete |
+
+## Phase 1 progress
+
+Implemented and tested (`crates/engine/tests/levels.rs`):
+
+- `crates/doc/src/levels.rs`: `LevelId`, `Level`, `Trace` (data only, not yet drawn), and on `Drawing`
+  `levels`, `active_level`, `switch_level`, `add_level`, `rename_level`, `remove_level`,
+  `move_level`, `model_stores` / `model_stores_mut`, `level_store`. A drawing with no levels is one
+  implicit level and is unchanged until the first `level.new`.
+- Commands `level.list`, `level.new` (first call names the existing level after the current floor,
+  else `Level 1`, via `first`), `level.set` (name, elevation, height, order), `level.delete` (needs
+  `force` for a level with objects or traces; the last level stays), `level.activate` (refused while
+  the block editor is open; clears the selection). Undo restores the active level.
+- Drawing-wide readers and writers now cover every level: `PURGE` blocks, layer in-use check, layer
+  rename and merge, `AUDIT` entity walk, `eattext` / compare walks, `Drawing::entity` and
+  `entity_count`. Objects on an inactive level are found but not editable: `move` and similar skip
+  them.
+- Limits: 64 levels, 64-character unique names, hostile parameters return errors.
+
+Not done in Phase 1 yet: `level.copyto`, `level.moveto`, `level.fromfloors`, `copyFrom`; keeping
+`floors` / `levels` project data and title-block `FLOOR` fields in step on rename; saving levels to
+DXF/DWG (`levels2`, `ODRAFT$LVL$` blocks). Until then `aad_io::write` refuses to write DXF or DWG for a drawing with more than one level (PDF, PNG and SVG still show the active level), so nothing is lost silently; `AUDIT` repair of
+objects on inactive levels; the remaining classification of `.model` users (about 150 files) as
+edit-target or drawing-wide.
 
 ## Risks
 

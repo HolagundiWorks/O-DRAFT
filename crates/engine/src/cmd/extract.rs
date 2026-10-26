@@ -360,7 +360,7 @@ fn fingerprint(d: &Drawing, e: &aad_doc::Entity) -> String {
 fn collect_prints(d: &Drawing) -> BTreeMap<String, usize> {
     let mut m = BTreeMap::new();
     let mut n = 0usize;
-    for e in d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())) {
+    for e in d.model_stores().flat_map(|s| s.iter()).chain(d.layouts.iter().flat_map(|l| l.entities.iter())) {
         *m.entry(fingerprint(d, e)).or_insert(0) += 1;
         n += 1;
         if n >= MAX_COMPARE {
@@ -372,7 +372,7 @@ fn collect_prints(d: &Drawing) -> BTreeMap<String, usize> {
 
 fn type_counts(d: &Drawing) -> BTreeMap<String, usize> {
     let mut m = BTreeMap::new();
-    for e in d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())).take(MAX_COMPARE) {
+    for e in d.model_stores().flat_map(|s| s.iter()).chain(d.layouts.iter().flat_map(|l| l.entities.iter())).take(MAX_COMPARE) {
         *m.entry(e.kind.type_name().to_string()).or_insert(0) += 1;
     }
     m

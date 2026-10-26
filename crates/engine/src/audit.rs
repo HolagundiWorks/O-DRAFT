@@ -303,7 +303,7 @@ fn header(d: &mut Drawing, out: &mut Vec<Issue>) {
 }
 
 fn each_entity(d: &Drawing) -> impl Iterator<Item = &Arc<Entity>> {
-    std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities)).flat_map(|s| s.iter())
+    d.model_stores().chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities)).flat_map(|s| s.iter())
 }
 
 fn all_handles(d: &Drawing) -> HashSet<Handle> {

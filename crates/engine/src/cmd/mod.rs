@@ -32,6 +32,7 @@ mod layer;
 pub mod layout;
 mod legacytools;
 mod legend;
+mod levels;
 mod library;
 mod mleader_content;
 mod modify;
@@ -250,6 +251,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(spatialq::specs());
         v.extend(aicards::specs());
         v.extend(vdb::specs());
+        v.extend(levels::specs());
         v.extend(sheet::specs());
         v.extend(layout::specs());
         v.extend(props::specs());

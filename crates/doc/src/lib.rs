@@ -9,6 +9,7 @@
 mod entity;
 mod extents;
 mod header;
+mod levels;
 pub mod library;
 mod plotstyle;
 mod store;
@@ -21,6 +22,7 @@ pub use aad_geom as geom;
 pub use entity::*;
 pub use extents::{MAX_BLOCK_DEPTH, entity_bounds};
 pub use header::{HVal, Header};
+pub use levels::*;
 pub use plotstyle::*;
 pub use store::EntityStore;
 pub use tables::*;
@@ -59,6 +61,12 @@ pub struct Drawing {
     pub table_styles: Vec<TableStyle>,
     pub blocks: BTreeMap<String, std::sync::Arc<Block>>,
     pub model: EntityStore,
+    /// Named model spaces; empty = one implicit level.
+    pub levels: Vec<Level>,
+    /// The level whose objects are in `model`; `None` while `levels` is empty.
+    pub active_level: Option<LevelId>,
+    /// Last level id handed out (ids are never reused).
+    pub level_seed: u32,
     pub layouts: Vec<Layout>,
     pub views: Vec<NamedView>,
     pub ucss: Vec<Ucs>,
@@ -109,6 +117,9 @@ impl Drawing {
             table_styles: vec![TableStyle::default()],
             blocks: BTreeMap::new(),
             model: EntityStore::new(),
+            levels: Vec::new(),
+            active_level: None,
+            level_seed: 0,
             layouts: vec![Layout::new("Layout1", 1), Layout::new("Layout2", 2)],
             views: Vec::new(),
             ucss: Vec::new(),
@@ -235,7 +246,7 @@ impl Drawing {
 
     /// Find an entity in model space or any layout.
     pub fn entity(&self, h: Handle) -> Option<&std::sync::Arc<Entity>> {
-        self.model.get(h).or_else(|| self.layouts.iter().find_map(|l| l.entities.get(h)))
+        self.model_stores().find_map(|s| s.get(h)).or_else(|| self.layouts.iter().find_map(|l| l.entities.get(h)))
     }
     pub fn space_of(&self, h: Handle) -> Option<Space> {
         if self.model.contains(h) {
@@ -282,7 +293,7 @@ impl Drawing {
 
     /// Total entity count across model and paper space.
     pub fn entity_count(&self) -> usize {
-        self.model.len() + self.layouts.iter().map(|l| l.entities.len()).sum::<usize>()
+        self.model_stores().map(EntityStore::len).sum::<usize>() + self.layouts.iter().map(|l| l.entities.len()).sum::<usize>()
     }
 
     /// Next unused anonymous block name with the given prefix (e.g. `*D`).

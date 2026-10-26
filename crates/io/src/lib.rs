@@ -59,6 +59,13 @@ pub fn write_framed(d: &Drawing, name: &str, window: Option<Bounds2>) -> Result<
     {
         check_window(w)?;
     }
+    // Levels are not stored in DXF/DWG yet (planned: docs/levels-and-sheet-sets.md). Writing would
+    // silently drop every level but the active one, so refuse instead of losing work.
+    if d.levels.len() > 1 && matches!(ext(name).as_str(), "dxf" | "dwg" | "") {
+        return Err(IoError::Format(
+            "this drawing has several levels, and saving levels to DXF/DWG is not available yet; the file would keep only the active level. Export a PDF/PNG/SVG instead, or delete the extra levels".into(),
+        ));
+    }
     match ext(name).as_str() {
         "dxf" | "" => Ok(dxf_write::write(d).into_bytes()),
         "dwg" => aad_dwg::dxf_to_dwg(dxf_write::write(d).as_bytes()).map_err(IoError::Format),

@@ -211,7 +211,7 @@ impl TextFont {
     /// Segoe UI face for drawing text, with optional bold/italic (MTEXT `\f…|b1|i1`).
     pub fn drawing_face(bold: bool, italic: bool) -> TextFont {
         for cand in drawing_face_candidates(bold, italic) {
-            if let Some(f) = ttf::find(&cand) {
+            if let Some(f) = ttf::find(cand) {
                 return TextFont::Outline(f);
             }
         }
