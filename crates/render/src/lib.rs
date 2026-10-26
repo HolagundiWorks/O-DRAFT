@@ -407,10 +407,7 @@ fn build_space(d: &Drawing, space: &Space, opts: &Options, plotting: bool) -> Di
     if let Some(store) = d.space(space) {
         let paper = matches!(space, Space::Paper(_));
         let cull = if paper || plotting { None } else { model_cull_window(opts) };
-        let ents: Vec<&std::sync::Arc<Entity>> = store
-            .iter()
-            .filter(|e| cull.as_ref().is_none_or(|w| entity_in_cull(d, e, w)))
-            .collect();
+        let ents: Vec<&std::sync::Arc<Entity>> = store.iter().filter(|e| cull.as_ref().is_none_or(|w| entity_in_cull(d, e, w))).collect();
         if !paper && ents.len() >= PARALLEL_MIN {
             // Model space: the entities are independent, so chunks are built on all cores and
             // appended in draw order.

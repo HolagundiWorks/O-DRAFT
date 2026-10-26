@@ -7,12 +7,8 @@ use aad_render::{Options, build, lod_for_view};
 fn hatch_and_circles() -> Drawing {
     let mut d = Drawing::new_metric();
     for i in 0..20 {
-        d.add(
-            &Space::Model,
-            Common::default(),
-            EntityKind::Circle(Circle { center: Vec3::new(f64::from(i) * 50.0, 0.0, 0.0), radius: 5.0 }),
-        )
-        .unwrap();
+        d.add(&Space::Model, Common::default(), EntityKind::Circle(Circle { center: Vec3::new(f64::from(i) * 50.0, 0.0, 0.0), radius: 5.0 }))
+            .unwrap();
     }
     let sq = vec![
         PolyVertex::new(Vec2::new(-10.0, -10.0)),
@@ -49,36 +45,15 @@ fn lod_turns_off_text_and_fill_when_zoomed_out() {
 #[test]
 fn fill_off_skips_hatch_pattern_lines() {
     let d = hatch_and_circles();
-    let with_fill = build(
-        &d,
-        &Space::Model,
-        &Options { text: true, fill: true, view_height: 40.0, tolerance: 0.01, ..Default::default() },
-    );
-    let no_fill = build(
-        &d,
-        &Space::Model,
-        &Options { text: false, fill: false, view_height: 40.0, tolerance: 0.01, ..Default::default() },
-    );
-    assert!(
-        no_fill.prims.len() < with_fill.prims.len(),
-        "no_fill={} with_fill={}",
-        no_fill.prims.len(),
-        with_fill.prims.len()
-    );
+    let with_fill = build(&d, &Space::Model, &Options { text: true, fill: true, view_height: 40.0, tolerance: 0.01, ..Default::default() });
+    let no_fill = build(&d, &Space::Model, &Options { text: false, fill: false, view_height: 40.0, tolerance: 0.01, ..Default::default() });
+    assert!(no_fill.prims.len() < with_fill.prims.len(), "no_fill={} with_fill={}", no_fill.prims.len(), with_fill.prims.len());
 }
 
 #[test]
 fn frustum_skips_entities_outside_the_view() {
     let d = hatch_and_circles();
     let full = build(&d, &Space::Model, &Options { view_height: 2000.0, ..Default::default() });
-    let corner = build(
-        &d,
-        &Space::Model,
-        &Options {
-            view_height: 30.0,
-            view_center: Some(Vec2::new(900.0, 0.0)),
-            ..Default::default()
-        },
-    );
+    let corner = build(&d, &Space::Model, &Options { view_height: 30.0, view_center: Some(Vec2::new(900.0, 0.0)), ..Default::default() });
     assert!(corner.prims.len() < full.prims.len(), "corner={} full={}", corner.prims.len(), full.prims.len());
 }

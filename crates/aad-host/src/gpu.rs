@@ -306,7 +306,6 @@ fn batch_ranges(counts: impl IntoIterator<Item = u32>, range: std::ops::Range<us
     out
 }
 
-
 fn msaa_target(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("cad_msaa"),

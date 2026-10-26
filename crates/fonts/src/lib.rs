@@ -226,39 +226,10 @@ impl TextFont {
 /// Candidate face names for Segoe UI (and a last-resort Arial) under Windows naming.
 fn drawing_face_candidates(bold: bool, italic: bool) -> Vec<&'static str> {
     match (bold, italic) {
-        (true, true) => vec![
-            "Segoe UI Bold Italic",
-            "segoeuiz",
-            "Segoe UI Bold",
-            "segoeuib",
-            DRAWING_FONT,
-            "segoeui",
-            "Arial Bold Italic",
-            "Arial",
-        ],
-        (true, false) => vec![
-            "Segoe UI Bold",
-            "segoeuib",
-            "Segoe UI Semibold",
-            DRAWING_FONT,
-            "segoeui",
-            "Arial Bold",
-            "Arial",
-        ],
-        (false, true) => vec![
-            "Segoe UI Italic",
-            "segoeuii",
-            DRAWING_FONT,
-            "segoeui",
-            "Arial Italic",
-            "Arial",
-        ],
-        (false, false) => vec![
-            DRAWING_FONT,
-            "segoeui",
-            "Segoe UI Variable",
-            "Arial",
-        ],
+        (true, true) => vec!["Segoe UI Bold Italic", "segoeuiz", "Segoe UI Bold", "segoeuib", DRAWING_FONT, "segoeui", "Arial Bold Italic", "Arial"],
+        (true, false) => vec!["Segoe UI Bold", "segoeuib", "Segoe UI Semibold", DRAWING_FONT, "segoeui", "Arial Bold", "Arial"],
+        (false, true) => vec!["Segoe UI Italic", "segoeuii", DRAWING_FONT, "segoeui", "Arial Italic", "Arial"],
+        (false, false) => vec![DRAWING_FONT, "segoeui", "Segoe UI Variable", "Arial"],
     }
 }
 

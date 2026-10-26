@@ -9,13 +9,13 @@
 
 mod assistant;
 mod bar;
-mod osas_ai;
 mod chrome;
 mod control;
 mod ffi;
 mod forms;
 #[cfg(windows)]
 mod gpu;
+mod osas_ai;
 mod overlay;
 mod panels;
 #[cfg(windows)]
@@ -30,8 +30,8 @@ use aad_color::Rgb;
 use aad_engine::Session;
 use aad_engine::doc::{Drawing, Space};
 use aad_geom::Vec2;
-use aad_render::mesh::{self, MeshData};
 use aad_render::DisplayList;
+use aad_render::mesh::{self, MeshData};
 use serde_json::Value;
 
 /// (document uid, revision, tessellation band, lwdisplay, space fingerprint, draw text, draw fill).
@@ -677,9 +677,10 @@ impl Host {
         if self.hot.is_some() || self.session.pending_window.is_some() {
             return serde_json::json!({ "on": false });
         }
-        let screen = self.screen.filter(|point| point.is_finite()).unwrap_or_else(|| {
-            Vec2::new(f64::from(self.width.max(1)) * 0.5, f64::from(self.height.max(1)) * 0.5)
-        });
+        let screen = self
+            .screen
+            .filter(|point| point.is_finite())
+            .unwrap_or_else(|| Vec2::new(f64::from(self.width.max(1)) * 0.5, f64::from(self.height.max(1)) * 0.5));
         let running = self.session.running.is_some();
         // Slash assistant drafts belong on the fixed AI bar, not beside the cursor.
         if !running && matches!(bar::classify(&self.draft), bar::Kind::Reference) {
@@ -2033,12 +2034,8 @@ impl Host {
             f64::from(self.pixels_per_point),
         );
         let over_key = gpu::Gpu::overlay_key(&overlay);
-        let stamp = PaintStamp {
-            mesh_key: key,
-            over_key,
-            uniform: std::array::from_fn(|i| uniform[i].to_bits()),
-            clear: (paper.0, paper.1, paper.2),
-        };
+        let stamp =
+            PaintStamp { mesh_key: key, over_key, uniform: std::array::from_fn(|i| uniform[i].to_bits()), clear: (paper.0, paper.1, paper.2) };
         if self.paint.as_ref() == Some(&stamp) {
             return Ok(());
         }
@@ -2517,15 +2514,7 @@ mod tests {
         assert!(tip.contains("5"), "{tip}");
         let drawn = overlay::mesh(
             &host.session,
-            Some(&overlay::Cursor {
-                aim: host.aim,
-                raw: host.raw,
-                snap: None,
-                track: None,
-                hot: None,
-                hover: None,
-                warm_grip: None,
-            }),
+            Some(&overlay::Cursor { aim: host.aim, raw: host.raw, snap: None, track: None, hot: None, hover: None, warm_grip: None }),
             host.paper(),
             host.height,
             Vec2::ZERO,
@@ -2589,15 +2578,7 @@ mod tests {
         assert!(selected >= 1, "Insert picks the entity under the keyboard cursor");
         let idle = overlay::mesh(
             &host.session,
-            Some(&overlay::Cursor {
-                aim: host.aim,
-                raw: host.raw,
-                snap: None,
-                track: None,
-                hot: None,
-                hover: host.hover,
-                warm_grip: None,
-            }),
+            Some(&overlay::Cursor { aim: host.aim, raw: host.raw, snap: None, track: None, hot: None, hover: host.hover, warm_grip: None }),
             host.paper(),
             host.height,
             Vec2::ZERO,
@@ -2766,11 +2747,7 @@ mod tests {
         assert!(host.plot_request_json().is_empty());
         host.session.plot_request = Some(aad_engine::PlotRequest { window: None, layout: String::new(), preview: false });
         assert!(host.plot_request_json().contains("null"), "{}", host.plot_request_json());
-        host.session.plot_request = Some(aad_engine::PlotRequest {
-            window: Some([1.0, 2.0, 3.0, 4.0]),
-            layout: "Nameplate L".into(),
-            preview: true,
-        });
+        host.session.plot_request = Some(aad_engine::PlotRequest { window: Some([1.0, 2.0, 3.0, 4.0]), layout: "Nameplate L".into(), preview: true });
         let json = host.plot_request_json();
         assert!(json.contains('1') && json.contains('4'), "{json}");
         host.clear_plot_request();
@@ -3013,13 +2990,7 @@ mod tests {
     fn high_value_commands_appear_on_the_menu() {
         let host = Host::create(false);
         let menu = host.menu_json();
-        for label in [
-            "Deselect All",
-            "Measure Geometry",
-            "New Layer",
-            "Inspect Drawing",
-            "Switch",
-        ] {
+        for label in ["Deselect All", "Measure Geometry", "New Layer", "Inspect Drawing", "Switch"] {
             assert!(menu.contains(label), "menu should include {label}");
         }
         assert!(menu.contains("\"id\":\"ai_deselect\"") || menu.contains("ai_deselect"));
