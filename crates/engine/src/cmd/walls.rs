@@ -605,11 +605,7 @@ fn schedule_mark_for_block(d: &Drawing, block: &str) -> Option<String> {
     let sched = project::get(d, "schedule");
     sched["openings"].as_array()?.iter().find_map(|o| {
         let linked = o["block"].as_str().unwrap_or("");
-        if linked.split(';').any(|b| b.trim().eq_ignore_ascii_case(block)) {
-            o["name"].as_str().map(str::to_string)
-        } else {
-            None
-        }
+        if linked.split(';').any(|b| b.trim().eq_ignore_ascii_case(block)) { o["name"].as_str().map(str::to_string) } else { None }
     })
 }
 
@@ -785,13 +781,7 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
         rot += std::f64::consts::PI;
     }
     let sx = if door && str_param(p, "swing") == Some("right") { -1.0 } else { 1.0 };
-    let mut placed = Insert {
-        block: block.clone(),
-        insert: v3(at),
-        scale: Vec3::new(sx, 1.0, 1.0),
-        rotation: rot,
-        ..Insert::default()
-    };
+    let mut placed = Insert { block: block.clone(), insert: v3(at), scale: Vec3::new(sx, 1.0, 1.0), rotation: rot, ..Insert::default() };
     store_params(&mut placed, &op);
     let ins = EntityKind::Insert(placed);
     let space = s.space();
@@ -936,16 +926,21 @@ mod tests {
         let doc = s.doc().unwrap();
         let kind = &doc.entity(h).unwrap().kind;
         let EntityKind::Insert(i) = kind else {
-            assert!(false, "door is an insert");
-            return;
+            panic!("door is an insert");
         };
         let w: f64 = i.attrib_value("OWIDTH").unwrap().parse().unwrap();
         assert!((w - 1200.0).abs() < 1e-3, "{w}");
         assert!((i.attrib_value("OHEIGHT").unwrap().parse::<f64>().unwrap() - 2.1).abs() < 1e-6);
-        let leaf = doc.block(&i.block).unwrap().entities.iter().filter_map(|e| match &e.kind {
-            EntityKind::Line(l) => Some(l.a.xy().dist(l.b.xy())),
-            _ => None,
-        }).fold(0.0_f64, f64::max);
+        let leaf = doc
+            .block(&i.block)
+            .unwrap()
+            .entities
+            .iter()
+            .filter_map(|e| match &e.kind {
+                EntityKind::Line(l) => Some(l.a.xy().dist(l.b.xy())),
+                _ => None,
+            })
+            .fold(0.0_f64, f64::max);
         assert!((leaf - 1200.0).abs() < 1e-3, "{leaf}");
         let xs: Vec<f64> = doc
             .model
@@ -965,9 +960,7 @@ mod tests {
     fn window_properties_edit_type_sill_and_lintel_lock() {
         let mut s = Session::new();
         place_wall(&mut s);
-        let placed = s
-            .execute("wall.window", &json!({ "at": [2000.0, 0.0], "angle": 0.0, "width": 1200.0, "thickness": 200.0 }))
-            .unwrap();
+        let placed = s.execute("wall.window", &json!({ "at": [2000.0, 0.0], "angle": 0.0, "width": 1200.0, "thickness": 200.0 })).unwrap();
         assert_eq!(placed["openingType"], "casement");
         assert_eq!(placed["lintelMode"], "standard");
         assert!((placed["sill"].as_f64().unwrap() - 900.0).abs() < 1e-6);
@@ -981,8 +974,7 @@ mod tests {
         .unwrap();
         let doc = s.doc().unwrap();
         let EntityKind::Insert(i) = &doc.entity(h).unwrap().kind else {
-            assert!(false, "window is an insert");
-            return;
+            panic!("window is an insert");
         };
         assert_eq!(i.attrib_value("OTYPE"), Some("sliding"));
         assert_eq!(i.attrib_value("OLINTEL"), Some("custom"));

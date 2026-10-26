@@ -25,12 +25,7 @@ fn read(bytes: &[u8], _name: &str) -> Result<Drawing, String> {
     let mut line = Entity::new(Handle(0x60), EntityKind::Line(Line { a: Vec3::new(10.0, 10.0, 0.0), b: Vec3::new(20.0, 10.0, 0.0) }));
     line.common.layer = "PARTS".into();
     d.model.push(line);
-    let ins = Insert {
-        block: "NUT".into(),
-        insert: Vec3::new(10.0, 10.0, 0.0),
-        scale: Vec3::new(1.0, 1.0, 1.0),
-        ..Default::default()
-    };
+    let ins = Insert { block: "NUT".into(), insert: Vec3::new(10.0, 10.0, 0.0), scale: Vec3::new(1.0, 1.0, 1.0), ..Default::default() };
     d.model.push(Entity::new(Handle(0x61), EntityKind::Insert(ins)));
     Ok(d)
 }

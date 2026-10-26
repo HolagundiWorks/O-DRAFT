@@ -103,10 +103,7 @@ impl Desk {
             let message = if aad_llm::available() {
                 "The assistant model file was not found.".to_string()
             } else {
-                format!(
-                    "Local OLMo is not ready. In OSAS open AI → Start AI agent. ({})",
-                    osas_ai::status_label()
-                )
+                format!("Local OLMo is not ready. In OSAS open AI → Start AI agent. ({})", osas_ai::status_label())
             };
             session.echo(message.clone());
             return Err(message);

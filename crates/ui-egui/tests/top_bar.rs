@@ -48,10 +48,7 @@ fn the_first_line_holds_the_chosen_tools_and_the_second_line_the_selectors() {
     let first = y_of(&h, "Room Label");
     let second = y_of(&h, "Layer");
     assert!(first < second, "the tools line is above the selectors line ({first} vs {second})");
-    assert!(
-        (y_of(&h, "Floor") - second).abs() < 6.0,
-        "layer and floor share the second line"
-    );
+    assert!((y_of(&h, "Floor") - second).abs() < 6.0, "layer and floor share the second line");
     // The old property row is gone: no dropdown sits in the top bar area above the selectors.
     let combos_in_top_bar = h.query_all_by_role(Role::ComboBox).filter(|n| n.rect().center().y < second - 8.0).count();
     assert_eq!(combos_in_top_bar, 0, "no layer, colour, linetype or lineweight dropdowns in the first line");

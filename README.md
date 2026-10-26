@@ -1,6 +1,6 @@
 # O-Draft
 
-O-Draft (formerly AAD, Accelerated Architecture Drafting) is the drafting app of OSAS, the Open Source Architecture Suit, alongside O-Studio (office management) and O-CoreOp (quantities, estimates and billing). It is a 2D computer-aided drafting application written in Rust, aimed at architectural and civil
+O-Draft (formerly AAD, Accelerated Architecture Drafting) is the drafting app of OSAS, the Open Source Architecture Suite, alongside O-Studio (office management) and O-CoreOp (quantities, estimates and billing). It is a 2D computer-aided drafting application written in Rust, aimed at architectural and civil
 drafting. It reads and writes DXF and DWG and can be driven from scripts and agents. **Windows is
 the only supported platform for now**; macOS, Linux and the web build come in later phases (the
 code stays portable, but only Windows is built, tested and packaged). This repository is a fork of
@@ -80,11 +80,14 @@ measures: [docs/maintenance.md](docs/maintenance.md).
 
 ## Built-in architecture tools
 
-Walls, doors and windows, grid, columns, lintels, stairs, lifts, levels and section markers,
-quantity take-off with rates and a bill, door and window schedules, electrical layout, and the
-project data they share are built-in commands under the Architecture menu ([docs/hcw-kit-port.md](docs/hcw-kit-port.md)).
-A calculator for feet, inches, lengths, areas and volumes and a Pomodoro timer are floating
-widgets under Tools ([docs/widgets.md](docs/widgets.md)).
+Doors and windows (Architecture bar; optional plan block, opening width on the drawing feeds the
+schedule), walls (`wall.draw` on the command line), grid, columns, lintels, stairs, lifts, levels
+and section markers, quantity take-off with rates and a bill, electrical layout, and Project
+Settings (details, default slab thickness and beam depth) are built-in under the Architecture menu
+([docs/hcw-kit-port.md](docs/hcw-kit-port.md)). Print and plot preview fit a model window into
+Nameplate L or Nameplate P ([docs/sheets.md](docs/sheets.md)). A calculator for feet, inches,
+lengths, areas and volumes and a Pomodoro timer are floating widgets under Tools
+([docs/widgets.md](docs/widgets.md)).
 
 ## Local AI assistant
 

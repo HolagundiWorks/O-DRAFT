@@ -11,11 +11,7 @@ const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8742;
 
 fn data_dir() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("OSAS")
-        .join("ai")
+    std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(".")).join("OSAS").join("ai")
 }
 
 fn token() -> Option<String> {
@@ -41,11 +37,7 @@ pub fn core_ready() -> bool {
         return false;
     };
     let url = format!("{}/v1/health", base_url());
-    let Ok(resp) = ureq::get(&url)
-        .set("Authorization", &format!("Bearer {token}"))
-        .timeout(Duration::from_secs(2))
-        .call()
-    else {
+    let Ok(resp) = ureq::get(&url).set("Authorization", &format!("Bearer {token}")).timeout(Duration::from_secs(2)).call() else {
         return false;
     };
     let Ok(body) = resp.into_json::<Value>() else {
@@ -88,11 +80,7 @@ pub fn chat(messages: &[Message], max_tokens: u32) -> Result<String, String> {
             // Match Qwen-style ChatML used by aad_llm::prompt (tool → user + tool_response).
             Role::Tool => "user",
         };
-        let mut content = if matches!(m.role, Role::Tool) {
-            format!("<tool_response>\n{}\n</tool_response>", m.content)
-        } else {
-            m.content.clone()
-        };
+        let mut content = if matches!(m.role, Role::Tool) { format!("<tool_response>\n{}\n</tool_response>", m.content) } else { m.content.clone() };
         if matches!(m.role, Role::System) && !primed {
             content.push_str(OLMO_DRAWING_HINT);
             primed = true;
@@ -118,11 +106,7 @@ pub fn chat(messages: &[Message], max_tokens: u32) -> Result<String, String> {
         Ok(r) => r,
         Err(ureq::Error::Status(code, r)) => {
             let detail = r.into_string().unwrap_or_default();
-            let detail = if detail.len() > 400 {
-                format!("{}…", &detail[..400])
-            } else {
-                detail
-            };
+            let detail = if detail.len() > 400 { format!("{}…", &detail[..400]) } else { detail };
             return Err(format!("OSAS AI Core HTTP {code}: {detail}"));
         }
         Err(e) => return Err(format!("OSAS AI Core could not be reached: {e}")),
@@ -130,11 +114,7 @@ pub fn chat(messages: &[Message], max_tokens: u32) -> Result<String, String> {
     let value: Value = resp.into_json().map_err(|e| format!("OSAS AI Core reply was not JSON: {e}"))?;
     let status = value.get("status").and_then(Value::as_str).unwrap_or("");
     if status != "ok" {
-        let err = value
-            .pointer("/error/message")
-            .or_else(|| value.get("message"))
-            .and_then(Value::as_str)
-            .unwrap_or("unknown error");
+        let err = value.pointer("/error/message").or_else(|| value.get("message")).and_then(Value::as_str).unwrap_or("unknown error");
         return Err(format!("OSAS AI Core: {err}"));
     }
     value

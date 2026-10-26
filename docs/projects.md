@@ -68,6 +68,6 @@ ground floor's beam layout shown over it while the ground floor plan itself is h
 | Floor View Manager panel | Not built |
 | Preventing edits of an inactive floor opened directly | Not built (the manifest records `locked`; opening the file still allows editing) |
 | Adding or removing a floor after setup | Not built |
-| Opening schedule `Type` field, generated and reused opening blocks, reconciliation report | Not built |
+| Opening schedule: door/window can place a plan block and sync schedule width from the drawing | Built (`wall.door` / `wall.window` `block`, `openings.sync`); full Type catalog / reconciliation report still not built |
 | Floor-wise electrical schedules and cross-floor coordination | Not built |
 | Batch print by floor and category | Implemented and tested (`plot.batch`, [sheets.md](sheets.md)); PDF only |

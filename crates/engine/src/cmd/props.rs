@@ -157,13 +157,10 @@ fn set_xy(p: &mut Vec3, v: &Value) {
     }
 }
 
-
 fn text_height_from_rank(s: &Session, rank: &str) -> Result<f64> {
     let d = s.doc()?;
-    let mm = crate::annot::printed_mm_for_rank(d, rank)
-        .ok_or_else(|| bad("properties.set", "`textSize` must be small, medium or large"))?;
-    let drawn = crate::annot::drawing_unit(d)
-        .ok_or_else(|| bad("properties.set", "the drawing's units are not set"))?;
+    let mm = crate::annot::printed_mm_for_rank(d, rank).ok_or_else(|| bad("properties.set", "`textSize` must be small, medium or large"))?;
+    let drawn = crate::annot::drawing_unit(d).ok_or_else(|| bad("properties.set", "the drawing's units are not set"))?;
     let scale = d.header.f64("AADPLOTSCALE", 0.0);
     let scale = if scale > 0.0 { crate::annot::PlotScale(scale) } else { crate::annot::PlotScale(100.0) };
     Ok(crate::annot::sizes(crate::annot::PrintedSizes { text_mm: mm, arrow_mm: mm }, scale, drawn).text_height)

@@ -102,7 +102,7 @@ fn window_of(p: &Value) -> Result<Option<(Bounds2, bool)>> {
 }
 
 fn handles_in_window(s: &Session, bx: Bounds2, crossing: bool) -> Vec<Handle> {
-    crate::select::select_window(s.doc().unwrap(), &s.space(), bx, crossing)
+    s.doc().map(|d| crate::select::select_window(d, &s.space(), bx, crossing)).unwrap_or_default()
 }
 
 fn assign(s: &mut Session, name: &str, handles: &[Handle], window: Option<(Bounds2, bool)>, add: bool) -> Result<Value> {
@@ -208,13 +208,8 @@ fn run_refresh(s: &mut Session, p: &Value) -> Result<Value> {
                 .filter_map(|(k, _)| Handle::parse_hex(k))
                 .collect();
             if hs.is_empty() {
-                hs = r
-                    .get("handles")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|v| v.as_str().and_then(Handle::parse_hex))
-                    .collect();
+                hs =
+                    r.get("handles").and_then(Value::as_array).into_iter().flatten().filter_map(|v| v.as_str().and_then(Handle::parse_hex)).collect();
             }
             (hs, None)
         };
@@ -242,11 +237,8 @@ fn run_regions(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn handles_of_floor(d: &Drawing, name: &str) -> Result<Vec<Handle>> {
     let map = entity_map(d);
-    let mut hs: Vec<Handle> = map
-        .iter()
-        .filter(|(_, v)| v.as_str().is_some_and(|n| n.eq_ignore_ascii_case(name)))
-        .filter_map(|(k, _)| Handle::parse_hex(k))
-        .collect();
+    let mut hs: Vec<Handle> =
+        map.iter().filter(|(_, v)| v.as_str().is_some_and(|n| n.eq_ignore_ascii_case(name))).filter_map(|(k, _)| Handle::parse_hex(k)).collect();
     if hs.is_empty()
         && let Value::Object(store) = regions_store(d)
         && let Some(regions) = store.get("regions").and_then(Value::as_array)
@@ -274,13 +266,9 @@ fn default_export_path(s: &Session, name: &str) -> Result<String> {
         .as_ref()
         .map(|p| {
             let p = std::path::Path::new(p);
-            p.with_file_name(format!(
-                "{}-{}.dxf",
-                p.file_stem().and_then(|s| s.to_str()).unwrap_or("floor"),
-                safe_file(name)
-            ))
-            .to_string_lossy()
-            .to_string()
+            p.with_file_name(format!("{}-{}.dxf", p.file_stem().and_then(|s| s.to_str()).unwrap_or("floor"), safe_file(name)))
+                .to_string_lossy()
+                .to_string()
         })
         .unwrap_or_else(|| format!("floor-{}.dxf", safe_file(name))))
 }

@@ -291,11 +291,7 @@ fn layer_set_controls(app: &mut CadApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         ui.label(crate::tl!("Layer set"));
-        let shown = spaces
-            .iter()
-            .find(|s| s["id"].as_str() == Some(active.as_str()))
-            .and_then(|s| s["name"].as_str())
-            .unwrap_or(crate::tl!("None"));
+        let shown = spaces.iter().find(|s| s["id"].as_str() == Some(active.as_str())).and_then(|s| s["name"].as_str()).unwrap_or(crate::tl!("None"));
         egui::ComboBox::from_id_salt("layer_set_pick").selected_text(shown).width(140.0).show_ui(ui, |ui| {
             for sp in &spaces {
                 let id = sp["id"].as_str().unwrap_or("");

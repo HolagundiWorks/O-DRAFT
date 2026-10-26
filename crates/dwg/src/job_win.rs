@@ -8,8 +8,11 @@
 use std::os::windows::io::AsRawHandle;
 use std::process::Child;
 
+#[allow(clippy::upper_case_acronyms)] // mirrors the Win32 names
 type HANDLE = *mut core::ffi::c_void;
+#[allow(clippy::upper_case_acronyms)]
 type BOOL = i32;
+#[allow(clippy::upper_case_acronyms)]
 type DWORD = u32;
 
 const INVALID_HANDLE_VALUE: HANDLE = -1isize as HANDLE;
@@ -87,12 +90,7 @@ pub fn limit_process_memory(child: &Child, max_bytes: usize) -> Result<(), Strin
             peak_process_memory_used: 0,
             peak_job_memory_used: 0,
         };
-        let ok = SetInformationJobObject(
-            job,
-            JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
-            (&raw mut info).cast(),
-            core::mem::size_of_val(&info) as DWORD,
-        );
+        let ok = SetInformationJobObject(job, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, (&raw mut info).cast(), core::mem::size_of_val(&info) as DWORD);
         if ok == 0 {
             let _ = CloseHandle(job);
             return Err("DWG: could not set the reader memory limit".into());

@@ -144,13 +144,7 @@ fn attributes_draw_with_their_own_properties() {
             props: Default::default(),
         })
         .to_vec();
-    let ins = Insert {
-        block: "TAGS".into(),
-        insert: Vec3::ZERO,
-        scale: Vec3::new(1.0, 1.0, 1.0),
-        attribs,
-        ..Default::default()
-    };
+    let ins = Insert { block: "TAGS".into(), insert: Vec3::ZERO, scale: Vec3::new(1.0, 1.0, 1.0), attribs, ..Default::default() };
     let common = Common { color: Color::Index(1), lineweight: Lineweight::Mm100(35), ..on("INS") };
     d.add(&Space::Model, common, EntityKind::Insert(ins)).unwrap();
 

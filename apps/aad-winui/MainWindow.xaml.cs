@@ -5516,7 +5516,7 @@ public sealed partial class MainWindow : Window
         _documents.Clear();
         _documents.AddRange(state.Documents);
         var active = _documents.FirstOrDefault(doc => doc.Active);
-        Title = active == null || active.Title.Length == 0 ? "O-Draft" : "O-Draft — " + active.Title;
+        Title = active == null || active.Title.Length == 0 ? "O-Draft" : "O-Draft \u2014 " + active.Title;
         var key = string.Join("\n", _documents.Select(doc => doc.Index + ":" + doc.Title + ":" + doc.Dirty + ":" + doc.Active));
         if (key == _docKey)
         {

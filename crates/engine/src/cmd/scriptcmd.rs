@@ -24,9 +24,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("lisp", "AutoLISP", run_lisp)
             .menu(&["Tools", "AutoLISP"])
             .alias(&["autolisp"])
-            .params(
-                "{text | expr: AutoLISP subset — numbers, strings, (+ - * /), setq, getvar, setvar, princ, command} → {result, printed}",
-            )
+            .params("{text | expr: AutoLISP subset — numbers, strings, (+ - * /), setq, getvar, setvar, princ, command} → {result, printed}")
             .noundo(),
     ]
 }

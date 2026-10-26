@@ -38,8 +38,9 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 enum LegendKind {
+    #[default]
     Layers,
     Symbols,
 }
@@ -47,12 +48,6 @@ enum LegendKind {
 #[derive(Default)]
 struct PlaceLegendM {
     kind: LegendKind,
-}
-
-impl Default for LegendKind {
-    fn default() -> Self {
-        LegendKind::Layers
-    }
 }
 
 impl Interactive for PlaceLegendM {
@@ -183,10 +178,7 @@ fn run_legend(s: &mut Session, p: &Value) -> Result<Value> {
         let used = used_layers(s.doc()?);
         let with_desc: Vec<String> = used
             .iter()
-            .filter(|n| {
-                override_desc(&ov, n).is_some()
-                    || s.doc().ok().and_then(|d| d.layer(n)).is_some_and(|l| !l.description.trim().is_empty())
-            })
+            .filter(|n| override_desc(&ov, n).is_some() || s.doc().ok().and_then(|d| d.layer(n)).is_some_and(|l| !l.description.trim().is_empty()))
             .cloned()
             .collect();
         if with_desc.is_empty() { used } else { with_desc }
@@ -205,22 +197,10 @@ fn run_legend(s: &mut Session, p: &Value) -> Result<Value> {
         // Swatch on the layer so its colour/linetype show in the key.
         add_on(s, name, lwpoly(rect_vertices(sw, Vec2::new(sw.x + sw_w, sw.y + sw_h)), true))?;
         add_on(s, name, line(Vec2::new(sw.x, sw.y + sw_h / 2.0), Vec2::new(sw.x + sw_w, sw.y + sw_h / 2.0)))?;
-        let desc = override_desc(&ov, name)
-            .or_else(|| s.doc().ok().and_then(|d| d.layer(name).map(|l| l.description.clone())))
-            .unwrap_or_default();
-        let label = if desc.trim().is_empty() {
-            name.clone()
-        } else {
-            format!("{name}  —  {desc}")
-        };
-        let txt = make_text(
-            s,
-            Vec2::new(sw.x + sw_w + gap, sw.y + (sw_h - t) / 2.0),
-            &label,
-            t,
-            0.0,
-            (aad_doc::HAlign::Left, aad_doc::VAlign::Baseline),
-        );
+        let desc = override_desc(&ov, name).or_else(|| s.doc().ok().and_then(|d| d.layer(name).map(|l| l.description.clone()))).unwrap_or_default();
+        let label = if desc.trim().is_empty() { name.clone() } else { format!("{name}  —  {desc}") };
+        let txt =
+            make_text(s, Vec2::new(sw.x + sw_w + gap, sw.y + (sw_h - t) / 2.0), &label, t, 0.0, (aad_doc::HAlign::Left, aad_doc::VAlign::Baseline));
         add_on(s, LAYER, txt)?;
         rows.push(json!({ "layer": name, "description": desc }));
     }
@@ -268,10 +248,7 @@ fn run_symbols(s: &mut Session, p: &Value) -> Result<Value> {
             .map(|b| b.name.clone())
             .collect();
         if named.is_empty() {
-            named = used_blocks(d)
-                .into_iter()
-                .filter(|n| d.block(n).is_some_and(|b| !b.anonymous))
-                .collect();
+            named = used_blocks(d).into_iter().filter(|n| d.block(n).is_some_and(|b| !b.anonymous)).collect();
         }
         named.sort();
         named
@@ -290,9 +267,7 @@ fn run_symbols(s: &mut Session, p: &Value) -> Result<Value> {
         let rows: Vec<Vec<String>> = names
             .iter()
             .map(|n| {
-                let desc = override_desc(&ov, n)
-                    .or_else(|| s.doc().ok().and_then(|d| d.block(n).map(|b| b.description.clone())))
-                    .unwrap_or_default();
+                let desc = override_desc(&ov, n).or_else(|| s.doc().ok().and_then(|d| d.block(n).map(|b| b.description.clone()))).unwrap_or_default();
                 vec![n.clone(), desc]
             })
             .collect();
@@ -333,14 +308,8 @@ fn run_symbols(s: &mut Session, p: &Value) -> Result<Value> {
             }
         }
         add_on(s, LAYER, EntityKind::Insert(ins))?;
-        let desc = override_desc(&ov, name)
-            .or_else(|| s.doc().ok().and_then(|d| d.block(name).map(|b| b.description.clone())))
-            .unwrap_or_default();
-        let label = if desc.trim().is_empty() {
-            name.clone()
-        } else {
-            format!("{name}  —  {desc}")
-        };
+        let desc = override_desc(&ov, name).or_else(|| s.doc().ok().and_then(|d| d.block(name).map(|b| b.description.clone()))).unwrap_or_default();
+        let label = if desc.trim().is_empty() { name.clone() } else { format!("{name}  —  {desc}") };
         let txt = make_text(
             s,
             Vec2::new(cell.x + box_sz + gap, cell.y + (box_sz - t) / 2.0),

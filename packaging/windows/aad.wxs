@@ -22,7 +22,7 @@
       Scope="perMachine"
       Compressed="yes"
       Language="1033">
-    <SummaryInformation Description="O-Draft - Drafting. Part of OSAS, the Open Source Architecture Suit." Manufacturer="Human Centric Works" />
+    <SummaryInformation Description="O-Draft - Architectural drafting for OSAS, the Open Source Architecture Suite." Manufacturer="Human Centric Works" />
     <!-- Same-version upgrades let successive pre-releases of one X.Y.Z replace each other
          (MSI versions are numeric, so 1.2.3-rc.1 and 1.2.3-rc.2 are both 1.2.3). -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
@@ -31,9 +31,9 @@
 
     <Icon Id="AadIcon.ico" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="AadIcon.ico" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/HolagundiWorks/AAD" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/HolagundiWorks/AAD" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/HolagundiWorks/AAD/issues" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/HolagundiWorks/O-DRAFT" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/HolagundiWorks/O-DRAFT" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/HolagundiWorks/O-DRAFT/issues" />
 
     <!-- Open-source EULA (MIT OR Apache-2.0) and installer splash bitmaps. -->
     <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
@@ -92,7 +92,7 @@
       <Component Id="AadApp" Guid="2AC18056-48DE-4079-AB79-4FDEF4FBB075">
         <File Id="AadExe" Source="$(var.BinDir)\o-draft.exe" KeyPath="yes">
           <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="O-Draft"
-              Description="O-Draft - Drafting. Part of OSAS." WorkingDirectory="INSTALLFOLDER" Advertise="yes"
+              Description="O-Draft - Architectural drafting for OSAS." WorkingDirectory="INSTALLFOLDER" Advertise="yes"
               Icon="AadIcon.ico" IconIndex="0" />
         </File>
 
@@ -121,7 +121,7 @@
            Public desktop) must be under HKCU (ICE38, ICE43, ICE57). -->
       <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="76029CD7-EBDB-420F-AC34-FF0E82A99E32"
           Condition="DESKTOPSHORTCUT = &quot;1&quot;">
-        <Shortcut Id="DesktopShortcut" Name="O-Draft" Description="O-Draft - Drafting. Part of OSAS."
+        <Shortcut Id="DesktopShortcut" Name="O-Draft" Description="O-Draft - Architectural drafting for OSAS."
             Target="[INSTALLFOLDER]o-draft.exe" WorkingDirectory="INSTALLFOLDER" Icon="AadIcon.ico" IconIndex="0" />
         <RegistryValue Root="HKCU" Key="Software\Human Centric Works\AAD" Name="DesktopShortcut"
             Value="1" Type="string" KeyPath="yes" />

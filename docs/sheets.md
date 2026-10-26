@@ -1,6 +1,11 @@
 # Sheets and batch plotting
 
-A new drawing has one paper layout, **Title plate**. `sheet.designer` replaces empty Layout1 and Layout2 with that sheet and places the title block on it. The layout tab is the title plate designer: the border and the title-block fields. A drawing that already has other sheets, or anything drawn on Layout1 or Layout2, is left unchanged. `open: true` switches to the sheet.
+A new drawing has two paper layouts for print: **Nameplate L** (landscape) and **Nameplate P**
+(portrait). `sheet.designer` replaces empty Layout1 and Layout2 with those sheets (each with its
+own title block and page setup) so each orientation can be designed separately. A drawing that
+already has other sheets, or anything drawn on Layout1 or Layout2, is left unchanged. Pass
+`landscape: true|false` (default true) and `open: true` to switch to the chosen plate. An older
+drawing that still has a single **Title plate** is migrated to Nameplate L once.
 
 A layout tab is a sheet. The commands are in `crates/engine/src/cmd/sheet.rs` (and `projfile.rs`
 for the project-aware ones); the Plot window only calls them. There is no separate Layout panel: it
@@ -23,8 +28,8 @@ Used from the command line, menus, scripts and the control channel:
 | Paper size and orientation | `pagesetup` |
 | Viewports: scale (typed as `1:100`), lock, remove, add; in a project, which floors and layouts each shows | `viewport.list`, `viewport.set`, `viewport.add`, `viewport.remove`, `floor.viewport` |
 | Title block fields, adding a title block | `sheet.fields`, `sheet.titleblock` |
-| One Title plate layout on a new drawing | `sheet.designer` |
-| Fit the model into the nameplate viewport (used by Print; not a separate UI) | `sheet.plotwindow` |
+| Ensure Nameplate L and Nameplate P; optionally open one | `sheet.designer` |
+| Fit the model into the nameplate viewport (used by Print / plot preview) | `sheet.plotwindow` |
 | Saved layouts (apply as the sheet's title card, delete, save) | `sheet.template.*` |
 
 ## Title block
@@ -53,14 +58,21 @@ in one viewport only, so the main drawing carries one sheet per floor, or a floo
 beam layout over it. The layer's global visibility (`floor.set`) still applies: a layout drawing
 must be shown to appear in any viewport.
 
-## Printing (File > Print, Export to PDF)
+## Printing and plot preview
 
-Print first asks for the **plot window** in model space (two corners, or Extents / Display). That
-region is fitted into the **nameplate** viewport at the nearest standard scale (`sheet.plotwindow`),
-the Title plate is plotted, then the app returns to model space. Edit the plate with **Nameplate**.
+Print, Export to PDF and the status-bar **plot preview** first ask for the **plot window** in model
+space (two corners, or Extents / Display). The WinUI shell starts `plotl` or `plotp` from the
+status-bar orientation (landscape → Nameplate L, portrait → Nameplate P). That region is fitted
+into the matching nameplate viewport at the nearest standard scale (`sheet.plotwindow`), the
+nameplate is plotted, then the app returns to model space.
 
-Scripts can pass `window` to `sheet.plotwindow` or to `plot` / `exportpdf` directly. Batch plotting
-(`plot.batch`) still plots whole drawings / sheets.
+- **Print / Export PDF** finishes with a save picker.
+- **Plot preview** (PDF icon on the status bar) writes a temporary PDF and opens it in the in-window
+  viewer titled "Plot preview".
+
+Edit the plates with **Nameplate** (menu or status-bar button): choose Nameplate L or Nameplate P.
+Scripts can pass `window` and `layout` to `sheet.plotwindow`, or call `plotl` / `plotp` / `plot` /
+`exportpdf` directly. Batch plotting (`plot.batch`) still plots whole drawings / sheets.
 
 ## Batch plot (File > Batch Plot)
 
@@ -79,7 +91,23 @@ The Plot window lists the project's floors with their layouts (ticked when marke
 the sheets of the drawing, a folder, and a Plot button; it shows the files written and what was
 skipped.
 
+## Sheet index and numbering
+
+`sheet.index {renumber?, draw?, layout?, at?, height?}` (Architecture > Sheets > Sheet Index):
+
+- Lists every layout except the nameplates with its sheet number, title, scale and revision, read
+  from the title block (`SHEET`, `TITLE`, `SCALE`, `REV`). A layout without a `SHEET` value is listed
+  under its layout name; one without a `SCALE` uses its first viewport's scale.
+- `renumber: {prefix?: "A-", start?: 101, step?: 1}` writes consecutive numbers into the `SHEET`
+  field of each layout that has a title block, in layout order. An overflowing range changes nothing.
+- `draw: true` draws the list as a table (sheet no., title, scale, revision) on `layout` (default the
+  current one) on layer `A-ANNO-SIDX`, top-left at `at` or inside the printable area. Drawing again
+  replaces the earlier table on that layout and nothing else.
+- Without `renumber` and `draw` it only reads. Tests: `crates/engine/tests/sheet.rs`.
+
+The index is a snapshot: edit a title and run the command again to refresh it. It is not a live field.
+
 ## Not implemented
 
-Revision tables, sheet numbering across a set, templates that carry viewports, a sheet index, and
-printing to a physical device (PDF only).
+Revision tables, live (self-updating) sheet index, templates that carry viewports, and printing to a
+physical device (PDF only).

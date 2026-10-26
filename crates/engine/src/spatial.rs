@@ -368,12 +368,9 @@ mod tests {
                     valign: Default::default(),
                 }),
                 6 => EntityKind::Point(aad_doc::Point { p: v3(x, y), angle: 0.0 }),
-                7 => EntityKind::Insert(Insert {
-                    block: "B".into(),
-                    insert: v3(x, y),
-                    scale: Vec3::new(s * 0.3, s * 0.3, 1.0),
-                    ..Default::default()
-                }),
+                7 => {
+                    EntityKind::Insert(Insert { block: "B".into(), insert: v3(x, y), scale: Vec3::new(s * 0.3, s * 0.3, 1.0), ..Default::default() })
+                }
                 8 if i % 40 == 8 => EntityKind::XLine(aad_doc::RayLine { base: v3(x, y), dir: v3(r.r(-1.0, 1.0), 1.0) }),
                 8 if i % 40 == 18 => EntityKind::Ray(aad_doc::RayLine { base: v3(x, y), dir: v3(1.0, r.r(-1.0, 1.0)) }),
                 _ => EntityKind::Circle(aad_doc::Circle { center: v3(x, y), radius: s * 0.1 }),

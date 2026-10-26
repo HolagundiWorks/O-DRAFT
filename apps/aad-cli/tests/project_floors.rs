@@ -162,8 +162,8 @@ fn activating_a_floor_opens_its_file_with_the_others_as_locked_overlays_and_new_
     s.execute("wall.draw", &json!({"points": [[0, 0], [6000, 0]], "thickness": 230})).unwrap();
     s.execute("wall.door", &json!({"at": [2000, 0], "name": "D2"})).unwrap();
     s.execute("qsave", &json!({})).unwrap();
-    assert!(block_names(&root.join("Floors/First_Floor.dxf")).iter().any(|b| b.starts_with("DOOR-")), "the door is in the first floor file");
-    assert!(!block_names(&root.join("Floors/Ground_Floor.dxf")).iter().any(|b| b.starts_with("DOOR-")), "and not in the ground floor file");
+    assert!(block_names(&root.join("Floors/First_Floor.dxf")).iter().any(|b| b.starts_with("AADOPEN-")), "the door is in the first floor file");
+    assert!(!block_names(&root.join("Floors/Ground_Floor.dxf")).iter().any(|b| b.starts_with("AADOPEN-")), "and not in the ground floor file");
     assert!(block_names(&root.join("Floors/First_Floor.dxf")).iter().all(|b| !b.starts_with("OVL|")), "overlays are never saved");
 
     // The active floor is recorded, and only it is unlocked.

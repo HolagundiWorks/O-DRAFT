@@ -205,17 +205,14 @@ fn run_lintel(s: &mut Session, p: &Value) -> Result<Value> {
                     return None;
                 }
                 // Prefer the stored opening width; fall back to the deduction line for older blocks.
-                let half = i
-                    .opening_width()
-                    .map(|w| w * i.scale.x.abs() / 2.0 + bearing)
-                    .or_else(|| {
-                        let b = d.block(&i.block)?;
-                        let ded = b.entities.iter().find_map(|x| match &x.kind {
-                            EntityKind::Line(l) if x.common.layer.eq_ignore_ascii_case("MEASURE-DEDUCT") => Some((l.a.x, l.b.x)),
-                            _ => None,
-                        })?;
-                        Some((ded.0 - ded.1).abs() * i.scale.x.abs() / 2.0 + bearing)
+                let half = i.opening_width().map(|w| w * i.scale.x.abs() / 2.0 + bearing).or_else(|| {
+                    let b = d.block(&i.block)?;
+                    let ded = b.entities.iter().find_map(|x| match &x.kind {
+                        EntityKind::Line(l) if x.common.layer.eq_ignore_ascii_case("MEASURE-DEDUCT") => Some((l.a.x, l.b.x)),
+                        _ => None,
                     })?;
+                    Some((ded.0 - ded.1).abs() * i.scale.x.abs() / 2.0 + bearing)
+                })?;
                 let u = Vec2::new(i.rotation.cos(), i.rotation.sin());
                 let c = i.insert.xy();
                 Some((c - u * half, c + u * half))

@@ -4,11 +4,12 @@ Most architecture commands take JSON. A menu click has none, so each command tha
 a form declared as data in `crates/engine/src/forms.rs` (`FORMS`). One declaration serves three
 callers:
 
-- **Dialog** (menu and toolbar): the settings are shown in a dialog drawn by
-  `crates/ui-egui/src/formdialog.rs`: project details, floors and heights (a table), beam depths,
-  the opening schedule (a table), rates (a table), room type and options, wall thickness, stair
-  rise and width, take-off options, and so on. OK validates the values and shows the reason if one
-  is wrong. If the command also needs points, they are picked on the drawing afterwards.
+- **Dialog** (menu and toolbar): the settings are shown in a dialog (WinUI `FormDialog`, or
+  `crates/ui-egui/src/formdialog.rs`): Project Settings (details, default slab thickness and beam
+  depth including slab), Floors (names), beam depth list, the opening schedule (a table), rates,
+  room type and options, door/window block and width, stair rise and width, take-off options, and
+  so on. OK validates the values and shows the reason if one is wrong. If the command also needs
+  points, they are picked on the drawing afterwards.
 - **Command line**: typing a command that has a form (and no prompts of its own) asks the missing
   values one by one, with points picked on the drawing. Enter skips an optional question; Escape
   cancels. A bad answer keeps the question.

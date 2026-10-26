@@ -324,12 +324,7 @@ fn hatch_pattern_preview(name: &str) -> Value {
     if name.eq_ignore_ascii_case("SOLID") {
         return json!({ "solid": true, "segments": [] });
     }
-    let square = [
-        aad_geom::Vec2::new(0.0, 0.0),
-        aad_geom::Vec2::new(1.0, 0.0),
-        aad_geom::Vec2::new(1.0, 1.0),
-        aad_geom::Vec2::new(0.0, 1.0),
-    ];
+    let square = [aad_geom::Vec2::new(0.0, 0.0), aad_geom::Vec2::new(1.0, 0.0), aad_geom::Vec2::new(1.0, 1.0), aad_geom::Vec2::new(0.0, 1.0)];
     let loop_verts: Vec<_> = square.iter().copied().map(aad_geom::PolyVertex::new).collect();
     let hatch = Hatch {
         pattern: name.into(),
@@ -349,9 +344,7 @@ fn hatch_pattern_preview(name: &str) -> Value {
     let segments: Vec<Value> = aad_render::pattern_lines(&hatch, &loops)
         .into_iter()
         .take(500)
-        .map(|seg| {
-            json!(seg.iter().take(64).map(|p| [round6(p.x), round6(p.y)]).collect::<Vec<_>>())
-        })
+        .map(|seg| json!(seg.iter().take(64).map(|p| [round6(p.x), round6(p.y)]).collect::<Vec<_>>()))
         .collect();
     json!({ "solid": false, "segments": segments })
 }

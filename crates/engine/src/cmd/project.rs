@@ -44,9 +44,8 @@ pub(crate) fn set(d: &mut Drawing, key: &str, v: &Value) {
 }
 
 const FLOOR_NAMES: [&str; 5] = ["Ground", "First", "Second", "Third", "Fourth"];
-const DETAIL_KEYS: [&str; 12] = [
-    "title", "owner", "architect", "engineer", "pid", "siteArea", "plotUse", "address", "authority", "date", "location", "summary",
-];
+const DETAIL_KEYS: [&str; 12] =
+    ["title", "owner", "architect", "engineer", "pid", "siteArea", "plotUse", "address", "authority", "date", "location", "summary"];
 
 fn floor_name(i: usize) -> String {
     FLOOR_NAMES.get(i).map_or_else(|| format!("Floor {i}"), |s| (*s).to_string())
@@ -111,9 +110,7 @@ fn num(v: &Value, key: &str, default: f64) -> f64 {
 }
 
 fn text_detail(v: &Value) -> Option<String> {
-    v.as_str()
-        .map(str::to_string)
-        .or_else(|| v.as_f64().map(|n| n.to_string()))
+    v.as_str().map(str::to_string).or_else(|| v.as_f64().map(|n| n.to_string()))
 }
 
 fn apply_structure(d: &mut Drawing, slab: f64, beam: f64) -> Result<()> {

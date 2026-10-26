@@ -101,12 +101,11 @@ pub(crate) fn load_tables(s: &Session, p: &Value) -> Result<Value> {
     if header.get("state").and_then(Value::as_str) != Some("complete") {
         return Err(bad("takeoff.restore", "the drawing is still recording; wait for a complete takeoff.record"));
     }
-    header.get("takeoff_tables").cloned().filter(|t| t.as_object().is_some_and(|o| !o.is_empty())).ok_or_else(|| {
-        bad(
-            "takeoff.restore",
-            "the ShilpiDB header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored",
-        )
-    })
+    header
+        .get("takeoff_tables")
+        .cloned()
+        .filter(|t| t.as_object().is_some_and(|o| !o.is_empty()))
+        .ok_or_else(|| bad("takeoff.restore", "the ShilpiDB header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored"))
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -507,13 +506,13 @@ fn write_slot(
 #[cfg(not(target_arch = "wasm32"))]
 fn app_bin_dirs() -> Vec<std::path::PathBuf> {
     let mut dirs = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            dirs.push(dir.to_path_buf());
-            // Some layouts put the shell one folder deeper than the staged binaries.
-            if let Some(parent) = dir.parent() {
-                dirs.push(parent.to_path_buf());
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        dirs.push(dir.to_path_buf());
+        // Some layouts put the shell one folder deeper than the staged binaries.
+        if let Some(parent) = dir.parent() {
+            dirs.push(parent.to_path_buf());
         }
     }
     if let Some(d) = std::env::var_os("LOCALAPPDATA") {

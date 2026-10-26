@@ -91,16 +91,8 @@ fn furniture_section(app: &mut CadApp, ui: &mut egui::Ui) {
             ui.label(egui::RichText::new(last_cat.to_ascii_uppercase()).small().strong().color(t.text_dim));
         }
         let size = item.size_mm.as_deref().unwrap_or("");
-        let label = if size.is_empty() {
-            item.title.clone()
-        } else {
-            format!("{} · {} mm", item.title, size)
-        };
-        if ui
-            .button(&label)
-            .on_hover_text(item.note.as_deref().unwrap_or("Place at the picked point (drawing scale)"))
-            .clicked()
-        {
+        let label = if size.is_empty() { item.title.clone() } else { format!("{} · {} mm", item.title, size) };
+        if ui.button(&label).on_hover_text(item.note.as_deref().unwrap_or("Place at the picked point (drawing scale)")).clicked() {
             insert_path = Some((item.file.trim_end_matches(".dxf").trim_end_matches(".DXF").to_string(), path.clone()));
         }
     }
@@ -156,11 +148,7 @@ pub(crate) fn blocks_section(app: &mut CadApp, ui: &mut egui::Ui) {
         let (prev, _) = ui.allocate_exact_size(vec2(ui.available_width().min(180.0), 120.0), Sense::hover());
         preview(ui, prev, d, b);
         ui.horizontal(|ui| {
-            if ui
-                .button(crate::tl!("Insert"))
-                .on_hover_text(crate::tl!("Place the selected block at the picked point (drawing scale)"))
-                .clicked()
-            {
+            if ui.button(crate::tl!("Insert")).on_hover_text(crate::tl!("Place the selected block at the picked point (drawing scale)")).clicked() {
                 action = Some(("insert", name.clone()));
             }
             let list = refs.get(&name).cloned().unwrap_or_default();

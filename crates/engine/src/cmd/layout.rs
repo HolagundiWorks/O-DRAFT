@@ -842,11 +842,7 @@ impl PlotWindowM {
     }
 
     fn request(&self, s: &mut Session, window: Option<[f64; 4]>) -> Result<Step> {
-        s.plot_request = Some(crate::PlotRequest {
-            window,
-            layout: self.layout.clone(),
-            preview: self.preview,
-        });
+        s.plot_request = Some(crate::PlotRequest { window, layout: self.layout.clone(), preview: self.preview });
         Ok(Step::Done)
     }
 }
@@ -863,11 +859,7 @@ impl Interactive for PlotWindowM {
                 let _ = s.execute("layout.set", &json!({ "name": "Model" }));
             }
         }
-        if matches!(s.space(), Space::Model) {
-            Ok(Step::Continue)
-        } else {
-            self.request(s, None)
-        }
+        if matches!(s.space(), Space::Model) { Ok(Step::Continue) } else { self.request(s, None) }
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         match self.first {

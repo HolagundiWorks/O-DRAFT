@@ -93,7 +93,6 @@ fn stairs_report_risers_goings_and_concrete_from_their_inputs() {
     assert!((mr["concrete"].as_f64().unwrap() - c).abs() < 0.02, "concrete m3 matches mm drawing");
 }
 
-
 #[test]
 fn lift_shafts_and_handrails() {
     let mut s = session();

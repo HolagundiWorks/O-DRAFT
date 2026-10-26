@@ -111,11 +111,8 @@ fn forms_exist_for_the_commands_people_open_from_menus() {
 fn project_and_floors_forms_round_trip_through_their_commands() {
     let mut s = session();
     let f = forms::get("project").unwrap();
-    let params = forms::parse_input(
-        f,
-        &json!({"title": "Rao House", "owner": "S. Rao", "siteArea": "186.5", "slabMm": "150", "beamMm": "450"}),
-    )
-    .unwrap();
+    let params =
+        forms::parse_input(f, &json!({"title": "Rao House", "owner": "S. Rao", "siteArea": "186.5", "slabMm": "150", "beamMm": "450"})).unwrap();
     s.execute("project", &params).unwrap();
     assert_eq!(forms::prefill(&s, f)["title"], "Rao House");
     assert_eq!(forms::prefill(&s, f)["slabMm"], 150.0);

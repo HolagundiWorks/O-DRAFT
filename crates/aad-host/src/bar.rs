@@ -68,11 +68,7 @@ pub fn classify(buffer: &str) -> Kind {
         return Kind::Native;
     }
     let words = first.chars().next().is_some_and(char::is_alphabetic);
-    if words && text.split_whitespace().count() >= 2 {
-        Kind::Natural
-    } else {
-        Kind::Partial
-    }
+    if words && text.split_whitespace().count() >= 2 { Kind::Natural } else { Kind::Partial }
 }
 
 pub fn is_reference_marker(word: &str) -> bool {
