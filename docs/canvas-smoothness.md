@@ -56,7 +56,7 @@ Every frame goes through one shared path (WinUI host and optional egui shell). T
 | # | Change | Fixes | Effort | Status |
 | --- | --- | --- | --- | --- |
 | 7 | Joined stroke strips (butt edges + round join/cap discs; negative instance width = butt) | #4 | ~1 w | **Done** (`stroke_polyline` in `mesh.rs`) |
-| 8 | Flatten glyphs by zoom tolerance; cache per glyph × octave | #5 | 2–3 d | Planned |
+| 8 | Flatten glyphs by zoom tolerance; cache per glyph × octave | #5 | 2–3 d | **Done** (`with_world_chord_tol` + flatten band in glyph cache) |
 | 9 | Density fade for hatches/text instead of hard LOD cut-offs | #7 | 3 d | Planned |
 | 10 | Lineweight modes: screen (model) + true scale (layouts) | presentation | 2 d | Planned |
 

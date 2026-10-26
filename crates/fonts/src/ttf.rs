@@ -14,6 +14,7 @@
 //! On native builds both start from the `AAD_FONTALT` / `AAD_FONTFALLBACK`
 //! environment variables.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
@@ -25,6 +26,33 @@ use skrifa::raw::FileRef;
 use skrifa::{FontRef, MetadataProvider};
 
 use crate::{Run, Shaped};
+
+thread_local! {
+    /// World-space chord tolerance for the current display-list build (0 = legacy fixed steps).
+    static WORLD_CHORD_TOL: Cell<f64> = const { Cell::new(0.0) };
+}
+
+/// Run `f` with TrueType outlines flattened to about `tol` world units (matches render tessellation).
+pub fn with_world_chord_tol<R>(tol: f64, f: impl FnOnce() -> R) -> R {
+    WORLD_CHORD_TOL.with(|c| {
+        let prev = c.replace(if tol.is_finite() && tol > 0.0 { tol } else { 0.0 });
+        let out = f();
+        c.set(prev);
+        out
+    })
+}
+
+fn world_chord_tol() -> f64 {
+    WORLD_CHORD_TOL.with(Cell::get)
+}
+
+/// Quantize font-unit chord tolerance for the glyph cache (same octave → same outline).
+fn flatten_band(font_tol: f64) -> i32 {
+    if !(font_tol.is_finite() && font_tol > 0.0) {
+        return i32::MIN;
+    }
+    font_tol.max(1e-12).log2().floor() as i32
+}
 
 /// One face of a font file (a TrueType collection holds several).
 #[derive(Clone)]
@@ -533,9 +561,9 @@ pub(crate) struct GlyphOutline {
     mapped: bool,
 }
 
-/// Cached glyph outlines keyed by (font bytes address, length, face, char). Fonts live for the
-/// whole process in the font table, so the address identifies them.
-type GlyphCache = HashMap<(usize, usize, u32, char), Arc<GlyphOutline>>;
+/// Cached glyph outlines keyed by (font bytes address, length, face, char, flatten band).
+/// Fonts live for the whole process in the font table, so the address identifies them.
+type GlyphCache = HashMap<(usize, usize, u32, char, i32), Arc<GlyphOutline>>;
 
 fn glyph_cache() -> &'static Mutex<GlyphCache> {
     static C: OnceLock<Mutex<GlyphCache>> = OnceLock::new();
@@ -548,6 +576,8 @@ const UPEM: f32 = 1000.0;
 struct Pen {
     contours: Vec<Vec<Vec2>>,
     cur: Vec<Vec2>,
+    /// Chord tolerance in font units; 0 keeps the legacy fixed 6 / 8 steps.
+    tol: f64,
 }
 
 impl Pen {
@@ -566,6 +596,32 @@ impl Pen {
             self.cur.clear();
         }
     }
+    fn fixed_steps(&self, kind: u32) -> u32 {
+        if kind == 2 { 6 } else { 8 }
+    }
+    fn steps_for(&self, approx_len: f64, kind: u32) -> u32 {
+        if !(self.tol.is_finite() && self.tol > 0.0) {
+            return self.fixed_steps(kind);
+        }
+        let n = (approx_len / self.tol).ceil() as u32;
+        n.clamp(self.fixed_steps(kind), 48)
+    }
+    fn push_quad(&mut self, a: Vec2, c: Vec2, b: Vec2) {
+        let n = self.steps_for(a.dist(c) + c.dist(b), 2);
+        for i in 1..=n {
+            let t = f64::from(i) / f64::from(n);
+            let u = 1.0 - t;
+            self.cur.push(a * (u * u) + c * (2.0 * u * t) + b * (t * t));
+        }
+    }
+    fn push_cubic(&mut self, a: Vec2, c0: Vec2, c1: Vec2, b: Vec2) {
+        let n = self.steps_for(a.dist(c0) + c0.dist(c1) + c1.dist(b), 3);
+        for i in 1..=n {
+            let t = f64::from(i) / f64::from(n);
+            let u = 1.0 - t;
+            self.cur.push(a * (u * u * u) + c0 * (3.0 * u * u * t) + c1 * (3.0 * u * t * t) + b * (t * t * t));
+        }
+    }
 }
 
 impl OutlinePen for Pen {
@@ -578,24 +634,11 @@ impl OutlinePen for Pen {
     }
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
         let a = self.cur.last().copied().unwrap_or_default();
-        let c = Self::pt(cx0, cy0);
-        let b = Self::pt(x, y);
-        for i in 1..=6 {
-            let t = f64::from(i) / 6.0;
-            let u = 1.0 - t;
-            self.cur.push(a * (u * u) + c * (2.0 * u * t) + b * (t * t));
-        }
+        self.push_quad(a, Self::pt(cx0, cy0), Self::pt(x, y));
     }
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
         let a = self.cur.last().copied().unwrap_or_default();
-        let c0 = Self::pt(cx0, cy0);
-        let c1 = Self::pt(cx1, cy1);
-        let b = Self::pt(x, y);
-        for i in 1..=8 {
-            let t = f64::from(i) / 8.0;
-            let u = 1.0 - t;
-            self.cur.push(a * (u * u * u) + c0 * (3.0 * u * u * t) + c1 * (3.0 * u * t * t) + b * (t * t * t));
-        }
+        self.push_cubic(a, Self::pt(cx0, cy0), Self::pt(cx1, cy1), Self::pt(x, y));
     }
     fn close(&mut self) {
         self.flush();
@@ -616,16 +659,17 @@ fn cap_height(f: &FontRef) -> f64 {
 }
 
 /// The outline of `c` in `face` (its missing-glyph shape when unmapped; empty when the face
-/// doesn't parse).
-pub(crate) fn glyph(face: &Face, c: char) -> Arc<GlyphOutline> {
-    let key = (face.bytes.as_ptr() as usize, face.bytes.len(), face.index, c);
+/// doesn't parse). `font_tol` is the chord tolerance in font units (0 = fixed 6/8 steps).
+pub(crate) fn glyph(face: &Face, c: char, font_tol: f64) -> Arc<GlyphOutline> {
+    let band = flatten_band(font_tol);
+    let key = (face.bytes.as_ptr() as usize, face.bytes.len(), face.index, c, band);
     if let Some(g) = glyph_cache().lock().unwrap_or_else(PoisonError::into_inner).get(&key) {
         return g.clone();
     }
     let Some(f) = face.font() else { return Arc::new(GlyphOutline { cap: 1.0, ..Default::default() }) };
     let mapped = f.charmap().map(c);
     let gid = mapped.unwrap_or_default();
-    let mut pen = Pen { contours: Vec::new(), cur: Vec::new() };
+    let mut pen = Pen { contours: Vec::new(), cur: Vec::new(), tol: font_tol };
     if let Some(g) = f.outline_glyphs().get(gid) {
         let _ = g.draw(DrawSettings::unhinted(Size::new(UPEM), LocationRef::default()), &mut pen);
         pen.flush();
@@ -643,16 +687,21 @@ pub(crate) fn glyph(face: &Face, c: char) -> Arc<GlyphOutline> {
 /// The outline of `c` from a fallback font, if any installed font has it.
 pub(crate) fn fallback_glyph(c: char) -> Option<Arc<GlyphOutline>> {
     let f = fallback_for(c)?;
-    Some(glyph(&f, c)).filter(|g| g.mapped)
+    Some(glyph(&f, c, 0.0)).filter(|g| g.mapped)
+}
+
+fn fallback_glyph_tol(c: char, font_tol: f64) -> Option<Arc<GlyphOutline>> {
+    let f = fallback_for(c)?;
+    Some(glyph(&f, c, font_tol)).filter(|g| g.mapped)
 }
 
 /// The glyph of `c` in `face`, or from a fallback font when `face` lacks it.
-fn glyph_or_fallback(face: &Face, c: char) -> Arc<GlyphOutline> {
-    let g = glyph(face, c);
+fn glyph_or_fallback(face: &Face, c: char, font_tol: f64) -> Arc<GlyphOutline> {
+    let g = glyph(face, c, font_tol);
     if g.mapped || c.is_whitespace() {
         return g;
     }
-    fallback_glyph(c).unwrap_or(g)
+    fallback_glyph_tol(c, font_tol).unwrap_or(g)
 }
 
 /// Contours of a glyph scaled so its font's cap height is `h`, at pen position `x`.
@@ -675,15 +724,19 @@ pub(crate) fn place_glyph(g: &GlyphOutline, x: f64, h: f64, wf: f64, shear: f64)
 /// y = 0, x from 0) plus `%%u`/`%%o` decorations as strokes. Text height = cap height.
 /// Characters the face lacks come from a fallback font, scaled to its own cap height.
 pub fn shape(face: &Face, s: &str, height: f64, width_factor: f64, oblique: f64) -> Option<Shaped> {
-    face.font()?;
+    let f = face.font()?;
     let h = if height.is_finite() && height > 0.0 { height } else { 1.0 };
     let wf = if width_factor.is_finite() && width_factor.abs() > 1e-6 { width_factor } else { 1.0 };
     let shear = oblique.tan().clamp(-10.0, 10.0);
+    let cap = cap_height(&f);
+    let world_tol = world_chord_tol();
+    // Font-unit chord so that after place_glyph (scale = h/cap) the world error ≈ world_tol.
+    let font_tol = if world_tol > 0.0 { world_tol * cap / h } else { 0.0 };
     let mut out = Shaped::default();
     let mut spans = Vec::new();
     let mut x = 0.0;
     for (c, under, over) in crate::decode_controls(s) {
-        let g = glyph_or_fallback(face, c);
+        let g = glyph_or_fallback(face, c, font_tol);
         if !c.is_whitespace() {
             let contours = place_glyph(&g, x, h, wf, shear);
             if !contours.is_empty() {
@@ -707,7 +760,7 @@ pub fn width(face: &Face, s: &str, height: f64, width_factor: f64) -> Option<f64
         crate::decode_controls(s)
             .iter()
             .map(|(c, _, _)| {
-                let g = glyph_or_fallback(face, *c);
+                let g = glyph_or_fallback(face, *c, 0.0);
                 g.advance * height / g.cap * wf
             })
             .sum(),

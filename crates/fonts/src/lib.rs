@@ -16,6 +16,7 @@ pub mod ttf;
 use aad_geom::{Bounds2, Vec2};
 
 pub use mtext::{MTextColor, MTextLayout, MTextParams, MTextPiece, layout_mtext, layout_mtext_with, plain_mtext};
+pub use ttf::with_world_chord_tol;
 
 /// Name of the built-in font.
 pub const BUILTIN_FONT: &str = "AAD Stroke";
@@ -211,7 +212,7 @@ impl TextFont {
     /// Segoe UI face for drawing text, with optional bold/italic (MTEXT `\f…|b1|i1`).
     pub fn drawing_face(bold: bool, italic: bool) -> TextFont {
         for cand in drawing_face_candidates(bold, italic) {
-            if let Some(f) = ttf::find(&cand) {
+            if let Some(f) = ttf::find(cand) {
                 return TextFont::Outline(f);
             }
         }
@@ -226,39 +227,10 @@ impl TextFont {
 /// Candidate face names for Segoe UI (and a last-resort Arial) under Windows naming.
 fn drawing_face_candidates(bold: bool, italic: bool) -> Vec<&'static str> {
     match (bold, italic) {
-        (true, true) => vec![
-            "Segoe UI Bold Italic",
-            "segoeuiz",
-            "Segoe UI Bold",
-            "segoeuib",
-            DRAWING_FONT,
-            "segoeui",
-            "Arial Bold Italic",
-            "Arial",
-        ],
-        (true, false) => vec![
-            "Segoe UI Bold",
-            "segoeuib",
-            "Segoe UI Semibold",
-            DRAWING_FONT,
-            "segoeui",
-            "Arial Bold",
-            "Arial",
-        ],
-        (false, true) => vec![
-            "Segoe UI Italic",
-            "segoeuii",
-            DRAWING_FONT,
-            "segoeui",
-            "Arial Italic",
-            "Arial",
-        ],
-        (false, false) => vec![
-            DRAWING_FONT,
-            "segoeui",
-            "Segoe UI Variable",
-            "Arial",
-        ],
+        (true, true) => vec!["Segoe UI Bold Italic", "segoeuiz", "Segoe UI Bold", "segoeuib", DRAWING_FONT, "segoeui", "Arial Bold Italic", "Arial"],
+        (true, false) => vec!["Segoe UI Bold", "segoeuib", "Segoe UI Semibold", DRAWING_FONT, "segoeui", "Arial Bold", "Arial"],
+        (false, true) => vec!["Segoe UI Italic", "segoeuii", DRAWING_FONT, "segoeui", "Arial Italic", "Arial"],
+        (false, false) => vec![DRAWING_FONT, "segoeui", "Segoe UI Variable", "Arial"],
     }
 }
 
@@ -557,6 +529,22 @@ mod ttf_tests {
         assert!(run.width > 1.5 && run.width < 4.0, "width {}", run.width);
         let maxy = run.strokes.iter().flatten().map(|p| p.y).fold(f64::MIN, f64::max);
         assert!((maxy - 1.0).abs() < 0.1, "cap height ~ text height, got {maxy}");
+    }
+
+    #[test]
+    fn tighter_chord_tolerance_adds_outline_points() {
+        let Some(face) = ["Arial", "Helvetica", "DejaVuSans", "Verdana", "LiberationSans-Regular"].iter().find_map(|n| crate::ttf::find(n)) else {
+            return;
+        };
+        let count = |tol: f64| {
+            crate::ttf::with_world_chord_tol(tol, || {
+                let run = crate::ttf::layout_line(&face, "O", 10.0, 1.0, 0.0).unwrap();
+                run.strokes.iter().map(|c| c.len()).sum::<usize>()
+            })
+        };
+        let coarse = count(1.0);
+        let fine = count(0.05);
+        assert!(fine > coarse, "fine={fine} coarse={coarse}");
     }
 
     #[test]

@@ -406,6 +406,10 @@ fn top_ctx<'a>(d: &'a Drawing, xf: Mat3, top: Handle, frozen: &'a [String], vp_c
 }
 
 fn build_space(d: &Drawing, space: &Space, opts: &Options, plotting: bool) -> DisplayList {
+    aad_fonts::with_world_chord_tol(opts.tolerance, || build_space_inner(d, space, opts, plotting))
+}
+
+fn build_space_inner(d: &Drawing, space: &Space, opts: &Options, plotting: bool) -> DisplayList {
     let opts = &with_point_view(d, space, opts);
     let table = opts.plot_style_table.clone().or_else(|| match space {
         Space::Paper(n) if !plotting => d
@@ -429,15 +433,18 @@ fn build_space(d: &Drawing, space: &Space, opts: &Options, plotting: bool) -> Di
             // appended in draw order.
             use rayon::prelude::*;
             let budget = std::sync::atomic::AtomicUsize::new(0);
+            let tol = opts.tolerance;
             let parts: Vec<DisplayList> = ents
                 .par_chunks(PARALLEL_CHUNK)
                 .map(|chunk| {
-                    let mut sub =
-                        Builder { list: DisplayList::default(), opts, plotting, styles: styler.as_ref(), named: None, budget: Some(&budget) };
-                    for e in chunk {
-                        entity(&mut sub, &top_ctx(d, Mat3::IDENTITY, e.handle, &[], &[]), e);
-                    }
-                    sub.list
+                    aad_fonts::with_world_chord_tol(tol, || {
+                        let mut sub =
+                            Builder { list: DisplayList::default(), opts, plotting, styles: styler.as_ref(), named: None, budget: Some(&budget) };
+                        for e in chunk {
+                            entity(&mut sub, &top_ctx(d, Mat3::IDENTITY, e.handle, &[], &[]), e);
+                        }
+                        sub.list
+                    })
                 })
                 .collect();
             for part in parts {
@@ -931,20 +938,22 @@ fn push_raw(dst: &mut DisplayList, p: &DPrim, kind: Kind, pts: &[Vec2]) {
 
 /// Build the display list for a set of loose entities (previews, rubber bands).
 pub fn build_entities<'a, I: IntoIterator<Item = &'a Entity>>(d: &Drawing, ents: I, opts: &Options) -> DisplayList {
-    let ents: Vec<&Entity> = ents.into_iter().collect();
-    // Only previews holding points need the model extents for relative point sizes.
-    let with_view;
-    let opts = if ents.iter().any(|e| matches!(e.kind, EntityKind::Point(_))) {
-        with_view = with_point_view(d, &Space::Model, opts);
-        &with_view
-    } else {
-        opts
-    };
-    let mut b = Builder { list: DisplayList::default(), opts, plotting: false, styles: None, named: None, budget: None };
-    for e in ents {
-        entity(&mut b, &top_ctx(d, Mat3::IDENTITY, e.handle, &[], &[]), e);
-    }
-    b.list
+    aad_fonts::with_world_chord_tol(opts.tolerance, || {
+        let ents: Vec<&Entity> = ents.into_iter().collect();
+        // Only previews holding points need the model extents for relative point sizes.
+        let with_view;
+        let opts = if ents.iter().any(|e| matches!(e.kind, EntityKind::Point(_))) {
+            with_view = with_point_view(d, &Space::Model, opts);
+            &with_view
+        } else {
+            opts
+        };
+        let mut b = Builder { list: DisplayList::default(), opts, plotting: false, styles: None, named: None, budget: None };
+        for e in ents {
+            entity(&mut b, &top_ctx(d, Mat3::IDENTITY, e.handle, &[], &[]), e);
+        }
+        b.list
+    })
 }
 
 fn resolve(ctx: &Ctx, e: &Entity, plotting: bool) -> (Ink, f32, Option<aad_doc::Linetype>, f64, bool) {
