@@ -510,12 +510,7 @@ fn make_room(s: &mut Session, p1: Vec2, p2: Vec2, name: &str, prefix: &str, rect
     // Group the rectangle (if any) with its labels so grip edits can refresh size and area.
     let key = handles.first().map(|h| h.hex()).unwrap_or_else(|| "0".into());
     let d = s.doc_mut()?;
-    d.groups.push(Group {
-        name: format!("AAD-ROOM-{key}"),
-        description: ROOM_GROUP_DESC.into(),
-        selectable: true,
-        members: handles.clone(),
-    });
+    d.groups.push(Group { name: format!("AAD-ROOM-{key}"), description: ROOM_GROUP_DESC.into(), selectable: true, members: handles.clone() });
     Ok(RoomLabel { name: full, width: w, height: h, handles, area, unit })
 }
 
@@ -594,11 +589,7 @@ fn refresh_room_labels(s: &mut Session, members: &[Handle]) -> Result<()> {
     let (area, unit) = area_in(u, w * h);
     let dim_s = format_dim(u, w, h);
     let area_s = format!("Area: {area:.2} {unit}");
-    let updates = [
-        (name_h, name_val.as_str(), 0.0, th),
-        (dim_h, dim_s.as_str(), th * 1.5, th * 0.8),
-        (area_h, area_s.as_str(), th * 2.8, th * 0.7),
-    ];
+    let updates = [(name_h, name_val.as_str(), 0.0, th), (dim_h, dim_s.as_str(), th * 1.5, th * 0.8), (area_h, area_s.as_str(), th * 2.8, th * 0.7)];
     for (handle, text, down, height) in updates {
         s.doc_mut()?.modify_entity(handle, |e| {
             if let EntityKind::Text(t) = &mut e.kind {

@@ -23,12 +23,12 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | main.splitter | Side panel width grip | toolbar | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (LeftSplitter) | Drag or arrow keys when focused | not_tested | — |
 | main.status | Status bar | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (StatusRow) | Window ▸ Status bar | pass | screenshots/03-main-clean-drawing1.webp |
 | main.status.drawings | Open drawing tabs + New | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (DrawingTabs) | Status bar left cluster | pass | `Drawing1` clean (no ` *`); QA-2026-003 |
-| main.status.nameplate | Nameplate designer button | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (NameplateButton) | Status bar; runs sheet.designer | not_tested | — |
+| main.status.nameplate | Nameplate L / P menu | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (NameplateButton) | Status bar; flyout opens Nameplate L or Nameplate P via sheet.designer | not_tested | — |
 | main.status.coords | Cursor coordinates | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (Coords) | Host chrome refresh | pass | live coords on status |
 | main.status.modes | Snap / Ortho / Polar / OTrack / Dyn / LW / Transparency / Quick props toggles | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (status toggles) | Status bar right cluster | pass | toggles visible |
 | main.status.units | Drafting units combo | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (UnitsBox) | Status bar; drawing.units metadata | pass | shows `in` |
 | main.status.layers-btn | Open layer manager | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (LayersButton) | Status bar layers icon → OpenLayers() | not_tested | — |
-| main.status.pdf | PDF preview | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (PdfButton) | Status bar → PDF window | not_tested | — |
+| main.status.pdf | Plot preview | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (PdfButton) | Status bar → plotl/plotp window pick, then temporary nameplate PDF preview | not_tested | — |
 | main.status.workspace | Classic / Pro workspace | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (WorkspaceButton) | Status bar; Ctrl+F11 toggle | not_tested | — |
 | main.status.theme | Light / dark theme | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (ThemeButton) | Status bar | not_tested | — |
 | main.status.ai-chip | AI assistant chip | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (AiChip) | Focus Ask bar (CommandChrome host window) | not_tested | — |
@@ -36,7 +36,7 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | main.ask-bar | Ask pill / AI prompt (hosted in separate HWND) | overlay | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/CommandChrome.cs; MainWindow.xaml (CommandBar, AskInputPill) | Ctrl+9 toggle command line area; AI chip; assistant mode | not_tested | — |
 | main.ask-history | Command history list (Ask bar) | overlay | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (HistoryList) | F2 toggles command history open state | not_tested | — |
 | main.ask-assistant | Allow / Decline assistant tools | overlay | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (AssistantButtons) | When host reports pending assistant action | not_tested | — |
-| arch.tool.wall.draw | Architecture bar: Wall | toolbar | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('ArchitectureTools') | Arch bar button → StartCommand("wall.draw") | not_tested | — |
+| arch.tool.wall.draw | Architecture bar: Wall | toolbar | — | Removed from Architecture bar; `wall.draw` remains command-line / scripts | removed | 2026-10-26 |
 | arch.tool.wall.door | Architecture bar: Door | toolbar | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('ArchitectureTools') | Arch bar button → StartCommand("wall.door") | not_tested | — |
 | arch.tool.wall.window | Architecture bar: Window | toolbar | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('ArchitectureTools') | Arch bar button → StartCommand("wall.window") | not_tested | — |
 | arch.tool.room | Architecture bar: Room | toolbar | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('ArchitectureTools') | Arch bar button → StartCommand("room") | not_tested | — |
@@ -75,7 +75,8 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | win.menu.shell.calc | Window menu: Calculator | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('EnsureShellMenus') | Window ▸ Calculator | not_tested | — |
 | win.menu.shell.pomodoro | Window menu: Pomodoro | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('EnsureShellMenus') | Window ▸ Pomodoro | not_tested | — |
 | win.menu.shell.customize-toolbar | Window menu: Customize tool bar | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('EnsureShellMenus') | Window ▸ Customize tool bar | not_tested | — |
-| win.menu.shell.nameplate | Window menu: Nameplate designer | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('EnsureShellMenus') | Window ▸ Nameplate designer | not_tested | — |
+| win.menu.shell.nameplate | Window menu: Nameplate L / P | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('EnsureShellMenus') | Window ▸ Nameplate L / Nameplate P | not_tested | — |
+| main.panel.project | Project settings side tab | panel | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (ProjectTab) | Side tab; slab/beam defaults + links to project/floors forms | not_tested | — |
 | win.menu.shell.ucs | Window menu: UCS icon | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('EnsureShellMenus') | Window ▸ UCS icon | not_tested | — |
 | help.commands | Help: Command list | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('EnsureHelp') | Help menu or F1 → CommandList.Show | not_tested | — |
 | help.about | Help: About O-Draft | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/AboutWindow.cs | Help menu → AboutWindow.Show | not_tested | — |
@@ -101,7 +102,7 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | win.pomodoro | Pomodoro | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/PomodoroWindow.cs | Window menu | not_tested | — |
 | win.tools | Tool bar (customize) | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/ToolsWindow.cs | `ui.dialog.customizetop`; tool strip gear | not_tested | — |
 | win.panels-float | Panels (floating side tabs) | panel | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('FloatLeft') | Side panel Float button | not_tested | — |
-| win.pdf | PDF preview | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('OnPdf') | Status bar PDF button | not_tested | — |
+| win.pdf | Plot preview / PDF viewer | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('OnPlotPreview', 'ShowPdfAsync') | Status bar plot-preview button | not_tested | — |
 | win.save-prompt | Save changes prompt | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/SavePrompt.cs | Close drawing / quit with dirty document | not_tested | — |
 | win.clear-history | Clear command history | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs ('OnClearHistory') | Hidden UI wiring / clear history action | not_tested | — |
 | win.canvas-menu | Canvas context menu window | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/CanvasMenu.cs | Host popup JSON (`ReadPopup`); right-click / snap menu | not_tested | — |
@@ -120,8 +121,8 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | picker.vdb-import | ShilpiDB import .vdb | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | Menu / `vdb.import` | not_tested | — |
 | picker.vdb-export | ShilpiDB export .vdb | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | Menu / `vdb.export` | not_tested | — |
 | picker.pdf-open | Open PDF from preview | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | PDF preview toolbar | not_tested | — |
-| form.project | Form dialog: Project Details | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id project) | Command project (or alias) when engine returns form JSON | not_tested | — |
-| form.floors | Form dialog: Floors and Heights | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id floors) | Command floors (or alias) when engine returns form JSON | not_tested | — |
+| form.project | Form dialog: Project Settings | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id project) | Command project (or alias) when engine returns form JSON | not_tested | — |
+| form.floors | Form dialog: Floors | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id floors) | Command floors (or alias) when engine returns form JSON | not_tested | — |
 | form.beams | Form dialog: Beam Depths | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id beams) | Command beams (or alias) when engine returns form JSON | not_tested | — |
 | form.schedule | Form dialog: Opening Schedule Edit | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id schedule) | Command schedule (or alias) when engine returns form JSON | not_tested | — |
 | form.notes | Form dialog: Notes Edit | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id notes) | Command notes (or alias) when engine returns form JSON | not_tested | — |
@@ -213,8 +214,8 @@ Populated at runtime from host menu JSON (`BuildMenus()`). Top-level order: File
 | menu.beams | Architecture > Project > Beam Depths | menu | crates/engine/src/cmd/project.rs (+ host chrome) | Menu bar path; command id beams via StartCommand / accelerator | not_tested | — |
 | menu.levels | Architecture > Project > Building Levels | menu | crates/engine/src/cmd/project.rs (+ host chrome) | Menu bar path; command id levels via StartCommand / accelerator | not_tested | — |
 | menu.companyfile | Architecture > Project > Company File Details | menu | crates/engine/src/cmd/companyfile.rs (+ host chrome) | Menu bar path; command id companyfile via StartCommand / accelerator | not_tested | — |
-| menu.floors | Architecture > Project > Floors and Heights | menu | crates/engine/src/cmd/project.rs (+ host chrome) | Menu bar path; command id floors via StartCommand / accelerator | not_tested | — |
-| menu.project | Architecture > Project > Project Details | menu | crates/engine/src/cmd/project.rs (+ host chrome) | Menu bar path; command id project via StartCommand / accelerator | not_tested | — |
+| menu.floors | Architecture > Project > Floors | menu | crates/engine/src/cmd/project.rs (+ host chrome) | Menu bar path; command id floors via StartCommand / accelerator | not_tested | — |
+| menu.project | Architecture > Project > Project Settings | menu | crates/engine/src/cmd/project.rs (+ host chrome) | Menu bar path; command id project via StartCommand / accelerator | not_tested | — |
 | menu.polyarea | Architecture > Rooms and Areas > Polyline Area Table | menu | crates/engine/src/cmd/legacytools.rs (+ host chrome) | Menu bar path; command id polyarea via StartCommand / accelerator | not_tested | — |
 | menu.room.relabel | Architecture > Rooms and Areas > Rename Room Label | menu | crates/engine/src/cmd/roomtools.rs (+ host chrome) | Menu bar path; command id room.relabel via StartCommand / accelerator | not_tested | — |
 | menu.rarea | Architecture > Rooms and Areas > Room Area | menu | crates/engine/src/cmd/hcw.rs (+ host chrome) | Menu bar path; command id rarea via StartCommand / accelerator | not_tested | — |
@@ -281,7 +282,7 @@ Populated at runtime from host menu JSON (`BuildMenus()`). Top-level order: File
 | menu.vhlayers | Architecture > VH Layers > Create VH Layer Set | menu | crates/engine/src/cmd/legacytools.rs (+ host chrome) | Menu bar path; command id vhlayers via StartCommand / accelerator | not_tested | — |
 | menu.wall.clean | Architecture > Walls and Openings > Clean Lines | menu | crates/engine/src/cmd/walls.rs (+ host chrome) | Menu bar path; command id wall.clean via StartCommand / accelerator | not_tested | — |
 | menu.wall.door | Architecture > Walls and Openings > Door | menu | crates/engine/src/cmd/walls.rs (+ host chrome) | Menu bar path; command id wall.door via StartCommand / accelerator | not_tested | — |
-| menu.wall.draw | Architecture > Walls and Openings > Draw Wall | menu | crates/engine/src/cmd/walls.rs (+ host chrome) | Menu bar path; command id wall.draw via StartCommand / accelerator | not_tested | — |
+| menu.wall.draw | Architecture > Walls and Openings > Draw Wall | menu | crates/engine/src/cmd/walls.rs | Menu entry removed; command id wall.draw remains for CLI / scripts | removed | 2026-10-26 |
 | menu.wall.window | Architecture > Walls and Openings > Window | menu | crates/engine/src/cmd/walls.rs (+ host chrome) | Menu bar path; command id wall.window via StartCommand / accelerator | not_tested | — |
 | menu.dimtedit.angle | Dimension > Align Text > Angle | menu | crates/engine/src/cmd/annotate.rs (+ host chrome) | Menu bar path; command id dimtedit.angle via StartCommand / accelerator | not_tested | — |
 | menu.dimtedit.center | Dimension > Align Text > Center | menu | crates/engine/src/cmd/annotate.rs (+ host chrome) | Menu bar path; command id dimtedit.center via StartCommand / accelerator | not_tested | — |

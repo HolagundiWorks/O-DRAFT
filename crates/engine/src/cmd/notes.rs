@@ -35,7 +35,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Format", "Notes", "Apply Notes"])
             .alias(&["notesplace", "placenotes"])
             .params("{name?: set name, at?: [x,y], title?: string} (places a numbered MTEXT list on AN-NOTES)")
-            .interactive(|_| Ok(Box::new(PlaceNotesM::default()))),
+            .interactive(|_| Ok(Box::new(PlaceNotesM))),
     ]
 }
 
@@ -53,12 +53,7 @@ fn sets(o: &Map<String, Value>) -> Map<String, Value> {
 fn items_of(set: &Value) -> Vec<String> {
     set.get("items")
         .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.trim().to_string())).filter(|s| !s.is_empty()).collect())
         .unwrap_or_default()
 }
 
@@ -97,13 +92,7 @@ fn run_edit(s: &mut Session, p: &Value) -> Result<Value> {
     let mut o = store(s.doc()?);
     let mut all = sets(&o);
     if let Some(items) = p.get("items").and_then(Value::as_array) {
-        let name = p
-            .get("name")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|n| !n.is_empty())
-            .unwrap_or("General")
-            .to_string();
+        let name = p.get("name").and_then(Value::as_str).map(str::trim).filter(|n| !n.is_empty()).unwrap_or("General").to_string();
         if name.len() > 64 {
             return Err(bad("notes", "set name is at most 64 characters"));
         }
@@ -153,9 +142,7 @@ fn numbered_mtext(items: &[String], title: &str) -> String {
 fn place_notes(s: &mut Session, name: &str, at: Vec2, title: &str) -> Result<Value> {
     let o = store(s.doc()?);
     let all = sets(&o);
-    let set = all
-        .get(name)
-        .ok_or_else(|| bad("notes.apply", format!("unknown notes set `{name}` — use `notes.std` or `notes`")))?;
+    let set = all.get(name).ok_or_else(|| bad("notes.apply", format!("unknown notes set `{name}` — use `notes.std` or `notes`")))?;
     let items = items_of(set);
     if items.is_empty() {
         return Err(bad("notes.apply", format!("notes set `{name}` has no items")));

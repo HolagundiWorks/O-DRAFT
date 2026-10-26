@@ -97,15 +97,8 @@ fn display_list_cost_by_feature() {
     let Ok(path) = std::env::var("AAD_PERF_FILE") else { return };
     let drawing = aad_io::read(&std::fs::read(&path).unwrap(), "x.dwg").unwrap();
     for (label, text, fill) in [("all", true, true), ("no text", false, true), ("no fill", true, false), ("neither", false, false)] {
-        let opts = aad_engine::render::Options {
-            tolerance: 0.5,
-            min_dash: 1.0,
-            text,
-            fill,
-            lineweights: true,
-            view_height: 0.0,
-            ..Default::default()
-        };
+        let opts =
+            aad_engine::render::Options { tolerance: 0.5, min_dash: 1.0, text, fill, lineweights: true, view_height: 0.0, ..Default::default() };
         let t0 = Instant::now();
         let list = aad_engine::render::build(&drawing, &aad_engine::doc::Space::Model, &opts);
         println!(

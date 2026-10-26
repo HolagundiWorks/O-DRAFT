@@ -16,9 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("bedit", "Block Editor", run_bedit)
             .menu(&["Tools", "Block Editor", "Open"])
             .params("{name | handle? (an INSERT)} → {name, entities} (model space becomes the block definition)"),
-        CommandSpec::new("bsave", "Save Block Definition", run_bsave)
-            .menu(&["Tools", "Block Editor", "Save"])
-            .params("{} → {name, entities}"),
+        CommandSpec::new("bsave", "Save Block Definition", run_bsave).menu(&["Tools", "Block Editor", "Save"]).params("{} → {name, entities}"),
         CommandSpec::new("bclose", "Close Block Editor", run_bclose)
             .menu(&["Tools", "Block Editor", "Close"])
             .params("{save?: bool (default false)} → {name, saved}"),

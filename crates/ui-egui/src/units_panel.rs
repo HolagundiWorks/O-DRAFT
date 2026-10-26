@@ -126,7 +126,11 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             let r = app.run("plot.config", json!({ "scale": text, "paper": paper }));
             say(app, r);
         }
-        if ui.button(crate::tl!("Apply paper")).on_hover_text(crate::tl!("Update page size and annotation sizes; keep the current scale when set")).clicked() {
+        if ui
+            .button(crate::tl!("Apply paper"))
+            .on_hover_text(crate::tl!("Update page size and annotation sizes; keep the current scale when set"))
+            .clicked()
+        {
             let r = app.run("plot.config", json!({ "paper": paper }));
             say(app, r);
         }

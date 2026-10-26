@@ -53,10 +53,8 @@ fn run_similar(s: &mut Session, p: &Value) -> Result<Value> {
     for h in &seeds {
         let Some(e) = d.entity(*h) else { continue };
         let all = properties(d, e);
-        let sig: Vec<(String, Value)> = props
-            .iter()
-            .filter_map(|name| all.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(k, v)| (k.clone(), v.clone())))
-            .collect();
+        let sig: Vec<(String, Value)> =
+            props.iter().filter_map(|name| all.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(k, v)| (k.clone(), v.clone()))).collect();
         if !sig.is_empty() {
             signatures.push(sig);
         }
@@ -68,7 +66,9 @@ fn run_similar(s: &mut Session, p: &Value) -> Result<Value> {
     let mut matched = Vec::new();
     for e in d.space(&space).into_iter().flat_map(|st| st.iter()).take(MAX_SCAN) {
         let all = properties(d, e);
-        let ok = signatures.iter().any(|sig| sig.iter().all(|(k, want)| all.iter().any(|(ak, av)| ak.eq_ignore_ascii_case(k) && compare(av, Op::Eq, want))));
+        let ok = signatures
+            .iter()
+            .any(|sig| sig.iter().all(|(k, want)| all.iter().any(|(ak, av)| ak.eq_ignore_ascii_case(k) && compare(av, Op::Eq, want))));
         if ok {
             matched.push(e.handle);
         }
@@ -93,7 +93,7 @@ fn run_filter(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "filter";
     let filters = p.get("filters").and_then(Value::as_array).ok_or_else(|| bad(CMD, "`filters` (array) is required"))?;
     if filters.is_empty() || filters.len() > MAX_FILTERS {
-        return Err(bad(CMD, format!("`filters` needs 1 to {MAX_FILTERS} entries")))
+        return Err(bad(CMD, format!("`filters` needs 1 to {MAX_FILTERS} entries")));
     }
     let apply = str_param(p, "applyTo").unwrap_or("drawing").to_ascii_lowercase();
     let mode = str_param(p, "mode").unwrap_or("new").to_ascii_lowercase();

@@ -455,12 +455,7 @@ impl Sink<'_> {
         match dm.block.as_ref().and_then(|n| d.block(n)) {
             Some(blk) => {
                 // The block holds world geometry: a reference at its own base point places it as is.
-                let ins = Insert {
-                    block: blk.name.clone(),
-                    insert: blk.base,
-                    scale: aad_geom::Vec3::new(1.0, 1.0, 1.0),
-                    ..Insert::default()
-                };
+                let ins = Insert { block: blk.name.clone(), insert: blk.base, scale: aad_geom::Vec3::new(1.0, 1.0, 1.0), ..Insert::default() };
                 block_leaves(d, &ins, &Mat3::IDENTITY, 0, budget, &mut |k, m| self.object(k, Some(m)));
             }
             None => {

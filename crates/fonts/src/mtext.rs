@@ -670,10 +670,7 @@ mod tests {
         // Still produces geometry; with Segoe UI Bold installed, outline glyphs appear.
         assert!(!l.pieces.is_empty() || !l.strokes.is_empty());
         if crate::ttf::find("Segoe UI Bold").is_some() || crate::ttf::find("segoeuib").is_some() {
-            assert!(
-                l.pieces.iter().any(|p| !p.shaped.glyphs.is_empty()),
-                "bold MTEXT switch should use Segoe UI Bold outlines"
-            );
+            assert!(l.pieces.iter().any(|p| !p.shaped.glyphs.is_empty()), "bold MTEXT switch should use Segoe UI Bold outlines");
         }
     }
 

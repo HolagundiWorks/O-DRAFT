@@ -1,6 +1,6 @@
 # O-Draft + ShilpiDB
 
-How [O-Draft](https://github.com/HolagundiWorks/AAD) uses
+How [O-Draft](https://github.com/HolagundiWorks/O-DRAFT) uses
 [ShilpiDB](https://github.com/HolagundiWorks/shilpidb) as a spatial vector store.
 
 DXF/DWG remain the editable drawing source of truth. `.vdb` is the spatial /

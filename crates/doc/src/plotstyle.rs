@@ -33,8 +33,7 @@ pub const MONOCHROME_STB: &str = "monochrome.stb";
 pub const PRESENTATION_STB: &str = "presentation.stb";
 
 /// The names of the built-in tables.
-pub const BUILTIN_PLOT_STYLE_TABLES: &[&str] =
-    &[DEFAULT_CTB, MONOCHROME_CTB, GRAYSCALE_CTB, DEFAULT_STB, MONOCHROME_STB, PRESENTATION_STB];
+pub const BUILTIN_PLOT_STYLE_TABLES: &[&str] = &[DEFAULT_CTB, MONOCHROME_CTB, GRAYSCALE_CTB, DEFAULT_STB, MONOCHROME_STB, PRESENTATION_STB];
 
 /// The style every named table has, which keeps the object's properties unless redefined.
 pub const NORMAL_STYLE: &str = "Normal";
@@ -279,12 +278,7 @@ impl PlotStyleTable {
                     PlotStyle { name: "Screened 60%".into(), color: black, screening: 60, ..PlotStyle::default() },
                     PlotStyle { name: "Screened 70%".into(), color: black, screening: 70, ..PlotStyle::default() },
                     PlotStyle { name: "Screened 80%".into(), color: black, screening: 80, ..PlotStyle::default() },
-                    PlotStyle {
-                        name: "Anno".into(),
-                        color: Some(Rgb(192, 0, 0)),
-                        lineweight: Some(18),
-                        ..PlotStyle::default()
-                    },
+                    PlotStyle { name: "Anno".into(), color: Some(Rgb(192, 0, 0)), lineweight: Some(18), ..PlotStyle::default() },
                 ],
             )),
             MONOCHROME_STB => {

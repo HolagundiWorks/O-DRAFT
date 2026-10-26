@@ -528,10 +528,10 @@ fn run_titleblock(s: &mut Session, p: &Value) -> Result<Value> {
         pick(&details, "address").map(|a| format!("Site: {a}")),
         pick(&details, "summary").map(|s| format!("Summary: {s}")),
     ]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join("  |  ");
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join("  |  ");
     if !site.is_empty() {
         labels.push((site, Vec2::new(at.x + 0.010 * k, at.y + 0.010 * k), 0.006 * k));
     }

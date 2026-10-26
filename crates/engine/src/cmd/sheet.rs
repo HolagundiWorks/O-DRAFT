@@ -2,8 +2,10 @@
 //! block with fields, lets a finished sheet be saved as a reusable template, and lists and edits
 //! its viewports. There is no Layout panel; sheet setup is done through these commands.
 //!
-//! - **Title plate** (`sheet.designer`): a new drawing's empty Layout1 and Layout2 become one
-//!   layout, `Title plate`, with the title block. That sheet is the title plate designer.
+//! - **Nameplates** (`sheet.designer`): a new drawing's empty Layout1 and Layout2 become
+//!   **Nameplate L** (landscape) and **Nameplate P** (portrait), each with its own title block so
+//!   the two orientations can be designed separately. A legacy single `Title plate` is migrated to
+//!   Nameplate L once. `landscape` / `open` choose which plate to open.
 //! - **Title block** (`sheet.titleblock`): the block `AAD-TITLEBLOCK`, drawn in millimetres of real
 //!   paper size and inserted at the lower right of the printable area, with a border around it. Its
 //!   fields are block attributes (`PROJECT`, `CLIENT`, `TITLE`, `FLOOR`, `DRAWN`, `DATE`, `SHEET`,
@@ -17,7 +19,11 @@
 //! - **Viewports** (`viewport.list|add|remove`): the viewports of a layout with their scale, size,
 //!   lock and frozen layers.
 //!
-//! Not implemented: revision tables, automatic sheet numbering across a set, and templates that
+//! - **Sheet index** (`sheet.index`): lists the sheets of the drawing (nameplates excluded) with
+//!   number, title, scale and revision read from each title block; `renumber` writes consecutive
+//!   sheet numbers into the title blocks; `draw` places the list as a table on a layout.
+//!
+//! Not implemented: revision tables, and templates that
 //! carry viewports (viewports are added per drawing, since what they show is the drawing's own).
 
 use std::collections::BTreeMap;
@@ -95,6 +101,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["View", "Viewports", "Remove"])
             .alias(&["vprem"])
             .params("{handle}"),
+        CommandSpec::new("sheet.index", "Sheet Index", run_index)
+            .menu(&["Architecture", "Sheets", "Sheet Index"])
+            .alias(&["sheetindex"])
+            .params("{renumber?: {prefix?: \"A-\", start?: 101, step?: 1}, draw?: bool, layout? (where to draw; default the current layout), at? ([x, y] paper units, top-left; default inside the printable area), height? (text height in mm, default 2.5)} → {sheets: [{layout, number, title, scale, rev, titleBlock}], renumbered, drawn}. Without `renumber` and `draw` it only reads."),
         // Used by Print after the user picks a model-space window (or Extents / Display).
         CommandSpec::new("sheet.plotwindow", "Plot Window", run_plotwindow)
             .alias(&["plotwindow", "nameplate.plotwindow"])
@@ -324,9 +334,7 @@ fn string_map(v: Option<&Value>) -> Result<BTreeMap<String, String>> {
 // ---------------- title plate ----------------
 
 fn is_nameplate(name: &str) -> bool {
-    name.eq_ignore_ascii_case(TITLE_PLATE_L)
-        || name.eq_ignore_ascii_case(TITLE_PLATE_P)
-        || name.eq_ignore_ascii_case(TITLE_PLATE)
+    name.eq_ignore_ascii_case(TITLE_PLATE_L) || name.eq_ignore_ascii_case(TITLE_PLATE_P) || name.eq_ignore_ascii_case(TITLE_PLATE)
 }
 
 /// Empty Layout1/Layout2 (or existing nameplates) and nothing else.
@@ -355,7 +363,7 @@ fn ensure_nameplates(s: &mut Session) -> Result<(bool, bool)> {
     let mut created_l = false;
     let mut created_p = false;
     if only_stock_sheets(s.doc()?) {
-        for (name, landscape) in [(TITLE_PLATE_L, true), (TITLE_PLATE_P, false)] {
+        for (name, _) in [(TITLE_PLATE_L, true), (TITLE_PLATE_P, false)] {
             if s.doc()?.layout(name).is_none() {
                 s.execute("layout.new", &json!({ "name": name, "viewport": false }))?;
                 if name == TITLE_PLATE_L {
@@ -365,13 +373,7 @@ fn ensure_nameplates(s: &mut Session) -> Result<(bool, bool)> {
                 }
             }
         }
-        let remove: Vec<String> = s
-            .doc()?
-            .layouts
-            .iter()
-            .filter(|l| !is_nameplate(&l.name))
-            .map(|l| l.name.clone())
-            .collect();
+        let remove: Vec<String> = s.doc()?.layouts.iter().filter(|l| !is_nameplate(&l.name)).map(|l| l.name.clone()).collect();
         for name in remove {
             s.execute("layout.delete", &json!({ "name": name }))?;
         }
@@ -872,12 +874,10 @@ fn run_plotwindow(s: &mut Session, p: &Value) -> Result<Value> {
     let existing = {
         let d = s.doc()?;
         let l = d.layouts.iter().find(|l| l.name == layout).ok_or_else(|| bad("sheet.plotwindow", "no such layout"))?;
-        l.entities
-            .iter()
-            .find_map(|e| match &e.kind {
-                EntityKind::Viewport(v) if v.id != 1 => Some(e.handle.hex()),
-                _ => None,
-            })
+        l.entities.iter().find_map(|e| match &e.kind {
+            EntityKind::Viewport(v) if v.id != 1 => Some(e.handle.hex()),
+            _ => None,
+        })
     };
     let (handle, created) = match existing {
         Some(h) => (h, false),
@@ -942,4 +942,147 @@ fn run_plotwindow(s: &mut Session, p: &Value) -> Result<Value> {
         "locked": locked,
         "message": format!("Plot window on {layout} at {scale_text_out}"),
     }))
+}
+
+// ---------------- sheet index ----------------
+
+const MAX_INDEX_SHEETS: usize = 500;
+const INDEX_LAYER: &str = "A-ANNO-SIDX";
+const INDEX_OWNED: &str = "sheetIndexOwned";
+
+/// The sheet layouts in drawing order, nameplates left out.
+fn index_layouts(d: &Drawing) -> Vec<String> {
+    d.layouts.iter().filter(|l| !is_nameplate(&l.name)).map(|l| l.name.clone()).take(MAX_INDEX_SHEETS).collect()
+}
+
+fn index_row(d: &Drawing, layout: &str) -> Value {
+    let f = read_fields(d, layout);
+    let get = |k: &str| f.get(k).map(String::as_str).unwrap_or("").trim().to_string();
+    let number = match get("SHEET") {
+        n if n.is_empty() => layout.to_string(),
+        n => n,
+    };
+    let scale = match get("SCALE") {
+        s if s.is_empty() => default_fields(d, layout).remove("SCALE").unwrap_or_default(),
+        s => s,
+    };
+    json!({ "layout": layout, "number": number, "title": get("TITLE"), "scale": scale, "rev": get("REV"), "titleBlock": !title_inserts(d, layout).is_empty() })
+}
+
+fn run_index(s: &mut Session, p: &Value) -> Result<Value> {
+    let mut renumbered = 0usize;
+    if let Some(r) = p.get("renumber").filter(|v| !v.is_null()) {
+        let prefix = r.get("prefix").and_then(Value::as_str).unwrap_or("A-");
+        if prefix.chars().count() > 20 {
+            return Err(bad("sheet.index", "`prefix` is too long"));
+        }
+        let int = |k: &str, def: i64| match r.get(k) {
+            None | Some(Value::Null) => Ok(def),
+            Some(v) => v.as_i64().ok_or_else(|| bad("sheet.index", format!("`{k}` must be a whole number"))),
+        };
+        let (start, step) = (int("start", 101)?, int("step", 1)?);
+        let layouts = index_layouts(s.doc()?);
+        // Work out every number first so a bad range changes nothing.
+        let mut numbers = Vec::new();
+        let mut n = start;
+        for l in &layouts {
+            if !title_inserts(s.doc()?, l).is_empty() {
+                numbers.push((l.clone(), format!("{prefix}{n}")));
+                n = n.checked_add(step).ok_or_else(|| bad("sheet.index", "the sheet numbers overflow"))?;
+            }
+        }
+        for (l, num) in numbers {
+            let fields = BTreeMap::from([("SHEET".to_string(), num)]);
+            renumbered += write_fields(s.doc_mut()?, &l, &fields);
+        }
+    }
+    let rows: Vec<Value> = {
+        let d = s.doc()?;
+        index_layouts(d).iter().map(|l| index_row(d, l)).collect()
+    };
+    let mut drawn = Value::Null;
+    if bool_or(p, "draw", false) {
+        let layout = layout_of(s, "sheet.index", p)?;
+        let mm = match p.get("height") {
+            None | Some(Value::Null) => 2.5,
+            Some(v) => v
+                .as_f64()
+                .filter(|h| h.is_finite() && (0.5..=50.0).contains(h))
+                .ok_or_else(|| bad("sheet.index", "`height` must be between 0.5 and 50 mm"))?,
+        };
+        let sh = sheet_of(s.doc()?, &layout, "sheet.index")?;
+        let k = 1.0 / sh.unit_mm;
+        let th = mm * k;
+        let at = point_param(p, "at").unwrap_or_else(|| Vec2::new(sh.printable.min.x + 10.0 * k, sh.printable.max.y - 10.0 * k));
+        let header = ["SHEET NO.", "TITLE", "SCALE", "REV"];
+        let body: Vec<[String; 4]> = rows
+            .iter()
+            .map(|r| {
+                let c = |key: &str| r.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+                [c("number"), c("title"), c("scale"), c("rev")]
+            })
+            .collect();
+        let mut widths: Vec<f64> = header.iter().map(|h| h.chars().count() as f64).collect();
+        for row in &body {
+            for (w, cell) in widths.iter_mut().zip(row) {
+                *w = w.max(cell.chars().count() as f64);
+            }
+        }
+        let widths: Vec<f64> = widths.iter().map(|w| w * th * 0.75 + th * 1.2).collect();
+        let total: f64 = widths.iter().sum();
+        let rh = th * 2.0;
+        let old: Vec<aad_doc::Handle> = match project::get(s.doc()?, INDEX_OWNED).get(&layout) {
+            Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).filter_map(aad_doc::Handle::parse_hex).collect(),
+            _ => Vec::new(),
+        };
+        let space = Space::Paper(layout.clone());
+        for h in old {
+            if s.doc()?.space(&space).is_some_and(|st| st.get(h).is_some()) {
+                s.doc_mut()?.remove_entity(h);
+            }
+        }
+        let nrows = body.len() + 1;
+        let bottom = at.y - rh * nrows as f64;
+        let handles = in_layout(s, &layout, |s| {
+            ensure_layer(s.doc_mut()?, INDEX_LAYER, 7, "Sheet index");
+            let mut hs = Vec::new();
+            let mut y = at.y;
+            for (ri, row) in std::iter::once(header.map(String::from)).chain(body.iter().cloned()).enumerate() {
+                let mut x = at.x;
+                for (cell, w) in row.iter().zip(&widths) {
+                    let kind = make_text(
+                        s,
+                        Vec2::new(x + th * 0.4, y - rh * 0.5),
+                        cell,
+                        if ri == 0 { th } else { th * 0.9 },
+                        0.0,
+                        (HAlign::Left, VAlign::Middle),
+                    );
+                    hs.push(super::hcw::add_on(s, INDEX_LAYER, kind)?);
+                    x += w;
+                }
+                y -= rh;
+            }
+            for i in 0..=nrows {
+                let y = at.y - rh * i as f64;
+                hs.push(super::hcw::add_on(s, INDEX_LAYER, line(Vec2::new(at.x, y), Vec2::new(at.x + total, y)))?);
+            }
+            let mut x = at.x;
+            for w in std::iter::once(&0.0).chain(widths.iter()) {
+                x += w;
+                hs.push(super::hcw::add_on(s, INDEX_LAYER, line(Vec2::new(x, at.y), Vec2::new(x, bottom)))?);
+            }
+            hs.push(super::hcw::add_on(s, INDEX_LAYER, line(Vec2::new(at.x, at.y), Vec2::new(at.x, bottom)))?);
+            Ok(hs)
+        })?;
+        let mut owned = match project::get(s.doc()?, INDEX_OWNED) {
+            Value::Object(o) => o,
+            _ => Map::new(),
+        };
+        let n = handles.len();
+        owned.insert(layout.clone(), Value::Array(handles.iter().map(|h| json!(h.hex())).collect()));
+        project::set(s.doc_mut()?, INDEX_OWNED, &Value::Object(owned));
+        drawn = json!({ "layout": layout, "objects": n });
+    }
+    Ok(json!({ "sheets": rows, "renumbered": renumbered, "drawn": drawn }))
 }

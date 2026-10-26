@@ -116,10 +116,8 @@ const RATE_COLS: &[Col] = &[
     Col { key: "rate", label: "Rate", numeric: true },
 ];
 const NOTE_COLS: &[Col] = &[Col { key: "text", label: "Note", numeric: false }];
-const LEGEND_COLS: &[Col] = &[
-    Col { key: "name", label: "Layer or symbol", numeric: false },
-    Col { key: "description", label: "Description", numeric: false },
-];
+const LEGEND_COLS: &[Col] =
+    &[Col { key: "name", label: "Layer or symbol", numeric: false }, Col { key: "description", label: "Description", numeric: false }];
 
 const TAKEOFF: &[Field] = &[
     field("units", "Units (blank: the drawing's)", Kind::Choice(UNITS)),
@@ -179,10 +177,7 @@ pub static FORMS: &[Form] = &[
         id: "notes",
         title: "Drawing Notes",
         wrap: None,
-        fields: &[
-            field("name", "Set name", Kind::Text).def("General"),
-            field("items", "Numbered notes", Kind::Table(NOTE_COLS)).req(),
-        ],
+        fields: &[field("name", "Set name", Kind::Text).def("General"), field("items", "Numbered notes", Kind::Table(NOTE_COLS)).req()],
     },
     Form {
         id: "legend.edit",
@@ -704,12 +699,7 @@ pub fn prefill(s: &Session, form: &Form) -> Value {
                 .and_then(|s| s.get(current))
                 .and_then(|set| set.get("items"))
                 .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str())
-                        .map(|t| json!({ "text": t }))
-                        .collect::<Vec<_>>()
-                })
+                .map(|a| a.iter().filter_map(|v| v.as_str()).map(|t| json!({ "text": t })).collect::<Vec<_>>())
                 .unwrap_or_default();
             o.insert("items".into(), Value::Array(items));
         }

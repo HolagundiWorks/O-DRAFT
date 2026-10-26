@@ -14,8 +14,7 @@ const BAR: f32 = 34.0;
 const BUTTON: f32 = 26.0;
 
 /// The Architecture toolbar: drawing tools (layer set is under Format, not here).
-pub const ARCHITECTURE: &[Tool] =
-    &[(Icon::Boundary, "room", "Room Label"), (Icon::Area, "rarea", "Room Area")];
+pub const ARCHITECTURE: &[Tool] = &[(Icon::Boundary, "room", "Room Label"), (Icon::Area, "rarea", "Room Area")];
 
 /// The tools of the named groups of [`DRAFTING`], large ones first.
 fn tools(groups: &[&str]) -> Vec<Tool> {

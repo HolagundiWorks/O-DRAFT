@@ -25,12 +25,7 @@ fn layout_with_model() -> Drawing {
 }
 
 fn vp_handle(d: &Drawing) -> aad_doc::Handle {
-    d.layouts[0]
-        .entities
-        .iter()
-        .find(|e| matches!(e.kind, EntityKind::Viewport(_)))
-        .map(|e| e.handle)
-        .expect("viewport")
+    d.layouts[0].entities.iter().find(|e| matches!(e.kind, EntityKind::Viewport(_))).map(|e| e.handle).expect("viewport")
 }
 
 fn content_count(list: &aad_render::DisplayList) -> usize {
@@ -42,7 +37,7 @@ fn content_centroid(list: &aad_render::DisplayList) -> Vec2 {
     let mut s = Vec2::ZERO;
     for p in list.prims.iter().filter(|p| p.handle == VIEWPORT_CONTENT) {
         for q in list.points(p) {
-            s = s + *q;
+            s += *q;
             n += 1;
         }
     }

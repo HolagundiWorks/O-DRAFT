@@ -251,11 +251,9 @@ fn about(ctx: &egui::Context, open: &mut bool) {
 
 fn parameters(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
     let mut action: Option<(&str, serde_json::Value)> = None;
-    egui::Window::new(crate::tl!("Parameters Manager"))
-        .id(egui::Id::new("Parameters Manager"))
-        .open(open)
-        .default_size(vec2(420.0, 480.0))
-        .show(ctx, |ui| {
+    egui::Window::new(crate::tl!("Parameters Manager")).id(egui::Id::new("Parameters Manager")).open(open).default_size(vec2(420.0, 480.0)).show(
+        ctx,
+        |ui| {
             let Ok(status) = app.session.execute("param.status", &json!({})) else {
                 ui.label(crate::tl!("Open a drawing first."));
                 return;
@@ -304,7 +302,8 @@ fn parameters(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
                     }
                 });
             }
-        });
+        },
+    );
     if let Some((cmd, p)) = action {
         let _ = app.run(cmd, p);
     }

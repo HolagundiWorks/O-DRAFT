@@ -1007,13 +1007,8 @@ pub(crate) fn redraw_tables(s: &mut Session, p: &Value, names: &[String]) -> Res
             continue;
         }
         let title = v.get("title").and_then(Value::as_str).unwrap_or(name).to_string();
-        let header: Vec<String> = v
-            .get("columns")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|c| c.as_str().map(str::to_string))
-            .collect();
+        let header: Vec<String> =
+            v.get("columns").and_then(Value::as_array).into_iter().flatten().filter_map(|c| c.as_str().map(str::to_string)).collect();
         let rows: Vec<Vec<String>> = v
             .get("rows")
             .and_then(Value::as_array)

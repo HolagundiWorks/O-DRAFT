@@ -466,12 +466,7 @@ mod tests {
 
     #[test]
     fn polyline_strip_uses_butt_edges_and_round_joins() {
-        let pts = [
-            Vec2::new(0.0, 0.0),
-            Vec2::new(10.0, 0.0),
-            Vec2::new(10.0, 10.0),
-            Vec2::new(0.0, 10.0),
-        ];
+        let pts = [Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0), Vec2::new(10.0, 10.0), Vec2::new(0.0, 10.0)];
         let mut quads = Vec::new();
         stroke_polyline(&mut quads, &pts, Vec2::ZERO, [0, 0, 0, 255], 2.0);
         // 3 butt edges + 2 end caps + 2 interior joins = 7
@@ -494,12 +489,7 @@ mod tests {
 
     #[test]
     fn closed_polyline_strip_has_joins_at_every_vertex() {
-        let pts = [
-            Vec2::new(0.0, 0.0),
-            Vec2::new(1.0, 0.0),
-            Vec2::new(1.0, 1.0),
-            Vec2::new(0.0, 0.0),
-        ];
+        let pts = [Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0), Vec2::new(0.0, 0.0)];
         let mut quads = Vec::new();
         stroke_polyline(&mut quads, &pts, Vec2::ZERO, [0, 0, 0, 255], 1.5);
         // 3 edges + 3 vertex discs

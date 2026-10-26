@@ -124,15 +124,7 @@ fn layout_with_viewport(vp: aad_doc::Viewport) -> Drawing {
 }
 
 fn vp(center: Vec2, w: f64, h: f64, view_center: Vec2, view_height: f64, id: u32) -> aad_doc::Viewport {
-    aad_doc::Viewport {
-        center: center.to3(0.0),
-        width: w,
-        height: h,
-        view_center,
-        view_height,
-        id,
-        ..Default::default()
-    }
+    aad_doc::Viewport { center: center.to3(0.0), width: w, height: h, view_center, view_height, id, ..Default::default() }
 }
 
 #[test]

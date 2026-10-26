@@ -22,12 +22,23 @@ internal static class AboutWindow
             FontSize = Density.FontSection,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
         });
-        stack.Children.Add(new TextBlock { Text = "Drafting. Part of OSAS, the Open Source Architecture Suite.", FontSize = Density.FontBody });
+        stack.Children.Add(new TextBlock { Text = "Architectural drafting for OSAS", FontSize = Density.FontBody });
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Open Source Architecture Suite — with O-Studio and O-CoreOp",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = Density.FontBody,
+        });
         if (version.Length > 0)
         {
             stack.Children.Add(new TextBlock { Text = "Version " + version, FontSize = Density.FontBody });
         }
-        stack.Children.Add(new TextBlock { Text = "2D architectural drafting. Open source, written in Rust.", TextWrapping = TextWrapping.Wrap, FontSize = Density.FontBody });
+        stack.Children.Add(new TextBlock
+        {
+            Text = "2D CAD in Rust. Nameplates, schedules and take-off for architectural drawings.",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = Density.FontBody,
+        });
         stack.Children.Add(Density.Secondary("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.", TextWrapping.Wrap));
         Density.Apply(stack);
         _window?.Close();

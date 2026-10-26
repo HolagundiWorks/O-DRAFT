@@ -18,9 +18,7 @@ fn selectsimilar_and_filter() {
     s.set_selection(vec![h]);
     let r = s.execute("selectsimilar", &json!({ "mode": "new" })).unwrap();
     assert_eq!(r["selected"], 2);
-    let f = s
-        .execute("filter", &json!({ "filters": [{ "type": "Line", "layer": "A" }], "mode": "new" }))
-        .unwrap();
+    let f = s.execute("filter", &json!({ "filters": [{ "type": "Line", "layer": "A" }], "mode": "new" })).unwrap();
     assert_eq!(f["selected"], 2);
 }
 
@@ -89,10 +87,7 @@ fn laywalk_cycles_visibility() {
 #[test]
 fn adcenter_lists_blocks() {
     let mut s = Session::new();
-    s.doc_mut().unwrap().blocks.insert(
-        "X".into(),
-        std::sync::Arc::new(aad_doc::Block::new("X")),
-    );
+    s.doc_mut().unwrap().blocks.insert("X".into(), std::sync::Arc::new(aad_doc::Block::new("X")));
     let r = s.execute("adcenter", &json!({ "table": "blocks" })).unwrap();
     assert!(r["blocks"].as_array().unwrap().iter().any(|b| b["name"] == "X"));
 }
@@ -102,13 +97,7 @@ fn vpclip_sets_viewport_polygon() {
     let mut s = Session::new();
     s.execute("layout.set", &json!({ "name": "Layout1" })).unwrap();
     // Ensure a viewport exists on the layout.
-    let vp = s
-        .doc()
-        .unwrap()
-        .layouts
-        .iter()
-        .flat_map(|l| l.entities.iter())
-        .find(|e| matches!(e.kind, EntityKind::Viewport(ref v) if v.id != 1));
+    let vp = s.doc().unwrap().layouts.iter().flat_map(|l| l.entities.iter()).find(|e| matches!(e.kind, EntityKind::Viewport(ref v) if v.id != 1));
     if vp.is_none() {
         s.execute("viewport.add", &json!({ "count": 1 })).unwrap();
     }
@@ -154,9 +143,7 @@ fn export_csv_and_propose_preview() {
     let p = s.execute("proposeedit", &json!({ "command": "circle", "params": { "center": [1, 1], "radius": 2 } })).unwrap();
     assert_eq!(p["proposed"]["command"], "circle");
     assert_eq!(s.doc().unwrap().model.len(), before);
-    let prev = s
-        .execute("previewedit", &json!({ "command": "circle", "params": { "center": [1, 1], "radius": 2 } }))
-        .unwrap();
+    let prev = s.execute("previewedit", &json!({ "command": "circle", "params": { "center": [1, 1], "radius": 2 } })).unwrap();
     assert_eq!(prev["beforeEntities"].as_u64().unwrap() + 1, prev["afterEntities"].as_u64().unwrap());
     assert!(prev["reverted"].as_bool().unwrap());
     assert_eq!(s.doc().unwrap().model.len(), before);

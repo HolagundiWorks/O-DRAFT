@@ -284,13 +284,7 @@ fn run_table(s: &mut Session, p: &Value) -> Result<Value> {
     let (slab_def, beam_def) = project::structure_mm(s.doc()?);
     let frows: Vec<Vec<String>> = floors
         .iter()
-        .map(|f| {
-            vec![
-                text(f, "name"),
-                format!("{:.0}", num(f, "slab").unwrap_or(slab_def)),
-                format!("{:.0}", num(f, "beam").unwrap_or(beam_def)),
-            ]
-        })
+        .map(|f| vec![text(f, "name"), format!("{:.0}", num(f, "slab").unwrap_or(slab_def)), format!("{:.0}", num(f, "beam").unwrap_or(beam_def))])
         .collect();
     let fh: Vec<String> = ["Floor", "Slab (mm)", "Beam incl. slab (mm)"].iter().map(|x| (*x).to_string()).collect();
     let mut y = origin;

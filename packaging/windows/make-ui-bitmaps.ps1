@@ -41,7 +41,7 @@ $g.DrawImage($logo, $x, $y, $mark, $mark)
 $fontTitle = New-Object System.Drawing.Font 'Segoe UI', 18, ([System.Drawing.FontStyle]::Bold)
 $fontSub = New-Object System.Drawing.Font 'Segoe UI', 10
 $g.DrawString('O-Draft', $fontTitle, $brush, (New-Object System.Drawing.RectangleF 0, ($y + $mark + 8), 493, 32), $sf)
-$g.DrawString('Drafting. Part of OSAS, the Open Source Architecture Suit.', $fontSub, $brush, (New-Object System.Drawing.RectangleF 0, ($y + $mark + 40), 493, 24), $sf)
+$g.DrawString('Architectural drafting for OSAS, the Open Source Architecture Suite.', $fontSub, $brush, (New-Object System.Drawing.RectangleF 0, ($y + $mark + 40), 493, 24), $sf)
 $g.DrawString('Open source  ·  MIT OR Apache-2.0', $fontSub, $brush, (New-Object System.Drawing.RectangleF 0, ($y + $mark + 64), 493, 24), $sf)
 Save-Bmp24 $dialog (Join-Path $Out 'WixUIDialogBmp.bmp')
 $g.Dispose(); $dialog.Dispose(); $fontTitle.Dispose(); $fontSub.Dispose()

@@ -7,8 +7,8 @@ use aad_color::Rgb;
 use aad_engine::Session;
 use aad_engine::doc::{Entity, Handle};
 use aad_engine::grips;
-use aad_engine::snap::{self, SnapHit};
 use aad_engine::snap::tracking::{Acquired, PathShape, Track};
+use aad_engine::snap::{self, SnapHit};
 use aad_geom::Vec2;
 use aad_render::mesh::{self, MeshData};
 use aad_render::{DPrim, DisplayList, Kind};
@@ -138,12 +138,7 @@ pub fn mesh(
             let color = if crossing { Rgb(80, 220, 120) } else { Rgb(80, 160, 255) };
             let a = pw.corner;
             let b = raw;
-            let corners = [
-                Vec2::new(a.x, a.y),
-                Vec2::new(b.x, a.y),
-                Vec2::new(b.x, b.y),
-                Vec2::new(a.x, b.y),
-            ];
+            let corners = [Vec2::new(a.x, a.y), Vec2::new(b.x, a.y), Vec2::new(b.x, b.y), Vec2::new(a.x, b.y)];
             let fill = if crossing { [0x18, 0x48, 0x18, 0x50] } else { [0x18, 0x30, 0x60, 0x50] };
             window_fill = Some((corners, fill));
             let ring = [corners[0], corners[1], corners[2], corners[3], corners[0]];
@@ -178,16 +173,7 @@ pub fn mesh(
         if let Some(hit) = cursor.snap {
             add_snap_marker(&mut list, hit, scale);
         }
-        add_crosshair(
-            &mut list,
-            cursor.aim,
-            scale,
-            height,
-            session.settings.cursorsize,
-            session.cursor_shape(),
-            session.settings.pickbox,
-            paper,
-        );
+        add_crosshair(&mut list, cursor.aim, scale, height, session.settings.cursorsize, session.cursor_shape(), session.settings.pickbox, paper);
         if let Some(tip) = tip {
             add_tip(&mut list, cursor.aim, scale, tip, paper);
         }
@@ -216,11 +202,7 @@ pub fn cursor_tip(snap: Option<&SnapHit>, track: Option<&Track>, hot: Option<Hot
         for path in &tr.paths {
             let distance = aad_engine::units::format_distance(path.from.dist(tr.point), 2, 4);
             let angle = (path.from.angle_to(tr.point).to_degrees().round() as i64).rem_euclid(360);
-            tips.push(if path.name == "Polar" {
-                format!("Polar: {distance} < {angle}°")
-            } else {
-                format!("{}: {distance} < {angle}°", path.name)
-            });
+            tips.push(if path.name == "Polar" { format!("Polar: {distance} < {angle}°") } else { format!("{}: {distance} < {angle}°", path.name) });
         }
         if let Some(o) = tr.object {
             tips.push(o.to_string());
@@ -256,7 +238,7 @@ fn add_entity_outline(
     }
     let built = aad_render::build_entities(
         doc,
-        ents.into_iter(),
+        ents,
         &aad_render::Options {
             tolerance: 0.2 / scale,
             min_dash: 2.0 / scale,
@@ -282,7 +264,7 @@ fn add_entity_outline(
 }
 
 fn add_snap_marker(list: &mut DisplayList, hit: SnapHit, scale: f64) {
-    if !hit.point.is_finite() || !(scale > 0.0) {
+    if !hit.point.is_finite() || scale.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
         return;
     }
     let s = 5.5 / scale;
@@ -290,7 +272,12 @@ fn add_snap_marker(list: &mut DisplayList, hit: SnapHit, scale: f64) {
     use snap::mode;
     match hit.mode {
         mode::END => add_poly(list, &square(at, s), SNAP_INK, false),
-        mode::MID => add_poly(list, &[at + Vec2::new(0.0, -s), at + Vec2::new(s, s * 0.8), at + Vec2::new(-s, s * 0.8), at + Vec2::new(0.0, -s)], SNAP_INK, false),
+        mode::MID => add_poly(
+            list,
+            &[at + Vec2::new(0.0, -s), at + Vec2::new(s, s * 0.8), at + Vec2::new(-s, s * 0.8), at + Vec2::new(0.0, -s)],
+            SNAP_INK,
+            false,
+        ),
         mode::CEN | mode::GCEN => add_circle(list, at, s, SNAP_INK),
         mode::QUA => add_poly(
             list,
@@ -334,13 +321,7 @@ fn add_snap_marker(list: &mut DisplayList, hit: SnapHit, scale: f64) {
         ),
         _ => add_poly(
             list,
-            &[
-                at + Vec2::new(-s, -s),
-                at + Vec2::new(s, -s),
-                at + Vec2::new(-s, s),
-                at + Vec2::new(s, s),
-                at + Vec2::new(-s, -s),
-            ],
+            &[at + Vec2::new(-s, -s), at + Vec2::new(s, -s), at + Vec2::new(-s, s), at + Vec2::new(s, s), at + Vec2::new(-s, -s)],
             SNAP_INK,
             false,
         ),
@@ -388,9 +369,7 @@ fn add_tracking(list: &mut DisplayList, acquired: &[Acquired], track: Option<&Tr
             PathShape::Line { dir, .. } => vec![tr.point - dir * far, tr.point + dir * far],
             PathShape::Circle { center, radius, .. } => {
                 let (a0, span) = (center.angle_to(tr.point), (far / radius.max(1e-12)).min(std::f64::consts::PI));
-                (0..=48)
-                    .map(|i| Vec2::polar(center, radius, a0 - span + span * f64::from(i) / 24.0))
-                    .collect()
+                (0..=48).map(|i| Vec2::polar(center, radius, a0 - span + span * f64::from(i) / 24.0)).collect()
             }
         };
         if pts.iter().all(|p| p.is_finite()) {
@@ -620,19 +599,9 @@ mod tests {
 
     #[test]
     fn cursor_tip_prefers_grip_then_snap_name() {
-        let hit = SnapHit {
-            point: Vec2::new(1.0, 2.0),
-            mode: 1,
-            name: "Endpoint",
-            deferred: None,
-        };
+        let hit = SnapHit { point: Vec2::new(1.0, 2.0), mode: 1, name: "Endpoint", deferred: None };
         assert_eq!(cursor_tip(Some(&hit), None, None).as_deref(), Some("Endpoint"));
-        let hot = HotGrip {
-            handle: Handle(1),
-            index: 0,
-            base: Vec2::new(0.0, 0.0),
-            mode: grips::GripMode::Move,
-        };
+        let hot = HotGrip { handle: Handle(1), index: 0, base: Vec2::new(0.0, 0.0), mode: grips::GripMode::Move };
         assert_eq!(cursor_tip(Some(&hit), None, Some(hot)).as_deref(), Some("** MOVE **"));
         assert!(cursor_tip(None, None, None).is_none());
     }
@@ -643,21 +612,13 @@ mod tests {
         let cursor = Cursor {
             aim: Vec2::new(10.0, 10.0),
             raw: Some(Vec2::new(10.0, 10.0)),
-            snap: Some(SnapHit {
-                point: Vec2::new(10.0, 10.0),
-                mode: 1,
-                name: "Endpoint",
-                deferred: None,
-            }),
+            snap: Some(SnapHit { point: Vec2::new(10.0, 10.0), mode: 1, name: "Endpoint", deferred: None }),
             track: None,
             hot: None,
             hover: None,
             warm_grip: None,
         };
         let built = mesh(&session, Some(&cursor), Rgb(0, 0, 0), 600, Vec2::ZERO, Some("Endpoint"), 800, false, 24.0);
-        assert!(
-            built.line_vertices() > 0 || built.quad_instances() > 0 || built.tri_vertices() > 0,
-            "crosshair and snap marker must emit geometry"
-        );
+        assert!(built.line_vertices() > 0 || built.quad_instances() > 0 || built.tri_vertices() > 0, "crosshair and snap marker must emit geometry");
     }
 }

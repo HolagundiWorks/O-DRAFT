@@ -116,10 +116,7 @@ fn run_plot_config(s: &mut Session, p: &Value) -> Result<Value> {
     let paper = paper_of(p, "plot.config")?;
     let iso = annot::paper_iso_name(paper).unwrap_or("");
     let rank = annot::text_rank_for_paper(if iso.is_empty() { "A1" } else { iso });
-    let printed = PrintedSizes {
-        text_mm: f64_or(p, "textMm", rank.medium),
-        arrow_mm: f64_or(p, "arrowMm", rank.arrow),
-    };
+    let printed = PrintedSizes { text_mm: f64_or(p, "textMm", rank.medium), arrow_mm: f64_or(p, "arrowMm", rank.arrow) };
     if !(printed.text_mm.is_finite() && printed.text_mm > 0.0 && printed.arrow_mm.is_finite() && printed.arrow_mm > 0.0) {
         return Err(bad("plot.config", "`textMm` and `arrowMm` must be positive"));
     }
@@ -151,7 +148,6 @@ fn run_plot_config(s: &mut Session, p: &Value) -> Result<Value> {
         "applied": bool_or(p, "apply", true),
     }))
 }
-
 
 fn configured(s: &Session) -> Option<(PlotScale, Paper)> {
     let h = &s.doc().ok()?.header;

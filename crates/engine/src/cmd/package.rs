@@ -55,11 +55,17 @@ fn run_adcenter(s: &mut Session, p: &Value) -> Result<Value> {
         out["blocks"] = Value::Array(blocks);
     }
     if want("layers") {
-        let layers: Vec<Value> = doc.layers.iter().take(MAX_LIST).map(|l| json!({ "name": l.name, "on": l.on, "frozen": l.frozen, "locked": l.locked, "color": l.color.name() })).collect();
+        let layers: Vec<Value> = doc
+            .layers
+            .iter()
+            .take(MAX_LIST)
+            .map(|l| json!({ "name": l.name, "on": l.on, "frozen": l.frozen, "locked": l.locked, "color": l.color.name() }))
+            .collect();
         out["layers"] = Value::Array(layers);
     }
     if want("styles") {
-        let styles: Vec<Value> = doc.text_styles.iter().take(MAX_LIST).map(|t| json!({ "name": t.name, "font": t.font, "height": t.height })).collect();
+        let styles: Vec<Value> =
+            doc.text_styles.iter().take(MAX_LIST).map(|t| json!({ "name": t.name, "font": t.font, "height": t.height })).collect();
         out["styles"] = Value::Array(styles);
     }
     if want("dimstyles") {

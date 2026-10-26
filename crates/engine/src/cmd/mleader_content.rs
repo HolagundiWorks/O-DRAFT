@@ -44,12 +44,8 @@ pub(super) fn apply(s: &Session, k: EntityKind, c: &Content) -> Result<EntityKin
     }
     if let Some((name, center)) = &c.block {
         let anchor = land + Vec2::new(m.dogleg * dir, 0.0);
-        let mut ins = Insert {
-            block: name.clone(),
-            insert: Vec3::new(anchor.x, anchor.y, m.landing.z),
-            scale: Vec3::new(1.0, 1.0, 1.0),
-            ..Insert::default()
-        };
+        let mut ins =
+            Insert { block: name.clone(), insert: Vec3::new(anchor.x, anchor.y, m.landing.z), scale: Vec3::new(1.0, 1.0, 1.0), ..Insert::default() };
         if *center {
             // Move the block so the centre of its extents lands on the anchor.
             let d = s.doc()?;

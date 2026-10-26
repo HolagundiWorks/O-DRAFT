@@ -20,7 +20,7 @@ claim that a feature works; it lists where the documents and the code disagree o
 
 | Item | Where | Note |
 |---|---|---|
-| Batch plot / PDF preview / cmdline open | WinUI / host | Menu picker and control `app.open`/`app.save` use workers; batch plot and PDF preview remain synchronous |
+| Batch plot / plot preview / cmdline open | WinUI / host | Menu picker and control `app.open`/`app.save` use workers; batch plot and plot-preview PDF build remain synchronous on the session thread after the window is picked |
 | DWG parse 1.2 to 1.5 s | `aad-dwg` worker | Stage with `AAD_DWG_STAGE=1`; speed is mostly `acadrust` + DXF bridge. Windows worker has a ~2 GiB Job Object cap |
 | Full-extents display list ~125 ms @ 100k | `aad-render` | LOD + frustum + async band help navigation; full walk stays O(n) |
 | Quality gate does not pass on the working tree | `cargo xtask ci` | `cargo fmt --check` fails on uncommitted files of the ShilpiDB work, and clippy reports `manual_range_contains` at `crates/vdb/src/file.rs:146` |

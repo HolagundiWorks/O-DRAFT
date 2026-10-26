@@ -363,10 +363,10 @@ fn obj_layers(s: &Session, p: &Value) -> Result<Vec<String>> {
 /// Layer names from `name` / `names`, else from selected (or param) object handles.
 fn named_or_obj_layers(s: &Session, p: &Value) -> Result<Vec<String>> {
     let mut v: Vec<String> = Vec::new();
-    if let Some(name) = str_param(p, "name") {
-        if !name.is_empty() {
-            v.push(name.to_string());
-        }
+    if let Some(name) = str_param(p, "name")
+        && !name.is_empty()
+    {
+        v.push(name.to_string());
     }
     if let Some(arr) = p.get("names").and_then(Value::as_array) {
         for item in arr {

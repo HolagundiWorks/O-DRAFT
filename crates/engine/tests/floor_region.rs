@@ -27,14 +27,13 @@ fn session() -> Session {
 #[test]
 fn declare_assigns_entities_in_window_and_export_writes_them() {
     let mut s = session();
-    s.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.0, "ceiling": 2.85, "lintel": 2.1, "slab": 150, "beam": 450}]})).unwrap();
+    s.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.0, "ceiling": 2.85, "lintel": 2.1, "slab": 150, "beam": 450}]}))
+        .unwrap();
     s.execute("line", &json!({"points": [[0.0, 0.0], [5000.0, 0.0]]})).unwrap();
     s.execute("line", &json!({"points": [[0.0, 1000.0], [5000.0, 1000.0]]})).unwrap();
     s.execute("line", &json!({"points": [[20000.0, 0.0], [25000.0, 0.0]]})).unwrap();
 
-    let r = s
-        .execute("floor.declare", &json!({"name": "Ground", "window": [[-100.0, -100.0], [6000.0, 2000.0]], "crossing": true}))
-        .unwrap();
+    let r = s.execute("floor.declare", &json!({"name": "Ground", "window": [[-100.0, -100.0], [6000.0, 2000.0]], "crossing": true})).unwrap();
     assert_eq!(r["name"], "Ground");
     assert_eq!(r["entities"], 2, "only the two lines inside the window");
 

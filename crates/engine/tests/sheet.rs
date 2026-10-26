@@ -218,3 +218,63 @@ fn templates_can_live_in_a_shared_folder_for_the_whole_office() {
     assert!(s.execute("sheet.template.list", &json!({"folder": folder})).unwrap()["templates"].as_array().unwrap().is_empty());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+fn three_sheets() -> Session {
+    let mut s = session();
+    for (i, title) in ["Ground Floor Plan", "First Floor Plan"].into_iter().enumerate() {
+        let name = if i == 0 { "Layout1".to_string() } else { "Layout3".to_string() };
+        if i > 0 {
+            s.execute("layout.new", &json!({"name": name})).unwrap();
+        }
+        s.execute("sheet.titleblock", &json!({"layout": name, "fields": {"TITLE": title}})).unwrap();
+    }
+    s
+}
+
+#[test]
+fn the_sheet_index_lists_sheets_and_renumbers_them() {
+    let mut s = three_sheets();
+    let r = s.execute("sheet.index", &json!({})).unwrap();
+    let rows = r["sheets"].as_array().unwrap();
+    assert!(rows.iter().any(|x| x["layout"] == "Layout3" && x["title"] == "First Floor Plan"));
+    assert!(rows.iter().all(|x| !x["layout"].as_str().unwrap().starts_with("Nameplate")));
+    assert_eq!(r["renumbered"], 0);
+
+    let r = s.execute("sheet.index", &json!({"renumber": {"prefix": "A-", "start": 101, "step": 10}})).unwrap();
+    assert_eq!(r["renumbered"], 2);
+    let numbers: Vec<&str> =
+        r["sheets"].as_array().unwrap().iter().filter(|x| x["titleBlock"] == true).map(|x| x["number"].as_str().unwrap()).collect();
+    assert_eq!(numbers, ["A-101", "A-111"]);
+}
+
+#[test]
+fn drawing_the_sheet_index_twice_replaces_the_first_table() {
+    let mut s = three_sheets();
+    s.execute("layout.set", &json!({"name": "Layout1"})).unwrap();
+    let count = |s: &Session| layout_entities(s, "Layout1").iter().filter(|(l, _)| l == "A-ANNO-SIDX").count();
+    let r = s.execute("sheet.index", &json!({"draw": true})).unwrap();
+    let first = count(&s);
+    assert!(first > 0 && r["drawn"]["objects"].as_u64() == Some(first as u64));
+    s.execute("sheet.index", &json!({"draw": true})).unwrap();
+    assert_eq!(count(&s), first);
+    s.execute("undo", &json!({})).unwrap();
+    assert_eq!(count(&s), first, "undo restores the first table");
+}
+
+#[test]
+fn hostile_sheet_index_params_never_panic() {
+    let mut s = three_sheets();
+    for p in [
+        json!({"renumber": {"start": i64::MAX, "step": 5}}),
+        json!({"renumber": {"start": "x"}}),
+        json!({"renumber": {"prefix": "A".repeat(500)}}),
+        json!({"draw": true, "height": 0}),
+        json!({"draw": true, "height": f64::NAN}),
+        json!({"draw": true, "layout": "nope"}),
+        json!({"draw": true, "at": [1e300, -1e300]}),
+    ] {
+        let _ = s.execute("sheet.index", &p);
+    }
+    let r = s.execute("sheet.index", &json!({})).unwrap();
+    assert_ne!(r["sheets"][0]["number"], "A-9223372036854775807", "an overflowing range changes nothing");
+}

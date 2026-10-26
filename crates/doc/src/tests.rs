@@ -54,12 +54,7 @@ fn inserts_of_missing_or_empty_blocks_do_not_stretch_extents() {
     let mut d = Drawing::new_imperial();
     d.add(&Space::Model, Common::default(), line((0.0, 0.0), (1.0, 1.0))).unwrap();
     let ins = |block: &str, x: f64, y: f64| {
-        EntityKind::Insert(Insert {
-            block: block.into(),
-            insert: Vec3::new(x, y, 0.0),
-            scale: Vec3::new(1.0, 1.0, 1.0),
-            ..Default::default()
-        })
+        EntityKind::Insert(Insert { block: block.into(), insert: Vec3::new(x, y, 0.0), scale: Vec3::new(1.0, 1.0, 1.0), ..Default::default() })
     };
     d.blocks.insert("Empty".into(), std::sync::Arc::new(Block::new("Empty")));
     d.add(&Space::Model, Common::default(), ins("Missing", -125_319.0, -79_990.0)).unwrap();
@@ -92,12 +87,7 @@ fn insert_bounds_with_cyclic_block_terminate() {
     let mut b = Block::new("A");
     b.entities.push(Entity::new(
         Handle(1),
-        EntityKind::Insert(Insert {
-            block: "A".into(),
-            insert: Vec3::ZERO,
-            scale: Vec3::new(1.0, 1.0, 1.0),
-            ..Default::default()
-        }),
+        EntityKind::Insert(Insert { block: "A".into(), insert: Vec3::ZERO, scale: Vec3::new(1.0, 1.0, 1.0), ..Default::default() }),
     ));
     b.entities.push(Entity::new(Handle(2), line((0.0, 0.0), (1.0, 1.0))));
     d.blocks.insert("A".into(), std::sync::Arc::new(b));
@@ -105,12 +95,7 @@ fn insert_bounds_with_cyclic_block_terminate() {
         .add(
             &Space::Model,
             Common::default(),
-            EntityKind::Insert(Insert {
-                block: "A".into(),
-                insert: Vec3::new(5.0, 5.0, 0.0),
-                scale: Vec3::new(2.0, 2.0, 1.0),
-                ..Default::default()
-            }),
+            EntityKind::Insert(Insert { block: "A".into(), insert: Vec3::new(5.0, 5.0, 0.0), scale: Vec3::new(2.0, 2.0, 1.0), ..Default::default() }),
         )
         .unwrap();
     let e = d.entity(h).unwrap().clone();
@@ -217,12 +202,7 @@ fn wide_arc_segment_extents_reach_the_outer_edge() {
 }
 
 fn plain_insert(block: &str) -> EntityKind {
-    EntityKind::Insert(Insert {
-        block: block.into(),
-        insert: Vec3::ZERO,
-        scale: Vec3::new(1.0, 1.0, 1.0),
-        ..Default::default()
-    })
+    EntityKind::Insert(Insert { block: block.into(), insert: Vec3::ZERO, scale: Vec3::new(1.0, 1.0, 1.0), ..Default::default() })
 }
 
 fn on_layer(layer: &str, kind: EntityKind, h: u64) -> Entity {

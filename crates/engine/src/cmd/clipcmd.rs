@@ -11,19 +11,14 @@ const MAX_CLIP: usize = 10_000;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("xclip", "Clip Block Reference", run_xclip)
-            .menu(&["Modify", "Clip", "Xref / Block"])
-            .alias(&["xclipframe"])
-            .params(
-                "{handles? (INSERT), points?: [[x,y],...] (world; 2 = rectangle corners, 3+ = polygon), \
+        CommandSpec::new("xclip", "Clip Block Reference", run_xclip).menu(&["Modify", "Clip", "Xref / Block"]).alias(&["xclipframe"]).params(
+            "{handles? (INSERT), points?: [[x,y],...] (world; 2 = rectangle corners, 3+ = polygon), \
                  delete?: bool, on?: bool, off?: bool} → {handles, clipping, points}",
-            ),
-        CommandSpec::new("vpclip", "Clip Viewport", run_vpclip)
-            .menu(&["View", "Viewports", "Clip"])
-            .params(
-                "{handle? (VIEWPORT), points?: [[x,y],...] (paper; 3+ polygon or 2 opposite corners), \
+        ),
+        CommandSpec::new("vpclip", "Clip Viewport", run_vpclip).menu(&["View", "Viewports", "Clip"]).params(
+            "{handle? (VIEWPORT), points?: [[x,y],...] (paper; 3+ polygon or 2 opposite corners), \
                  delete?: bool, rectangular?: bool} → {handle, width, height, clip}",
-            ),
+        ),
     ]
 }
 

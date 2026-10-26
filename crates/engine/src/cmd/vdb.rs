@@ -203,13 +203,7 @@ fn run_connect(s: &mut Session, p: &Value) -> Result<Value> {
         // Engine-owned daemon: when talking to the shared loopback endpoint and nothing answers,
         // start the bundled shilpid (same path as takeoff.record).
         if addr == DEFAULT_SHILPID || addr == super::takeoffrec::SHARED_ADDR {
-            let _ = super::takeoffrec::ensure_server(
-                "vdb.connect",
-                super::takeoffrec::SHARED_ADDR,
-                "127.0.0.1:7421",
-                "takeoff",
-                "takeoff.vdb",
-            );
+            let _ = super::takeoffrec::ensure_server("vdb.connect", super::takeoffrec::SHARED_ADDR, "127.0.0.1:7421", "takeoff", "takeoff.vdb");
         }
         let mut client = VdbClient::connect(&addr).map_err(|e| bad("vdb.connect", e.to_string()))?;
         client.ping().map_err(|e| bad("vdb.connect", e.to_string()))?;
@@ -245,8 +239,7 @@ fn run_convert(s: &mut Session, _p: &Value) -> Result<Value> {
                 let vdb_path = parent.join(format!("{stem}.vdb"));
                 let (store, truncated, skipped) = store_from_drawing_ref(s)?;
                 let count = store.len();
-                save_path(&vdb_path, &store)
-                    .map_err(|e| bad("vdb.convert", format!("{}: {e}", vdb_path.display())))?;
+                save_path(&vdb_path, &store).map_err(|e| bad("vdb.convert", format!("{}: {e}", vdb_path.display())))?;
                 out["vdb"] = json!(vdb_path.to_string_lossy());
                 out["count"] = json!(count);
                 out["truncated"] = json!(truncated);
@@ -339,13 +332,7 @@ fn run_status(s: &mut Session, _p: &Value) -> Result<Value> {
 /// Start the engine-bundled shared `shilpid` (if needed) and remember its address on the session.
 #[cfg(not(target_arch = "wasm32"))]
 fn ensure_shared_vdb(s: &mut Session) -> Result<()> {
-    super::takeoffrec::ensure_server(
-        "vdb.connect",
-        super::takeoffrec::SHARED_ADDR,
-        "127.0.0.1:7421",
-        "takeoff",
-        "takeoff.vdb",
-    )?;
+    super::takeoffrec::ensure_server("vdb.connect", super::takeoffrec::SHARED_ADDR, "127.0.0.1:7421", "takeoff", "takeoff.vdb")?;
     let mut client = VdbClient::connect(DEFAULT_SHILPID).map_err(|e| bad("vdb.connect", e.to_string()))?;
     client.ping().map_err(|e| bad("vdb.connect", e.to_string()))?;
     s.vdb_addr = Some(DEFAULT_SHILPID.to_string());
@@ -391,9 +378,7 @@ pub fn push_if_connected(s: &Session) -> Result<Option<Value>> {
         let (store, truncated, _skipped) = store_from_drawing_ref(s)?;
         let count = store.len();
         let mut client = VdbClient::connect(&addr).map_err(|e| bad("vdb.push", e.to_string()))?;
-        client
-            .push_store(&store, true)
-            .map_err(|e| bad("vdb.push", e.to_string()))?;
+        client.push_store(&store, true).map_err(|e| bad("vdb.push", e.to_string()))?;
         client.save().map_err(|e| bad("vdb.push", e.to_string()))?;
         Ok(Some(json!({
             "addr": addr,
@@ -622,14 +607,7 @@ mod tests {
         s.state_mut().expect("state").path = Some(dxf.to_string_lossy().into());
         s.doc_mut()
             .expect("doc")
-            .add(
-                &Space::Model,
-                Common::default(),
-                EntityKind::Line(Line {
-                    a: Vec3::new(0.0, 0.0, 0.0),
-                    b: Vec3::new(10.0, 0.0, 0.0),
-                }),
-            )
+            .add(&Space::Model, Common::default(), EntityKind::Line(Line { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(10.0, 0.0, 0.0) }))
             .expect("add");
         let r = s.execute("vdb.convert", &json!({})).expect("convert");
         let vdb = dir.path().join("plan.vdb");

@@ -148,13 +148,7 @@ pub(crate) fn insert(s: &mut Session, name: &str, at: Vec2, scale: f64, rotation
 /// The block reference INSERT places: X/Y scale factors, and an optional base point (in block
 /// coordinates) that lands on `at` instead of the block's own base point.
 fn insert_entity(blk: &Block, at: Vec2, scale: Vec2, rotation: f64, base: Option<Vec2>) -> Insert {
-    let mut ins = Insert {
-        block: blk.name.clone(),
-        insert: v3(at),
-        scale: Vec3::new(scale.x, scale.y, scale.x),
-        rotation,
-        ..Insert::default()
-    };
+    let mut ins = Insert { block: blk.name.clone(), insert: v3(at), scale: Vec3::new(scale.x, scale.y, scale.x), rotation, ..Insert::default() };
     if let Some(b) = base {
         let landed = ins.transform(blk.base.xy()).apply(b);
         ins.insert = v3(at + (at - landed));
@@ -351,15 +345,9 @@ fn preview_path(path: &str) -> Result<Value> {
 
 fn preview_entities<'a>(d: &aad_doc::Drawing, entities: impl Iterator<Item = &'a Entity>) -> Value {
     // One display-list pass keeps layer/block colours (AutoCAD DesignCenter style).
-    let ents: Vec<&Entity> = entities
-        .take(400)
-        .filter(|e| !matches!(e.kind, EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::AttDef(_)))
-        .collect();
-    let list = aad_render::build_entities(
-        d,
-        ents,
-        &aad_render::Options { tolerance: 0.05, text: false, fill: false, ..Default::default() },
-    );
+    let ents: Vec<&Entity> =
+        entities.take(400).filter(|e| !matches!(e.kind, EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::AttDef(_))).collect();
+    let list = aad_render::build_entities(d, ents, &aad_render::Options { tolerance: 0.05, text: false, fill: false, ..Default::default() });
     let paper = aad_color::Rgb(245, 245, 245);
     let mut strokes: Vec<(aad_color::Rgb, Vec<Vec2>)> = Vec::new();
     for p in &list.prims {
@@ -658,10 +646,7 @@ impl Interactive for InsertM {
                 Prompt::new(format!("Block \"{name}\" already exists. Redefine it?"), super::curves::KW).kw(&["Yes", "No"]).default("N")
             }
             InsStage::Point => {
-                let p = Prompt::new(
-                    if self.quick { "Specify insertion point (drawing scale)" } else { "Specify insertion point" },
-                    Accept::POINT,
-                );
+                let p = Prompt::new(if self.quick { "Specify insertion point (drawing scale)" } else { "Specify insertion point" }, Accept::POINT);
                 if self.quick { p.kw(&["Basepoint"]) } else { p.kw(&["Basepoint", "Scale", "Rotate"]) }
             }
             InsStage::BasePoint => Prompt::new("Specify base point", Accept::POINT),

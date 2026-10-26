@@ -17,12 +17,7 @@ fn line(y: f64) -> EntityKind {
 
 /// An insert of block "B" (one ByBlock line along y = 0) at height `y`.
 fn insert(y: f64) -> EntityKind {
-    EntityKind::Insert(Insert {
-        block: "B".into(),
-        insert: Vec3::new(0.0, y, 0.0),
-        scale: Vec3::new(1.0, 1.0, 1.0),
-        ..Default::default()
-    })
+    EntityKind::Insert(Insert { block: "B".into(), insert: Vec3::new(0.0, y, 0.0), scale: Vec3::new(1.0, 1.0, 1.0), ..Default::default() })
 }
 
 /// One horizontal line per case at y = 0, 1, 2, ... and, per case, its name and the expected

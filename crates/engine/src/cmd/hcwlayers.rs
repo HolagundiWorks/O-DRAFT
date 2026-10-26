@@ -119,9 +119,7 @@ fn per_layer(counts: std::collections::BTreeMap<String, usize>) -> Vec<Value> {
 
 fn run_audit2(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = all_objects(s)?;
-    let is_standard = |name: &str| {
-        STANDARD_LAYERS.iter().any(|l| l.0 == name) || PRESENTATION_LAYERS.iter().any(|l| l.0 == name)
-    };
+    let is_standard = |name: &str| STANDARD_LAYERS.iter().any(|l| l.0 == name) || PRESENTATION_LAYERS.iter().any(|l| l.0 == name);
     let d = s.doc()?;
     let mut rogue: Vec<Handle> = Vec::new();
     let mut counts = std::collections::BTreeMap::new();
@@ -265,10 +263,7 @@ fn run_legend(s: &mut Session, p: &Value) -> Result<Value> {
     let rows = left.len().max(right.len());
     let header_y = at.y + rows as f64 * row_h + row_h;
     let title_h = 0.3 * k * 1.4;
-    for (title, x) in [
-        ("STANDARD LAYERS v4.1 - AN / A / I", at.x),
-        ("STANDARD LAYERS v4.1 - E / P / S / PR", at.x + col_gap),
-    ] {
+    for (title, x) in [("STANDARD LAYERS v4.1 - AN / A / I", at.x), ("STANDARD LAYERS v4.1 - E / P / S / PR", at.x + col_gap)] {
         let t = make_text(s, Vec2::new(x, header_y), title, title_h, 0.0, (HAlign::Left, VAlign::Baseline));
         add_on(s, "AN-TEXT", t)?;
     }

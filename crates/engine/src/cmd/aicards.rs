@@ -30,11 +30,11 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 fn run_digest(s: &mut Session, _p: &Value) -> Result<Value> {
-    Ok(drawing_digest(s)?)
+    drawing_digest(s)
 }
 
 fn run_cards(s: &mut Session, p: &Value) -> Result<Value> {
-    Ok(context_cards(s, p)?)
+    context_cards(s, p)
 }
 
 /// Compact overview (~200–400 tokens) for the open drawing.
@@ -56,14 +56,10 @@ pub fn drawing_digest(s: &Session) -> Result<Value> {
     // Top layers by count (keep prompt small).
     let mut layer_rows: Vec<(String, usize)> = by_layer.into_iter().collect();
     layer_rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    let layer_top: Map<String, Value> = layer_rows
-        .into_iter()
-        .take(16)
-        .map(|(k, n)| (k, json!(n)))
-        .collect();
+    let layer_top: Map<String, Value> = layer_rows.into_iter().take(16).map(|(k, n)| (k, json!(n))).collect();
 
-    let rooms = room_tally(&d);
-    let openings = match super::project::get(&d, "schedule") {
+    let rooms = room_tally(d);
+    let openings = match super::project::get(d, "schedule") {
         Value::Object(o) => o.get("openings").and_then(Value::as_array).map(|a| a.len()).unwrap_or(0),
         _ => 0,
     };
@@ -104,11 +100,7 @@ pub fn context_cards(s: &Session, p: &Value) -> Result<Value> {
         Some(_) => parse_window(p)?,
         None => view_bounds(s).unwrap_or_else(|| {
             let ext = d.extents(&s.space());
-            if ext.is_empty() {
-                Bounds2::new(Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0))
-            } else {
-                Bounds2::new(ext.min, ext.max)
-            }
+            if ext.is_empty() { Bounds2::new(Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0)) } else { Bounds2::new(ext.min, ext.max) }
         }),
     };
 
@@ -119,13 +111,13 @@ pub fn context_cards(s: &Session, p: &Value) -> Result<Value> {
             if !layer_type_ok(e, &layers, &types) {
                 continue;
             }
-            let b = aad_doc::entity_bounds(&d, e, 0);
+            let b = aad_doc::entity_bounds(d, e, 0);
             if b.is_empty() || !b.intersects(&win) {
                 continue;
             }
             matched += 1;
             if cards.len() < limit {
-                cards.push(context_card(&d, e));
+                cards.push(context_card(d, e));
             }
         }
     }
@@ -150,24 +142,15 @@ pub fn context_card(d: &Drawing, e: &Entity) -> Value {
         "layer": e.common.layer,
         "type": e.kind.type_name(),
     });
-    let o = card.as_object_mut().unwrap();
+    let Some(o) = card.as_object_mut() else { return card };
     if !b.is_empty() {
-        o.insert(
-            "bbox".into(),
-            json!([round(b.min.x), round(b.min.y), round(b.max.x), round(b.max.y)]),
-        );
+        o.insert("bbox".into(), json!([round(b.min.x), round(b.min.y), round(b.max.x), round(b.max.y)]));
     }
     match &e.kind {
         EntityKind::Line(l) => {
             let len = (l.b.xy() - l.a.xy()).len();
             o.insert("length".into(), json!(round(len)));
-            o.insert(
-                "geom".into(),
-                json!(format!(
-                    "line {:.0},{:.0} → {:.0},{:.0}",
-                    l.a.x, l.a.y, l.b.x, l.b.y
-                )),
-            );
+            o.insert("geom".into(), json!(format!("line {:.0},{:.0} → {:.0},{:.0}", l.a.x, l.a.y, l.b.x, l.b.y)));
         }
         EntityKind::Circle(c) => {
             o.insert("radius".into(), json!(round(c.radius)));
@@ -194,10 +177,7 @@ pub fn context_card(d: &Drawing, e: &Entity) -> Value {
         }
         EntityKind::Insert(i) => {
             o.insert("block".into(), json!(i.block));
-            o.insert(
-                "geom".into(),
-                json!(format!("insert {} @ {:.0},{:.0}", i.block, i.insert.x, i.insert.y)),
-            );
+            o.insert("geom".into(), json!(format!("insert {} @ {:.0},{:.0}", i.block, i.insert.x, i.insert.y)));
         }
         _ => {
             o.insert("geom".into(), json!(e.kind.type_name()));
@@ -215,13 +195,7 @@ fn room_tally(d: &Drawing) -> Value {
         .model
         .iter()
         .filter(|e| e.common.layer.eq_ignore_ascii_case(LABELS))
-        .filter_map(|e| {
-            if let EntityKind::Text(t) = &e.kind {
-                Some(t)
-            } else {
-                None
-            }
-        })
+        .filter_map(|e| if let EntityKind::Text(t) = &e.kind { Some(t) } else { None })
         .collect();
     let mut names = Vec::new();
     for c in texts.chunks(3) {
@@ -279,10 +253,7 @@ fn num(v: &Value) -> Option<f64> {
 }
 
 fn str_list(p: &Value, key: &str) -> Vec<String> {
-    p.get(key)
-        .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(Value::as_str).take(32).map(str::to_string).collect())
-        .unwrap_or_default()
+    p.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).take(32).map(str::to_string).collect()).unwrap_or_default()
 }
 
 fn layer_type_ok(e: &Entity, layers: &[String], types: &[String]) -> bool {
@@ -329,14 +300,8 @@ mod tests {
         let h = d.new_handle();
         let e = Entity {
             handle: h,
-            common: Common {
-                layer: "A-WALL".into(),
-                ..Common::default()
-            },
-            kind: EntityKind::Line(Line {
-                a: Vec3::new(0.0, 0.0, 0.0),
-                b: Vec3::new(4.0, 0.0, 0.0),
-            }),
+            common: Common { layer: "A-WALL".into(), ..Common::default() },
+            kind: EntityKind::Line(Line { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(4.0, 0.0, 0.0) }),
         };
         d.space_mut(&Space::Model).unwrap().push(e);
         let stored = d.space(&Space::Model).unwrap().iter().next().unwrap();

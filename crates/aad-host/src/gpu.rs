@@ -344,16 +344,6 @@ fn present_mode_for(vsync: Option<&str>) -> wgpu::PresentMode {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn present_mode_defaults_to_vsync() {
-        assert!(matches!(super::present_mode_for(None), wgpu::PresentMode::AutoVsync));
-        assert!(matches!(super::present_mode_for(Some("1")), wgpu::PresentMode::AutoVsync));
-        assert!(matches!(super::present_mode_for(Some("off")), wgpu::PresentMode::AutoNoVsync));
-    }
-}
-
 fn open_adapter(hwnd: isize) -> Result<(wgpu::Instance, wgpu::Surface<'static>, wgpu::Adapter), String> {
     // Prefer DX12 on Windows (native hardware path). WGPU_BACKEND overrides; fall back to all
     // primary backends if the preferred set cannot create a surface adapter.
@@ -385,4 +375,14 @@ fn open_adapter(hwnd: isize) -> Result<(wgpu::Instance, wgpu::Surface<'static>, 
         }
     }
     Err(last)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn present_mode_defaults_to_vsync() {
+        assert!(matches!(super::present_mode_for(None), wgpu::PresentMode::AutoVsync));
+        assert!(matches!(super::present_mode_for(Some("1")), wgpu::PresentMode::AutoVsync));
+        assert!(matches!(super::present_mode_for(Some("off")), wgpu::PresentMode::AutoNoVsync));
+    }
 }

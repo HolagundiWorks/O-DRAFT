@@ -333,7 +333,9 @@ fn opening_fields(fields: &mut Vec<Value>, doc: &aad_engine::doc::Drawing, openi
         _ => varies_field(fields, "openingWidth", "Width"),
     }
     push_metres(fields, "sill", "Sill height (m)", openings, "OSILL");
-    let mode = shared(openings.iter().map(|i| if i.attrib_value("OLINTEL").is_some_and(|m| m.eq_ignore_ascii_case("custom")) { "custom" } else { "standard" }));
+    let mode = shared(
+        openings.iter().map(|i| if i.attrib_value("OLINTEL").is_some_and(|m| m.eq_ignore_ascii_case("custom")) { "custom" } else { "standard" }),
+    );
     choice_field(fields, "lintelMode", "Lintel lock", &mode, &["standard", "custom"]);
     let lintel = aad_engine::standard_lintel(doc);
     if mode == "standard" {
@@ -358,10 +360,8 @@ fn opening_fields(fields: &mut Vec<Value>, doc: &aad_engine::doc::Drawing, openi
     } else {
         fields.push(json!({ "label": "Head height (m)", "value": "*VARIES*" }));
     }
-    if one {
-        if let Some(i) = openings.first() {
-            number_field(fields, "rotation", "Rotation", i.rotation.to_degrees());
-        }
+    if one && let Some(i) = openings.first() {
+        number_field(fields, "rotation", "Rotation", i.rotation.to_degrees());
     }
 }
 

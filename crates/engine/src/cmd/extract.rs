@@ -78,10 +78,7 @@ fn fmt_of(path: Option<&str>, explicit: Option<&str>) -> String {
     if let Some(f) = explicit.filter(|s| !s.is_empty()) {
         return f.to_ascii_lowercase();
     }
-    path.and_then(|p| std::path::Path::new(p).extension())
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .unwrap_or_else(|| "dxf".into())
+    path.and_then(|p| std::path::Path::new(p).extension()).and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).unwrap_or_else(|| "dxf".into())
 }
 
 fn write_export_bytes(cmd: &str, path: Option<&str>, name: &str, bytes: &[u8]) -> Result<Value> {
@@ -350,7 +347,12 @@ fn fingerprint(d: &Drawing, e: &aad_doc::Entity) -> String {
     let (x0, y0, x1, y1) = if b.is_empty() {
         (0.0, 0.0, 0.0, 0.0)
     } else {
-        ((b.min.x * 1000.0).round() / 1000.0, (b.min.y * 1000.0).round() / 1000.0, (b.max.x * 1000.0).round() / 1000.0, (b.max.y * 1000.0).round() / 1000.0)
+        (
+            (b.min.x * 1000.0).round() / 1000.0,
+            (b.min.y * 1000.0).round() / 1000.0,
+            (b.max.x * 1000.0).round() / 1000.0,
+            (b.max.y * 1000.0).round() / 1000.0,
+        )
     };
     format!("{}|{}|{x0}|{y0}|{x1}|{y1}", e.kind.type_name(), e.common.layer)
 }
