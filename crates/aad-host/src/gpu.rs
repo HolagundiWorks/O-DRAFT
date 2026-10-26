@@ -14,7 +14,8 @@ use crate::surface;
 
 const CHUNK: usize = 4_194_300;
 const UNIFORM_SIZE: u64 = 48;
-const SAMPLE_COUNT: u32 = 1;
+/// 4× MSAA softens hatch fills and TrueType glyph edges; stroke quads still use coverage AA.
+const SAMPLE_COUNT: u32 = 4;
 
 struct Batch {
     buffer: wgpu::Buffer,
@@ -57,9 +58,8 @@ impl Gpu {
         if let Some(format) = caps.formats.iter().copied().find(|f| f.is_srgb()) {
             config.format = format;
         }
-        // Crosshair is drawn in the overlay; a deep swapchain queue reads as pointer lag.
-        // AutoNoVsync picks Immediate → Mailbox → Fifo and is valid on every surface.
-        // AAD_VSYNC=1/on forces tear-free FIFO; =0/off keeps the low-latency mode.
+        // Default: tear-free vsync. AAD_VSYNC=0/off picks AutoNoVsync (Immediate → Mailbox → FIFO)
+        // when the crosshair must track a high-rate pointer with lower latency.
         config.present_mode = present_mode_from_env();
         config.desired_maximum_frame_latency = 1;
         let format = config.format;
@@ -306,7 +306,6 @@ fn batch_ranges(counts: impl IntoIterator<Item = u32>, range: std::ops::Range<us
     out
 }
 
-
 fn msaa_target(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("cad_msaa"),
@@ -335,10 +334,23 @@ fn mesh_fingerprint(mesh: &MeshData) -> u64 {
 }
 
 fn present_mode_from_env() -> wgpu::PresentMode {
-    match std::env::var("AAD_VSYNC").ok().as_deref().map(str::trim).map(|v| v.to_ascii_lowercase()).as_deref() {
-        Some("1" | "on" | "true" | "yes") => wgpu::PresentMode::AutoVsync,
+    present_mode_for(std::env::var("AAD_VSYNC").ok().as_deref())
+}
+
+fn present_mode_for(vsync: Option<&str>) -> wgpu::PresentMode {
+    match vsync.map(str::trim).map(|v| v.to_ascii_lowercase()).as_deref() {
         Some("0" | "off" | "false" | "no") => wgpu::PresentMode::AutoNoVsync,
-        _ => wgpu::PresentMode::AutoNoVsync,
+        _ => wgpu::PresentMode::AutoVsync,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn present_mode_defaults_to_vsync() {
+        assert!(matches!(super::present_mode_for(None), wgpu::PresentMode::AutoVsync));
+        assert!(matches!(super::present_mode_for(Some("1")), wgpu::PresentMode::AutoVsync));
+        assert!(matches!(super::present_mode_for(Some("off")), wgpu::PresentMode::AutoNoVsync));
     }
 }
 

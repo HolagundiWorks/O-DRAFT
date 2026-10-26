@@ -208,15 +208,31 @@ pub fn lod_for_view(view_height: f64, pixel_height: f64) -> (bool, bool) {
     (text, fill)
 }
 
+/// World-space half-extent of the mesh origin snap cell ([`mesh::choose_origin`] uses `64 × h`).
+pub const MODEL_ORIGIN_CELL: f64 = 64.0;
+
 fn model_cull_window(opts: &Options) -> Option<Bounds2> {
     let center = opts.view_center?;
     let h = opts.view_height;
     if !(h.is_finite() && h > 0.0 && center.is_finite()) {
         return None;
     }
-    // Assume a wide aspect; expand so entity bounds slack does not pop in at edges.
-    let half = Vec2::new(h * 1.2, h * 0.7);
-    Some(Bounds2::new(center - half, center + half).expand(h * 0.15))
+    // Cull around the snapped mesh origin cell so a cached display list still covers every pan
+    // that keeps the same origin. A window the size of one screen left geometry missing after a
+    // deep zoom + far pan until the next zoom band or edit rebuilt the list.
+    let step = h * MODEL_ORIGIN_CELL;
+    let origin = Vec2::new((center.x / step).round() * step, (center.y / step).round() * step);
+    let half = Vec2::new(step * 0.5 + h * 2.0, step * 0.5 + h * 2.0);
+    Some(Bounds2::new(origin - half, origin + half))
+}
+
+/// Coarse pan cell for model-space display-list caching (matches [`model_cull_window`]).
+pub fn model_pan_cell(center: Vec2, view_height: f64) -> (i64, i64) {
+    if !(view_height.is_finite() && view_height > 0.0 && center.is_finite()) {
+        return (0, 0);
+    }
+    let step = view_height * MODEL_ORIGIN_CELL;
+    ((center.x / step).round() as i64, (center.y / step).round() as i64)
 }
 
 fn entity_in_cull(d: &Drawing, e: &Entity, win: &Bounds2) -> bool {
@@ -407,10 +423,7 @@ fn build_space(d: &Drawing, space: &Space, opts: &Options, plotting: bool) -> Di
     if let Some(store) = d.space(space) {
         let paper = matches!(space, Space::Paper(_));
         let cull = if paper || plotting { None } else { model_cull_window(opts) };
-        let ents: Vec<&std::sync::Arc<Entity>> = store
-            .iter()
-            .filter(|e| cull.as_ref().is_none_or(|w| entity_in_cull(d, e, w)))
-            .collect();
+        let ents: Vec<&std::sync::Arc<Entity>> = store.iter().filter(|e| cull.as_ref().is_none_or(|w| entity_in_cull(d, e, w))).collect();
         if !paper && ents.len() >= PARALLEL_MIN {
             // Model space: the entities are independent, so chunks are built on all cores and
             // appended in draw order.

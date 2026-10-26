@@ -118,7 +118,12 @@ fn fs_main(v: VOut) -> @location(0) vec4<f32> {
     let t = select(0.0, clamp(dot(p - v.pa, ab) / max(lab, 0.000001), 0.0, 1.0), lab > 0.0001);
     let d = length(p - (v.pa + ab * t));
     // Fills (hw = 0) stay solid. A stroke covers its width and fades across one pixel at the edge.
-    let cover = select(1.0, clamp(v.hw + 0.5 - d, 0.0, 1.0), v.hw > 0.0);
+    var cover = select(1.0, clamp(v.hw + 0.5 - d, 0.0, 1.0), v.hw > 0.0);
+    // Linear-light premultiplied blend thins dark-on-white edges; raise coverage toward display
+    // gamma so a black hairline keeps its visual weight on a white sheet.
+    if (v.hw > 0.0 && view.a.w > 0.5) {
+        cover = pow(cover, 0.454545);
+    }
     let a = v.color.a * cover;
     return vec4<f32>(v.color.rgb * a, a);
 }
@@ -178,12 +183,16 @@ fn push_instance(out: &mut Vec<u8>, a: [f32; 2], b: [f32; 2], c: [u8; 4], width:
 }
 
 /// Lineweight in screen points for a primitive (as on the CPU path), or `None` for a hairline.
+///
+/// When LWDISPLAY is on, millimetre weights map to points (`lw × 3.78`) and are never thinner
+/// than [`HAIRLINE_POINTS`]. That keeps 0.25 / 0.30 / 0.35 mm monotonic: previously 0.25 fell
+/// through to the hairline expander at 1.5 pt while 0.30/0.35 drew as ~1.13/1.32 pt quads.
 pub fn wide_width(lw: f32, lwdisplay: bool) -> Option<f32> {
     if !lwdisplay || lw <= 0.0 {
         return None;
     }
-    let w = (lw * 3.78).clamp(1.0, 12.0);
-    (w > 1.0).then_some(w)
+    let w = (lw * 3.78).clamp(HAIRLINE_POINTS, 12.0);
+    Some(w)
 }
 
 /// Convert a display list into vertex data relative to `origin`, colours resolved against `bg`.
@@ -375,5 +384,20 @@ mod tests {
         assert_eq!(mesh.breaks, vec![[0, 0, 2]]);
         let width = f32::from_le_bytes(mesh.quads[20..24].try_into().expect("width bytes"));
         assert_eq!(width, HAIRLINE_POINTS);
+    }
+
+    #[test]
+    fn displayed_lineweights_are_monotonic_and_at_least_hairline() {
+        assert!(wide_width(0.25, false).is_none());
+        let w25 = wide_width(0.25, true).expect("0.25 mm");
+        let w30 = wide_width(0.30, true).expect("0.30 mm");
+        let w35 = wide_width(0.35, true).expect("0.35 mm");
+        let w50 = wide_width(0.50, true).expect("0.50 mm");
+        // Below the hairline floor, weights share HAIRLINE_POINTS (never thinner than 0.25's path).
+        assert_eq!(w25, HAIRLINE_POINTS);
+        assert_eq!(w30, HAIRLINE_POINTS);
+        assert_eq!(w35, HAIRLINE_POINTS);
+        assert!(w50 > w35);
+        assert!(w50 >= w30 && w30 >= w25);
     }
 }

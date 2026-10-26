@@ -9,13 +9,13 @@
 
 mod assistant;
 mod bar;
-mod osas_ai;
 mod chrome;
 mod control;
 mod ffi;
 mod forms;
 #[cfg(windows)]
 mod gpu;
+mod osas_ai;
 mod overlay;
 mod panels;
 #[cfg(windows)]
@@ -30,12 +30,13 @@ use aad_color::Rgb;
 use aad_engine::Session;
 use aad_engine::doc::{Drawing, Space};
 use aad_geom::Vec2;
-use aad_render::mesh::{self, MeshData};
 use aad_render::DisplayList;
+use aad_render::mesh::{self, MeshData};
 use serde_json::Value;
 
 /// (document uid, revision, tessellation band, lwdisplay, space fingerprint, draw text, draw fill).
-type ListKey = (u64, u64, i32, bool, u64, bool, bool);
+/// uid, revision, tessellation band, lwdisplay, space, text LOD, fill LOD, packed model pan cell.
+type ListKey = (u64, u64, i32, bool, u64, bool, bool, i64);
 
 /// Display list being rebuilt on a worker for a new zoom / LOD band.
 struct PendingList {
@@ -67,7 +68,7 @@ struct PaintStamp {
 impl Default for FrameCache {
     fn default() -> Self {
         FrameCache {
-            list_key: (0, 0, 0, false, 0, true, true),
+            list_key: (0, 0, 0, false, 0, true, true, 0),
             list: None,
             list_doc: None,
             mesh_key: None,
@@ -677,9 +678,10 @@ impl Host {
         if self.hot.is_some() || self.session.pending_window.is_some() {
             return serde_json::json!({ "on": false });
         }
-        let screen = self.screen.filter(|point| point.is_finite()).unwrap_or_else(|| {
-            Vec2::new(f64::from(self.width.max(1)) * 0.5, f64::from(self.height.max(1)) * 0.5)
-        });
+        let screen = self
+            .screen
+            .filter(|point| point.is_finite())
+            .unwrap_or_else(|| Vec2::new(f64::from(self.width.max(1)) * 0.5, f64::from(self.height.max(1)) * 0.5));
         let running = self.session.running.is_some();
         // Slash assistant drafts belong on the fixed AI bar, not beside the cursor.
         if !running && matches!(bar::classify(&self.draft), bar::Kind::Reference) {
@@ -962,11 +964,8 @@ impl Host {
                 continue;
             }
             if matches!(job.method.as_str(), "app.open" | "app.save") {
-                if let Some(err) = self.queue_control_io(job) {
-                    // queue_control_io already replied on failure paths that keep the job;
-                    // when it returns Some the reply was not sent.
-                    let _ = err;
-                }
+                // queue_control_io replies itself on every path that does not start the worker.
+                let _ = self.queue_control_io(job);
                 continue;
             }
             let value = self.control_one(&job.method, &job.params);
@@ -1301,8 +1300,8 @@ impl Host {
             return Ok(());
         }
         let about = self.screen_to_world(ev.x, ev.y)?;
-        // One notch is 120 wheel units in the egui shell (`scroll.y / 300`).
-        let factor = (f64::from(ev.wheel) * 120.0 / 300.0).exp();
+        // One notch is 120 wheel units. Divisor 600 → ~1.22× per notch (was 300 → ~1.49×).
+        let factor = (f64::from(ev.wheel) * 120.0 / 600.0).exp();
         self.session.zoom_about(factor, about).map_err(|e| e.to_string())
     }
 
@@ -1804,19 +1803,25 @@ impl Host {
             view_center: matches!(state.space, Space::Model).then_some(view.center),
             plot_style_table: None,
         };
-        let list_key: ListKey = (state.uid, state.revision, band, lw, space_fp(&state.space), text, fill);
+        let pan_cell = if matches!(state.space, Space::Model) {
+            let (cx, cy) = aad_render::model_pan_cell(view.center, view.height);
+            ((cx as i32 as u32 as i64) << 32) | (cy as i32 as u32 as i64)
+        } else {
+            0
+        };
+        let list_key: ListKey = (state.uid, state.revision, band, lw, space_fp(&state.space), text, fill, pan_cell);
         // Take a finished background band rebuild first.
         if let Some(p) = &self.frame.pending {
             match p.rx.try_recv() {
                 Ok(list) => {
-                    if let Some(p) = self.frame.pending.take() {
-                        if (p.key.0, p.key.1, p.key.3, p.key.4) == (list_key.0, list_key.1, list_key.3, list_key.4) {
-                            self.frame.list = Some(list);
-                            self.frame.list_key = p.key;
-                            self.frame.list_doc = Some(state.doc.clone());
-                            self.frame.mesh_key = None;
-                            self.frame.mesh = None;
-                        }
+                    if let Some(p) = self.frame.pending.take()
+                        && (p.key.0, p.key.1, p.key.3, p.key.4, p.key.7) == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.7)
+                    {
+                        self.frame.list = Some(list);
+                        self.frame.list_key = p.key;
+                        self.frame.list_doc = Some(state.doc.clone());
+                        self.frame.mesh_key = None;
+                        self.frame.mesh = None;
                     }
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
@@ -1825,8 +1830,8 @@ impl Host {
         }
         if self.frame.list_key != list_key || self.frame.list.is_none() {
             let same_drawing = self.frame.list.is_some()
-                && (self.frame.list_key.0, self.frame.list_key.1, self.frame.list_key.3, self.frame.list_key.4)
-                    == (list_key.0, list_key.1, list_key.3, list_key.4);
+                && (self.frame.list_key.0, self.frame.list_key.1, self.frame.list_key.3, self.frame.list_key.4, self.frame.list_key.7)
+                    == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.7);
             // Zoom / LOD band only: keep the last list on screen and rebuild on a worker.
             if same_drawing && self.frame.pending.is_none() {
                 let (tx, rx) = std::sync::mpsc::channel();
@@ -1850,7 +1855,8 @@ impl Host {
                             && self.frame.list_key.2 == list_key.2
                             && self.frame.list_key.3 == list_key.3
                             && self.frame.list_key.5 == list_key.5
-                            && self.frame.list_key.6 == list_key.6 =>
+                            && self.frame.list_key.6 == list_key.6
+                            && self.frame.list_key.7 == list_key.7 =>
                     {
                         aad_render::rebuild(old, old_doc, &state.doc, &opts)
                     }
@@ -2033,12 +2039,8 @@ impl Host {
             f64::from(self.pixels_per_point),
         );
         let over_key = gpu::Gpu::overlay_key(&overlay);
-        let stamp = PaintStamp {
-            mesh_key: key,
-            over_key,
-            uniform: std::array::from_fn(|i| uniform[i].to_bits()),
-            clear: (paper.0, paper.1, paper.2),
-        };
+        let stamp =
+            PaintStamp { mesh_key: key, over_key, uniform: std::array::from_fn(|i| uniform[i].to_bits()), clear: (paper.0, paper.1, paper.2) };
         if self.paint.as_ref() == Some(&stamp) {
             return Ok(());
         }
@@ -2149,7 +2151,10 @@ mod tests {
         assert_eq!(host.stats().entities, before + 1);
         let height = host.stats().view_height;
         host.pointer(Pointer { x: 600.0, y: 400.0, action: POINTER_WHEEL, wheel: 1.0, mods: 0 }).unwrap();
-        assert!(host.stats().view_height < height, "wheel zooms in");
+        let after = host.stats().view_height;
+        assert!(after < height, "wheel zooms in");
+        let step = height / after;
+        assert!((1.15..=1.30).contains(&step), "wheel step ≈1.22×, got {step}");
         host.pointer(Pointer { x: 600.0, y: 400.0, action: POINTER_WHEEL, wheel: -1.0, mods: 0 }).unwrap();
         assert!((host.stats().view_height - height).abs() / height < 1e-6);
     }
@@ -2517,15 +2522,7 @@ mod tests {
         assert!(tip.contains("5"), "{tip}");
         let drawn = overlay::mesh(
             &host.session,
-            Some(&overlay::Cursor {
-                aim: host.aim,
-                raw: host.raw,
-                snap: None,
-                track: None,
-                hot: None,
-                hover: None,
-                warm_grip: None,
-            }),
+            Some(&overlay::Cursor { aim: host.aim, raw: host.raw, snap: None, track: None, hot: None, hover: None, warm_grip: None }),
             host.paper(),
             host.height,
             Vec2::ZERO,
@@ -2589,15 +2586,7 @@ mod tests {
         assert!(selected >= 1, "Insert picks the entity under the keyboard cursor");
         let idle = overlay::mesh(
             &host.session,
-            Some(&overlay::Cursor {
-                aim: host.aim,
-                raw: host.raw,
-                snap: None,
-                track: None,
-                hot: None,
-                hover: host.hover,
-                warm_grip: None,
-            }),
+            Some(&overlay::Cursor { aim: host.aim, raw: host.raw, snap: None, track: None, hot: None, hover: host.hover, warm_grip: None }),
             host.paper(),
             host.height,
             Vec2::ZERO,
@@ -2766,11 +2755,7 @@ mod tests {
         assert!(host.plot_request_json().is_empty());
         host.session.plot_request = Some(aad_engine::PlotRequest { window: None, layout: String::new(), preview: false });
         assert!(host.plot_request_json().contains("null"), "{}", host.plot_request_json());
-        host.session.plot_request = Some(aad_engine::PlotRequest {
-            window: Some([1.0, 2.0, 3.0, 4.0]),
-            layout: "Nameplate L".into(),
-            preview: true,
-        });
+        host.session.plot_request = Some(aad_engine::PlotRequest { window: Some([1.0, 2.0, 3.0, 4.0]), layout: "Nameplate L".into(), preview: true });
         let json = host.plot_request_json();
         assert!(json.contains('1') && json.contains('4'), "{json}");
         host.clear_plot_request();
@@ -3013,13 +2998,7 @@ mod tests {
     fn high_value_commands_appear_on_the_menu() {
         let host = Host::create(false);
         let menu = host.menu_json();
-        for label in [
-            "Deselect All",
-            "Measure Geometry",
-            "New Layer",
-            "Inspect Drawing",
-            "Switch",
-        ] {
+        for label in ["Deselect All", "Measure Geometry", "New Layer", "Inspect Drawing", "Switch"] {
             assert!(menu.contains(label), "menu should include {label}");
         }
         assert!(menu.contains("\"id\":\"ai_deselect\"") || menu.contains("ai_deselect"));

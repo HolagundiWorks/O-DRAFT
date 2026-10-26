@@ -652,8 +652,8 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         } else if scroll.y.abs() > 0.0
             && let Some(hp) = hover_pos
         {
-            // Zoom with the mouse wheel about the cursor.
-            let f = (f64::from(scroll.y) / 300.0).exp();
+            // Zoom with the mouse wheel about the cursor (~1.22× per 120-unit notch).
+            let f = (f64::from(scroll.y) / 600.0).exp();
             let about = xf.to_world(hp);
             let _ = app.session.zoom_about(f, about);
         }
@@ -1112,10 +1112,10 @@ fn draw_crosshair(app: &CadApp, p: &egui::Painter, rect: Rect, at: Pos2, shape: 
     p.line_segment([pos2(at.x + gap, at.y), pos2(at.x + len, at.y)], st);
     p.line_segment([pos2(at.x, at.y - len), pos2(at.x, at.y - gap)], st);
     p.line_segment([pos2(at.x, at.y + gap), pos2(at.x, at.y + len)], st);
-    if shape == aad_engine::CursorShape::CrosshairsAndPickbox {
-        if let Some(half) = pb {
-            p.rect_stroke(Rect::from_center_size(at, vec2(half * 2.0, half * 2.0)), 0.0, st, egui::StrokeKind::Middle);
-        }
+    if shape == aad_engine::CursorShape::CrosshairsAndPickbox
+        && let Some(half) = pb
+    {
+        p.rect_stroke(Rect::from_center_size(at, vec2(half * 2.0, half * 2.0)), 0.0, st, egui::StrokeKind::Middle);
     }
 }
 
