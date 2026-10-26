@@ -49,15 +49,15 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("stair.plan", "Stair", run_stair)
             .menu(&["Architecture", "Structure", "Stair"])
             .alias(&["stair", "aecstair"])
-            .params("{at: [x,y], kind?: straight|dogleg (default straight), rise: floor height in metres, width (drawing units), going? (mm, default 250), riserMax? (mm, default 175), landing? (drawing units, dog-leg), waist? (mm, default 150)} → {risers, riser, going, run, concrete}"),
+            .params("{at: [x,y], kind?: straight|dogleg (default straight), rise: floor-to-floor (drawing units), width (drawing units), going? (drawing units; default ~250 mm), riserMax? (drawing units; default ~175 mm), landing? (drawing units, dog-leg), waist? (drawing units; default ~150 mm)} → {risers, riser, going, run, concrete}"),
         CommandSpec::new("lift.shaft", "Lift Shaft", run_lift)
             .menu(&["Architecture", "Structure", "Lift Shaft"])
             .alias(&["hcwlift"])
-            .params("{at: [x,y] (lower-left of the clear shaft), width, depth, wall? (default 230 mm), car?: [w, d] (default shaft less 200 mm each way)} → {outer, shaft, car}"),
+            .params("{at: [x,y] (lower-left of the clear shaft), width, depth (drawing units), wall? (drawing units; default ~230 mm), car?: [w, d] (default shaft less ~200 mm each way)} → {outer, shaft, car}"),
         CommandSpec::new("rail.draw", "Handrail", run_rail)
             .menu(&["Architecture", "Structure", "Handrail"])
             .alias(&["hcwrail"])
-            .params("{points: [[x,y],...], post? (spacing, default 1.2 m), size? (post size, default 50 mm)} → {posts}"),
+            .params("{points: [[x,y],...], post? (spacing, drawing units; default ~1.2 m), size? (post size, drawing units; default ~50 mm)} → {posts}"),
     ]
 }
 
@@ -201,16 +201,21 @@ fn run_lintel(s: &mut Session, p: &Value) -> Result<Value> {
             .filter(|e| only.as_ref().is_none_or(|v| v.contains(&e.handle)))
             .filter_map(|e| {
                 let EntityKind::Insert(i) = &e.kind else { return None };
-                if !(i.block.starts_with("DOOR-") || i.block.starts_with("WIN-")) {
+                if !i.is_opening() {
                     return None;
                 }
-                // The opening width is the span of the block's deduction line.
-                let b = d.block(&i.block)?;
-                let ded = b.entities.iter().find_map(|x| match &x.kind {
-                    EntityKind::Line(l) if x.common.layer.eq_ignore_ascii_case("MEASURE-DEDUCT") => Some((l.a.x, l.b.x)),
-                    _ => None,
-                })?;
-                let half = (ded.0 - ded.1).abs() * i.scale.x.abs() / 2.0 + bearing;
+                // Prefer the stored opening width; fall back to the deduction line for older blocks.
+                let half = i
+                    .opening_width()
+                    .map(|w| w * i.scale.x.abs() / 2.0 + bearing)
+                    .or_else(|| {
+                        let b = d.block(&i.block)?;
+                        let ded = b.entities.iter().find_map(|x| match &x.kind {
+                            EntityKind::Line(l) if x.common.layer.eq_ignore_ascii_case("MEASURE-DEDUCT") => Some((l.a.x, l.b.x)),
+                            _ => None,
+                        })?;
+                        Some((ded.0 - ded.1).abs() * i.scale.x.abs() / 2.0 + bearing)
+                    })?;
                 let u = Vec2::new(i.rotation.cos(), i.rotation.sin());
                 let c = i.insert.xy();
                 Some((c - u * half, c + u * half))
@@ -234,27 +239,28 @@ fn run_stair(s: &mut Session, p: &Value) -> Result<Value> {
     let at = point_req("stair.plan", p, "at")?;
     let rise = f64_req("stair.plan", p, "rise")?;
     let width = f64_req("stair.plan", p, "width")?;
-    if !(rise.is_finite() && rise > 0.0 && rise < 12.0 && width.is_finite() && width > 0.0) {
-        return Err(bad("stair.plan", "`rise` (metres, below 12) and `width` must be positive"));
+    let m = mm(s);
+    // Metres of real size per drawing unit (unset INSUNITS treated as millimetres).
+    let unit = ua::drawing_unit(s.doc()?).map_or(0.001, |u| u.metres());
+    let max_rise = 12.0 / unit;
+    if !(rise.is_finite() && rise > 0.0 && rise < max_rise && width.is_finite() && width > 0.0) {
+        return Err(bad("stair.plan", "`rise` and `width` must be positive drawing units (rise under 12 m)"));
     }
     let kind = str_param(p, "kind").unwrap_or("straight");
     if !["straight", "dogleg"].contains(&kind) {
         return Err(bad("stair.plan", "`kind` must be straight or dogleg"));
     }
-    let unit = ua::drawing_unit(s.doc()?).map_or(0.001, |u| u.metres());
-    let m = mm(s);
-    let going = f64_or(p, "going", 250.0) * m;
-    let riser_max = f64_or(p, "riserMax", 175.0);
-    let waist = f64_or(p, "waist", 150.0);
-    if !(going > 0.0 && riser_max > 50.0 && waist > 0.0) {
+    let going = f64_or(p, "going", 250.0 * m);
+    let riser_max = f64_or(p, "riserMax", 175.0 * m);
+    let waist = f64_or(p, "waist", 150.0 * m);
+    if !(going > 0.0 && riser_max > 50.0 * m && waist > 0.0) {
         return Err(bad("stair.plan", "`going`, `riserMax` and `waist` must be positive"));
     }
-    let rise_mm = rise * 1000.0;
-    let risers = (rise_mm / riser_max).ceil().max(2.0) as usize;
+    let risers = (rise / riser_max).ceil().max(2.0) as usize;
     if risers > 200 {
         return Err(bad("stair.plan", "too many risers"));
     }
-    let riser = rise_mm / risers as f64;
+    let riser = rise / risers as f64;
     let treads = risers - 1;
     ensure_layer(s.doc_mut()?, STAIR, 2, "Continuous", 25, "Stairs");
     let th = 125.0 * m;
@@ -292,18 +298,18 @@ fn run_stair(s: &mut Session, p: &Value) -> Result<Value> {
         }
         text(s, STAIR, Vec2::new(at.x + run / 2.0, at.y + width / 2.0), "UP", th, (HAlign::Center, VAlign::Middle))?;
     }
-    text(s, STAIR, Vec2::new(at.x, at.y - th * 1.5), &format!("{risers} R @ {riser:.0}  T @ {:.0}", going / m), th, (HAlign::Left, VAlign::Middle))?;
+    text(s, STAIR, Vec2::new(at.x, at.y - th * 1.5), &format!("{risers} R @ {riser:.0}  T @ {going:.0}"), th, (HAlign::Left, VAlign::Middle))?;
     // Concrete from the inputs: the waist slab along the slope plus the steps, per flight, in m3.
-    let (w_m, g_m, r_m) = (width * unit, going * unit, riser / 1000.0);
+    let (w_m, g_m, r_m, waist_m) = (width * unit, going * unit, riser * unit, waist * unit);
     let slope = (g_m * g_m + r_m * r_m).sqrt();
     let flights = if kind == "straight" { 1.0 } else { 2.0 };
     let steps = if kind == "straight" { treads } else { treads.div_ceil(2) + (treads - treads.div_ceil(2)) } as f64;
-    let waist_vol = steps * slope * w_m * (waist / 1000.0);
+    let waist_vol = steps * slope * w_m * waist_m;
     let step_vol = steps * 0.5 * g_m * r_m * w_m;
-    let landing_vol = if kind == "dogleg" { landing * unit * 2.0 * w_m * (waist / 1000.0) } else { 0.0 };
+    let landing_vol = if kind == "dogleg" { landing * unit * 2.0 * w_m * waist_m } else { 0.0 };
     let concrete = ((waist_vol + step_vol + landing_vol) * 1000.0).round() / 1000.0;
     Ok(json!({
-        "kind": kind, "risers": risers, "riser": (riser * 10.0).round() / 10.0, "treads": treads, "going": going / m,
+        "kind": kind, "risers": risers, "riser": (riser * 10.0).round() / 10.0, "treads": treads, "going": going,
         "run": run, "flights": flights, "tallestFlightTreads": flight_treads, "concrete": concrete, "concreteUnit": "m3",
     }))
 }

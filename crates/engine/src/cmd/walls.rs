@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 
-use aad_doc::{Block, Common, Drawing, Entity, EntityKind, Handle, Insert};
+use aad_doc::{Block, Common, Drawing, Entity, EntityKind, Handle, Insert, entity_bounds};
 use aad_geom::{Line, Vec2, Vec3};
 use serde_json::{Value, json};
 
@@ -30,17 +30,16 @@ const DEDUCT: &str = "MEASURE-DEDUCT";
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("wall.draw", "Draw Wall", run_wall)
-            .menu(&["Architecture", "Walls and Openings", "Draw Wall"])
             .alias(&["wall", "hcwwall"])
             .params("{points?: [[x,y],...] | handles?: [lines, polylines], thickness? (drawing units; default ≈230 mm), closed?: bool, layer?: default A-WALL} → {lines}"),
         CommandSpec::new("wall.door", "Door", run_door)
             .menu(&["Architecture", "Walls and Openings", "Door"])
             .alias(&["door", "hcwdoor"])
-            .params("{at: [x,y], angle?: degrees (default: the nearest wall line), width? (drawing units; default ≈900 mm) | name? (schedule entry), thickness? (drawing units), swing?: left|right, side?: up|down, openingType?: single|double|sliding|folding, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units, custom), layer?, deduct?: bool} → {block, cut}"),
+            .params("{at: [x,y], block? (plan block; width from its extents), angle?: degrees (default: the nearest wall line), width? (drawing units; default ≈900 mm) | name? (schedule entry), thickness? (drawing units), swing?: left|right, side?: up|down, openingType?: single|double|sliding|folding, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units, custom), layer?, deduct?: bool} → {block, cut}"),
         CommandSpec::new("wall.window", "Window", run_window)
             .menu(&["Architecture", "Walls and Openings", "Window"])
             .alias(&["window", "hcwwindow"])
-            .params("{at: [x,y], angle?, width? (drawing units; default ≈1200 mm) | name?, thickness? (drawing units), openingType?: fixed|casement|sliding|ventilator, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units), layer?, deduct?: bool} → {block, cut}"),
+            .params("{at: [x,y], block?, angle?, width? (drawing units; default ≈1200 mm) | name?, thickness? (drawing units), openingType?: fixed|casement|sliding|ventilator, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units), layer?, deduct?: bool} → {block, cut}"),
         CommandSpec::new("wall.clean", "Clean Lines", run_clean)
             .menu(&["Architecture", "Walls and Openings", "Clean Lines"])
             .alias(&["hcwclean"])
@@ -563,6 +562,57 @@ fn shift_jambs(s: &mut Session, ins: &Insert, old_w: f64, new_w: f64, thick: f64
     Ok(())
 }
 
+fn is_generated_opening(name: &str) -> bool {
+    name.to_ascii_uppercase().starts_with("AADOPEN-")
+}
+
+/// Plan width of a named block from its extents (X span in block coordinates).
+fn block_plan_width(d: &Drawing, name: &str) -> Option<f64> {
+    let b = d.block(name)?;
+    let mut bb = aad_geom::Bounds2::EMPTY;
+    for e in b.entities.iter() {
+        bb = bb.union(&entity_bounds(d, e, 0));
+    }
+    if bb.is_empty() {
+        return None;
+    }
+    let w = bb.max.x - bb.min.x;
+    (w.is_finite() && w > 1e-9).then_some(w)
+}
+
+/// Push the opening's plan width (metres) onto a schedule mark, and link the block name.
+fn apply_width_to_schedule(s: &mut Session, mark: &str, width_m: f64, block: &str) -> Result<()> {
+    if mark.is_empty() || !(width_m.is_finite() && width_m > 0.0) {
+        return Ok(());
+    }
+    let mut sc = project::get(s.doc()?, "schedule");
+    let Some(list) = sc["openings"].as_array_mut() else { return Ok(()) };
+    let Some(o) = list.iter_mut().find(|o| o["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(mark))) else {
+        return Ok(());
+    };
+    o["length"] = json!((width_m * 1000.0).round() / 1000.0);
+    if !block.is_empty() {
+        let cur = o["block"].as_str().unwrap_or("").to_string();
+        if !cur.split(';').any(|b| b.trim().eq_ignore_ascii_case(block)) {
+            o["block"] = json!(if cur.is_empty() { block.to_string() } else { format!("{cur};{block}") });
+        }
+    }
+    project::set(s.doc_mut()?, "schedule", &sc);
+    Ok(())
+}
+
+fn schedule_mark_for_block(d: &Drawing, block: &str) -> Option<String> {
+    let sched = project::get(d, "schedule");
+    sched["openings"].as_array()?.iter().find_map(|o| {
+        let linked = o["block"].as_str().unwrap_or("");
+        if linked.split(';').any(|b| b.trim().eq_ignore_ascii_case(block)) {
+            o["name"].as_str().map(str::to_string)
+        } else {
+            None
+        }
+    })
+}
+
 fn commit_opening(s: &mut Session, h: Handle, block: &str, old_w: f64, op: &Opening) -> Result<()> {
     let insert = {
         let e = s.doc()?.entity(h).ok_or_else(|| bad("properties.set", "no such opening"))?;
@@ -572,11 +622,26 @@ fn commit_opening(s: &mut Session, h: Handle, block: &str, old_w: f64, op: &Open
     s.doc_mut()?.modify_entity(h, |e| {
         if let EntityKind::Insert(i) = &mut e.kind {
             store_params(i, op);
+            // User blocks keep their geometry; stretch X scale when the opening width changes.
+            if !is_generated_opening(&i.block) && old_w > 1e-9 {
+                let sx = (i.scale.x.abs() * (op.width / old_w)).copysign(i.scale.x);
+                i.scale.x = sx;
+            }
         }
     })?;
-    let name = exclusive_name(s, h, block)?;
-    write_symbol(s.doc_mut()?, &name, op.door, &op.otype, op.width, op.thick, op.deduct);
-    shift_jambs(s, &insert, old_w, op.width, op.thick)
+    let name = if is_generated_opening(block) {
+        let name = exclusive_name(s, h, block)?;
+        write_symbol(s.doc_mut()?, &name, op.door, &op.otype, op.width, op.thick, op.deduct);
+        name
+    } else {
+        block.to_string()
+    };
+    shift_jambs(s, &insert, old_w, op.width, op.thick)?;
+    let to_m = metres_per_du(s);
+    if let Some(mark) = schedule_mark_for_block(s.doc()?, &name) {
+        apply_width_to_schedule(s, &mark, op.width * to_m, &name)?;
+    }
+    Ok(())
 }
 
 /// Rebuild an opening after a width grip. `old_width` is the plan width before the grip moved.
@@ -634,7 +699,15 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
     let at = point_req(cmd, p, "at")?;
     let mm = per_mm(s);
     let layer = str_param(p, "layer").unwrap_or(WALL).to_string();
-    // Width: explicit, else a schedule entry's length (metres) in drawing units, else a default.
+    let user_block = str_param(p, "block").map(str::to_string).filter(|n| !n.is_empty());
+    if let Some(name) = &user_block {
+        let key = s.doc()?.blocks.keys().find(|k| k.eq_ignore_ascii_case(name)).cloned();
+        if key.is_none() {
+            return Err(bad(cmd, format!("no block `{name}` — pick one in the Blocks panel")));
+        }
+    }
+    let resolved_block = user_block.as_ref().and_then(|n| s.doc().ok()?.blocks.keys().find(|k| k.eq_ignore_ascii_case(n)).cloned());
+    // Width: explicit override, else the grabbed block's plan width, else schedule mark, else default.
     let sched = project::get(s.doc()?, "schedule");
     let entry = str_param(p, "name")
         .and_then(|n| sched["openings"].as_array()?.iter().find(|o| o["name"].as_str().is_some_and(|x| x.eq_ignore_ascii_case(n))))
@@ -644,10 +717,12 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
     }
     let to_m = metres_per_du(s);
     let to_du = |m: f64| m / to_m;
-    let width = match (p.get("width").and_then(Value::as_f64), &entry) {
-        (Some(w), _) => w,
-        (None, Some(e)) => to_du(e["length"].as_f64().unwrap_or(0.9)),
-        (None, None) => (if door { 900.0 } else { 1200.0 }) * mm,
+    let block_w = resolved_block.as_ref().and_then(|n| block_plan_width(s.doc().ok()?, n));
+    let width = match (p.get("width").and_then(Value::as_f64), block_w, &entry) {
+        (Some(w), _, _) => w,
+        (None, Some(w), _) => w,
+        (None, None, Some(e)) => to_du(e["length"].as_f64().unwrap_or(0.9)),
+        (None, None, None) => (if door { 900.0 } else { 1200.0 }) * mm,
     };
     if !(width.is_finite() && width > 0.0) {
         return Err(bad(cmd, "`width` must be positive"));
@@ -696,9 +771,14 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
         }
     }
     apply_opening(&mut op, p, standard, cmd, to_m)?;
-    let token = s.doc_mut()?.new_handle();
-    let block = format!("AADOPEN-{}", token.hex());
-    write_symbol(s.doc_mut()?, &block, op.door, &op.otype, op.width, op.thick, op.deduct);
+    let block = if let Some(name) = resolved_block {
+        name
+    } else {
+        let token = s.doc_mut()?.new_handle();
+        let block = format!("AADOPEN-{}", token.hex());
+        write_symbol(s.doc_mut()?, &block, op.door, &op.otype, op.width, op.thick, op.deduct);
+        block
+    };
     // Insert: mirrored for a right-hand swing, turned half a turn to swing to the other side.
     let mut rot = angle;
     if str_param(p, "side") == Some("down") {
@@ -718,19 +798,10 @@ fn opening(s: &mut Session, p: &Value, cmd: &str, door: bool) -> Result<Value> {
     let mut common = s.current_common();
     common.layer = (if door { DOOR } else { WINDOW }).to_string();
     let h = s.doc_mut()?.add(&space, common, ins)?;
-    // Link the schedule entry to this block when it has none.
+    // Schedule width follows the opening on the drawing.
     if let Some(e) = &entry {
         let name = e["name"].as_str().unwrap_or("");
-        let mut sc = sched.clone();
-        if let Some(list) = sc["openings"].as_array_mut()
-            && let Some(o) = list.iter_mut().find(|o| o["name"].as_str() == Some(name))
-        {
-            let cur = o["block"].as_str().unwrap_or("").to_string();
-            if !cur.split(';').any(|b| b.trim().eq_ignore_ascii_case(&block)) {
-                o["block"] = json!(if cur.is_empty() { block.clone() } else { format!("{cur};{block}") });
-                project::set(s.doc_mut()?, "schedule", &sc);
-            }
-        }
+        apply_width_to_schedule(s, name, op.width * to_m, &block)?;
     }
     Ok(json!({
         "block": block,

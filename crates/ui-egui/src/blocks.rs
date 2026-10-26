@@ -55,19 +55,19 @@ fn preview(ui: &egui::Ui, rect: Rect, d: &Drawing, block: &aad_doc::Block) {
     }
 }
 
-/// Start INSERT for `name` (the command asks for the insertion point next).
+/// Place `name` at drawing scale: pick the insertion point only (scale 1, rotation 0).
 fn insert(app: &mut CadApp, name: &str) {
-    app.start("insert");
+    app.start("insert.place");
     if let Err(e) = app.session.input(Input::Text(name.to_string())) {
         app.session.echo(e.to_string());
     }
 }
 
-/// INSERT a furniture DXF from the bundled standard set (`name=path` so the block is named cleanly).
+/// Place a furniture DXF from the bundled standard set (`name=path` so the block is named cleanly).
 fn insert_furniture_file(app: &mut CadApp, block_name: &str, path: &std::path::Path) {
     let path = path.to_string_lossy();
     let token = format!("{block_name}={path}");
-    app.start("insert");
+    app.start("insert.place");
     if let Err(e) = app.session.input(Input::Text(token)) {
         app.session.echo(e.to_string());
     }
@@ -96,7 +96,11 @@ fn furniture_section(app: &mut CadApp, ui: &mut egui::Ui) {
         } else {
             format!("{} · {} mm", item.title, size)
         };
-        if ui.button(&label).on_hover_text(item.note.as_deref().unwrap_or("Insert this block (asks for the insertion point)")).clicked() {
+        if ui
+            .button(&label)
+            .on_hover_text(item.note.as_deref().unwrap_or("Place at the picked point (drawing scale)"))
+            .clicked()
+        {
             insert_path = Some((item.file.trim_end_matches(".dxf").trim_end_matches(".DXF").to_string(), path.clone()));
         }
     }
@@ -149,8 +153,14 @@ pub(crate) fn blocks_section(app: &mut CadApp, ui: &mut egui::Ui) {
         && let Some(b) = d.block(&name)
     {
         ui.separator();
+        let (prev, _) = ui.allocate_exact_size(vec2(ui.available_width().min(180.0), 120.0), Sense::hover());
+        preview(ui, prev, d, b);
         ui.horizontal(|ui| {
-            if ui.button(crate::tl!("Insert")).on_hover_text(crate::tl!("Insert the selected block (asks for the insertion point)")).clicked() {
+            if ui
+                .button(crate::tl!("Insert"))
+                .on_hover_text(crate::tl!("Place the selected block at the picked point (drawing scale)"))
+                .clicked()
+            {
                 action = Some(("insert", name.clone()));
             }
             let list = refs.get(&name).cloned().unwrap_or_default();

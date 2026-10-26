@@ -34,7 +34,11 @@ use super::*;
 use crate::{Result, Session};
 
 pub const TITLE_BLOCK: &str = "AAD-TITLEBLOCK";
-/// The single paper layout a new drawing uses to design the title plate.
+/// Landscape nameplate layout (designed separately from portrait).
+pub const TITLE_PLATE_L: &str = "Nameplate L";
+/// Portrait nameplate layout (designed separately from landscape).
+pub const TITLE_PLATE_P: &str = "Nameplate P";
+/// Legacy single title-plate name (still recognised when migrating old drawings).
 pub const TITLE_PLATE: &str = "Title plate";
 const BORDER_LAYER: &str = "A-ANNO-BORD";
 const TITLE_LAYER: &str = "A-ANNO-TTLB";
@@ -61,7 +65,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{layout?, fields?: {PROJECT, CLIENT, TITLE, FLOOR, DRAWN, DATE, SHEET, SCALE, REV}} → {handle, fields, created}"),
         CommandSpec::new("sheet.designer", "Title Plate", run_designer)
             .menu(&["Architecture", "Sheets", "Title Plate"])
-            .params("{open?: bool} → {name, layouts, created}. A new drawing's empty Layout1/Layout2 become this one sheet; `open` switches to it."),
+            .params("{open?: bool, landscape?: bool (default true → Nameplate L; false → Nameplate P)} → {name, layouts, created}. Ensures both nameplates; `open` switches to the chosen one."),
         CommandSpec::new("sheet.fields", "Sheet Fields", run_fields)
             .menu(&["Architecture", "Sheets", "Sheet Fields"])
             .params("{layout?, fields?: {TAG: value}} → {fields: {TAG: value}} (without `fields`: just reads them)"),
@@ -91,6 +95,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["View", "Viewports", "Remove"])
             .alias(&["vprem"])
             .params("{handle}"),
+        // Used by Print after the user picks a model-space window (or Extents / Display).
+        CommandSpec::new("sheet.plotwindow", "Plot Window", run_plotwindow)
+            .alias(&["plotwindow", "nameplate.plotwindow"])
+            .params("{layout?, window?: [x0,y0,x1,y1] model region to show (default: model extents), p1?, p2? (paper units for the viewport; default above the title block), locked?: bool (default true)} → {handle, scale, scaleText, created, layout}"),
     ]
 }
 
@@ -315,13 +323,18 @@ fn string_map(v: Option<&Value>) -> Result<BTreeMap<String, String>> {
 
 // ---------------- title plate ----------------
 
-/// Empty Layout1/Layout2 (or an existing Title plate) and nothing else.
+fn is_nameplate(name: &str) -> bool {
+    name.eq_ignore_ascii_case(TITLE_PLATE_L)
+        || name.eq_ignore_ascii_case(TITLE_PLATE_P)
+        || name.eq_ignore_ascii_case(TITLE_PLATE)
+}
+
+/// Empty Layout1/Layout2 (or existing nameplates) and nothing else.
 fn only_stock_sheets(d: &Drawing) -> bool {
     !d.layouts.is_empty()
         && d.layouts.iter().all(|l| {
             let stock = l.name.eq_ignore_ascii_case("Layout1") || l.name.eq_ignore_ascii_case("Layout2");
-            let plate = l.name.eq_ignore_ascii_case(TITLE_PLATE);
-            (stock && l.entities.is_empty()) || plate
+            (stock && l.entities.is_empty()) || is_nameplate(&l.name)
         })
 }
 
@@ -329,35 +342,89 @@ fn layout_names(s: &Session) -> Vec<String> {
     s.doc().map(|d| d.layouts.iter().map(|l| l.name.clone()).collect()).unwrap_or_default()
 }
 
-/// One paper layout, `Title plate`, with the title block. Drawings that already have other sheets,
-/// or anything drawn on Layout1 or Layout2, are left as they are.
-fn run_designer(s: &mut Session, p: &Value) -> Result<Value> {
-    let open = bool_or(p, "open", false);
+fn plate_for(landscape: bool) -> &'static str {
+    if landscape { TITLE_PLATE_L } else { TITLE_PLATE_P }
+}
+
+/// Ensure Nameplate L (landscape) and Nameplate P (portrait) exist with title blocks and page setup.
+fn ensure_nameplates(s: &mut Session) -> Result<(bool, bool)> {
+    // Migrate a legacy single "Title plate" into Nameplate L once.
+    if s.doc()?.layout(TITLE_PLATE).is_some() && s.doc()?.layout(TITLE_PLATE_L).is_none() {
+        // Rename by creating L and copying is heavy; keep legacy usable as L via alias in plotwindow_layout.
+    }
+    let mut created_l = false;
+    let mut created_p = false;
     if only_stock_sheets(s.doc()?) {
-        if s.doc()?.layout(TITLE_PLATE).is_none() {
-            s.execute("layout.new", &json!({ "name": TITLE_PLATE, "viewport": false }))?;
+        for (name, landscape) in [(TITLE_PLATE_L, true), (TITLE_PLATE_P, false)] {
+            if s.doc()?.layout(name).is_none() {
+                s.execute("layout.new", &json!({ "name": name, "viewport": false }))?;
+                if name == TITLE_PLATE_L {
+                    created_l = true;
+                } else {
+                    created_p = true;
+                }
+            }
         }
         let remove: Vec<String> = s
             .doc()?
             .layouts
             .iter()
-            .filter(|l| !l.name.eq_ignore_ascii_case(TITLE_PLATE))
+            .filter(|l| !is_nameplate(&l.name))
             .map(|l| l.name.clone())
             .collect();
         for name in remove {
             s.execute("layout.delete", &json!({ "name": name }))?;
         }
-    } else if s.doc()?.layout(TITLE_PLATE).is_none() {
-        return Ok(json!({ "name": Value::Null, "layouts": layout_names(s), "created": false }));
+    } else {
+        for (name, _) in [(TITLE_PLATE_L, true), (TITLE_PLATE_P, false)] {
+            if s.doc()?.layout(name).is_none() {
+                s.execute("layout.new", &json!({ "name": name, "viewport": false }))?;
+                if name == TITLE_PLATE_L {
+                    created_l = true;
+                } else {
+                    created_p = true;
+                }
+            }
+        }
     }
-    let block = s.execute("sheet.titleblock", &json!({ "layout": TITLE_PLATE }))?;
+    for (name, landscape) in [(TITLE_PLATE_L, true), (TITLE_PLATE_P, false)] {
+        if s.doc()?.layout(name).is_some() {
+            let _ = s.execute("sheet.titleblock", &json!({ "layout": name }));
+            let _ = s.execute("pagesetup", &json!({ "layout": name, "landscape": landscape }));
+        }
+    }
+    // Legacy Title plate: keep title block; treat as landscape companion when L was just created from stock.
+    if s.doc()?.layout(TITLE_PLATE).is_some() {
+        let _ = s.execute("sheet.titleblock", &json!({ "layout": TITLE_PLATE }));
+        let _ = s.execute("pagesetup", &json!({ "layout": TITLE_PLATE, "landscape": true }));
+    }
+    Ok((created_l, created_p))
+}
+
+/// Both nameplates (landscape + portrait). Drawings that already have other sheets keep them;
+/// missing nameplates are still added. `landscape` chooses which sheet `open` switches to.
+fn run_designer(s: &mut Session, p: &Value) -> Result<Value> {
+    let open = bool_or(p, "open", false);
+    let landscape = bool_or(p, "landscape", true);
+    let target = plate_for(landscape);
+    let (created_l, created_p) = ensure_nameplates(s)?;
+    // Prefer the requested plate; fall back to legacy Title plate if L is missing somehow.
+    let name = if s.doc()?.layout(target).is_some() {
+        target
+    } else if s.doc()?.layout(TITLE_PLATE).is_some() {
+        TITLE_PLATE
+    } else {
+        return Ok(json!({ "name": Value::Null, "layouts": layout_names(s), "created": false }));
+    };
+    let block = s.execute("sheet.titleblock", &json!({ "layout": name }))?;
     if open {
-        s.execute("layout.set", &json!({ "name": TITLE_PLATE }))?;
+        s.execute("layout.set", &json!({ "name": name }))?;
     }
     Ok(json!({
-        "name": TITLE_PLATE,
+        "name": name,
+        "landscape": landscape,
         "layouts": layout_names(s),
-        "created": block.get("created").cloned().unwrap_or(Value::Bool(false)),
+        "created": created_l || created_p || block.get("created").and_then(Value::as_bool).unwrap_or(false),
         "fields": block.get("fields").cloned().unwrap_or(Value::Null),
     }))
 }
@@ -744,4 +811,135 @@ fn run_vp_remove(s: &mut Session, p: &Value) -> Result<Value> {
     }
     d.remove_entity(h);
     Ok(json!({ "removed": hex }))
+}
+
+/// Layout for the nameplate plot window: explicit `layout`, else Nameplate L, else legacy / current paper.
+fn plotwindow_layout(s: &mut Session, p: &Value) -> Result<String> {
+    if let Some(n) = str_param(p, "layout") {
+        let _ = s.execute("sheet.designer", &json!({ "landscape": !n.eq_ignore_ascii_case(TITLE_PLATE_P) }));
+        return s.doc()?.layout(n).map(|l| l.name.clone()).ok_or_else(|| bad("sheet.plotwindow", format!("no layout named `{n}`")));
+    }
+    let _ = s.execute("sheet.designer", &json!({}));
+    if s.doc()?.layout(TITLE_PLATE_L).is_some() {
+        return Ok(TITLE_PLATE_L.to_string());
+    }
+    if s.doc()?.layout(TITLE_PLATE).is_some() {
+        return Ok(TITLE_PLATE.to_string());
+    }
+    match s.layout_space() {
+        Space::Paper(n) => Ok(n),
+        Space::Model => Err(bad("sheet.plotwindow", "switch to a layout or open the nameplate first")),
+    }
+}
+
+/// Model extents used to fit a plot window (limits when the model is empty).
+fn model_fit_extents(d: &Drawing) -> Bounds2 {
+    let mut ext = d.extents(&Space::Model);
+    if ext.is_empty() {
+        let lo = d.header.point("LIMMIN").map(|p| p.xy()).unwrap_or(Vec2::ZERO);
+        let hi = d.header.point("LIMMAX").map(|p| p.xy()).unwrap_or(Vec2::new(12.0, 9.0));
+        ext = Bounds2::new(lo, hi);
+    }
+    ext
+}
+
+/// Optional model-space rectangle from Print's window pick (`window: [x0,y0,x1,y1]`).
+fn model_window_extents(d: &Drawing, p: &Value) -> Result<Bounds2> {
+    let Some(v) = p.get("window").filter(|v| !v.is_null()) else {
+        return Ok(model_fit_extents(d));
+    };
+    let a: Vec<f64> = v.as_array().map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+    match a[..] {
+        [x0, y0, x1, y1] if a.iter().all(|n| n.is_finite() && n.abs() < 1e12) && x0 != x1 && y0 != y1 => {
+            Ok(Bounds2::new(Vec2::new(x0.min(x1), y0.min(y1)), Vec2::new(x0.max(x1), y0.max(y1))))
+        }
+        _ => Err(bad("sheet.plotwindow", "`window` must be [x0, y0, x1, y1]: two different corners")),
+    }
+}
+
+/// Paper units per model unit that just fit `ext` into a viewport of size `w` × `h`.
+fn exact_fit_scale(ext: Bounds2, w: f64, h: f64) -> f64 {
+    let aspect = (w / h.max(1e-12)).max(1e-12);
+    let vh = (ext.height().max(ext.width() / aspect) * 1.02).max(1e-9);
+    (h / vh).max(1e-12)
+}
+
+/// Add or update the sheet's plot window so the model fits at the nearest standard scale.
+fn run_plotwindow(s: &mut Session, p: &Value) -> Result<Value> {
+    let layout = plotwindow_layout(s, p)?;
+    // Ensure a title block / border so the default plot area sits above it.
+    let _ = s.execute("sheet.titleblock", &json!({ "layout": layout }))?;
+    let existing = {
+        let d = s.doc()?;
+        let l = d.layouts.iter().find(|l| l.name == layout).ok_or_else(|| bad("sheet.plotwindow", "no such layout"))?;
+        l.entities
+            .iter()
+            .find_map(|e| match &e.kind {
+                EntityKind::Viewport(v) if v.id != 1 => Some(e.handle.hex()),
+                _ => None,
+            })
+    };
+    let (handle, created) = match existing {
+        Some(h) => (h, false),
+        None => {
+            let mut add = json!({ "layout": layout });
+            if let (Some(a), Some(b), Some(o)) = (point_param(p, "p1"), point_param(p, "p2"), add.as_object_mut()) {
+                o.insert("p1".into(), json!([a.x, a.y]));
+                o.insert("p2".into(), json!([b.x, b.y]));
+            }
+            let r = s.execute("viewport.add", &add)?;
+            let h = r["handle"].as_str().ok_or_else(|| bad("sheet.plotwindow", "the plot window was not created"))?.to_string();
+            (h, true)
+        }
+    };
+    let locked = bool_or(p, "locked", true);
+    let (scale_text_out, scale_num, center) = {
+        let d = s.doc()?;
+        let h = aad_doc::Handle::parse_hex(&handle).ok_or_else(|| bad("sheet.plotwindow", "bad viewport handle"))?;
+        let EntityKind::Viewport(v) = d.entity(h).map(|e| e.kind.clone()).ok_or_else(|| bad("sheet.plotwindow", "no viewport"))? else {
+            return Err(bad("sheet.plotwindow", "not a viewport"));
+        };
+        let ext = model_window_extents(d, p)?;
+        let exact = exact_fit_scale(ext, v.width, v.height);
+        let nearest = crate::annot::nearest_plot_scale(exact);
+        let scale_label = if nearest.nearest.is_empty() { scale_text(exact) } else { nearest.nearest.clone() };
+        let scale_num = if scale_label.contains(':') {
+            let mut parts = scale_label.split(':');
+            let a: f64 = parts.next().unwrap_or("1").parse().unwrap_or(1.0);
+            let b: f64 = parts.next().unwrap_or("1").parse().unwrap_or(1.0);
+            (a / b.max(1e-12)).max(1e-12)
+        } else {
+            exact
+        };
+        (scale_label, scale_num, ext.center())
+    };
+    // Unlock first so a previously locked plot window can be re-fitted.
+    s.execute(
+        "viewport.set",
+        &json!({
+            "handle": handle,
+            "scale": scale_text_out,
+            "center": [center.x, center.y],
+            "locked": false,
+        }),
+    )?;
+    if locked {
+        s.execute("viewport.set", &json!({ "handle": handle, "locked": true }))?;
+    }
+    if !title_inserts(s.doc()?, &layout).is_empty() {
+        let mut f = BTreeMap::new();
+        f.insert("SCALE".to_string(), scale_text_out.clone());
+        write_fields(s.doc_mut()?, &layout, &f);
+    }
+    // Show the sheet so the plot window is visible.
+    s.execute("layout.set", &json!({ "name": layout }))?;
+    Ok(json!({
+        "handle": handle,
+        "layout": layout,
+        "created": created,
+        "scale": scale_num,
+        "scaleText": scale_text_out,
+        "locked": locked,
+        "message": format!("Plot window on {layout} at {scale_text_out}"),
+    }))
 }

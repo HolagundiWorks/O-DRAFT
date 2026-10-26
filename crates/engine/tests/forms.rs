@@ -43,7 +43,7 @@ fn the_command_line_asks_for_what_is_missing() {
     s.start("stair.plan").unwrap();
     assert!(s.current_prompt().unwrap().message.contains("rise"), "asks the required fields in order after the choice default");
     // `kind` is optional and has a default, so the first question is the rise.
-    s.input(Input::Text("3".into())).unwrap();
+    s.input(Input::Text("3000".into())).unwrap();
     s.input(Input::Text("1100".into())).unwrap();
     assert!(s.current_prompt().unwrap().message.contains("Start of the stair"));
     s.input(Input::Point(Vec2::new(0.0, 0.0))).unwrap();
@@ -111,13 +111,16 @@ fn forms_exist_for_the_commands_people_open_from_menus() {
 fn project_and_floors_forms_round_trip_through_their_commands() {
     let mut s = session();
     let f = forms::get("project").unwrap();
-    let params = forms::parse_input(f, &json!({"title": "Rao House", "owner": "S. Rao", "siteArea": "186.5"})).unwrap();
+    let params = forms::parse_input(
+        f,
+        &json!({"title": "Rao House", "owner": "S. Rao", "siteArea": "186.5", "slabMm": "150", "beamMm": "450"}),
+    )
+    .unwrap();
     s.execute("project", &params).unwrap();
     assert_eq!(forms::prefill(&s, f)["title"], "Rao House");
+    assert_eq!(forms::prefill(&s, f)["slabMm"], 150.0);
     let f = forms::get("floors").unwrap();
-    let params =
-        forms::parse_input(f, &json!({"floors": [["Ground", "3.15", "3.0", "2.1", "150", "450"], ["First", "3.0", "2.85", "2.1", "150", "450"]]}))
-            .unwrap();
+    let params = forms::parse_input(f, &json!({"floors": [["Ground"], ["First"]]})).unwrap();
     s.execute("floors", &params).unwrap();
     assert_eq!(forms::prefill(&s, f)["floors"].as_array().unwrap().len(), 2);
     let f = forms::get("takeoff.rates").unwrap();

@@ -81,11 +81,11 @@ fn vs_quad(
     // so it fills one row or column instead of splitting across two.
     let px_w = max(width * view.c.x, 1.0);
     let dlt = pb - pa;
-    if (px_w <= 2.5 && abs(dlt.y) <= 0.75 && abs(dlt.x) >= abs(dlt.y)) {
+    if (px_w <= 3.5 && abs(dlt.y) <= 0.75 && abs(dlt.x) >= abs(dlt.y)) {
         let y = floor((pa.y + pb.y) * 0.5) + 0.5;
         pa.y = y;
         pb.y = y;
-    } else if (px_w <= 2.5 && abs(dlt.x) <= 0.75 && abs(dlt.y) > abs(dlt.x)) {
+    } else if (px_w <= 3.5 && abs(dlt.x) <= 0.75 && abs(dlt.y) > abs(dlt.x)) {
         let x = floor((pa.x + pb.x) * 0.5) + 0.5;
         pa.x = x;
         pb.x = x;
@@ -278,12 +278,18 @@ pub fn append_infinite(mesh: &mut MeshData, list: &DisplayList, origin: Vec2, ce
     }
 }
 
-/// Turn hairline segments into 1-point quads, in the same draw order.
+/// Default document hairline width in points (logical pixels ≈ CSS px at 96 DPI).
+///
+/// AutoCAD model-space hairlines are about one device pixel; on HiDPI that reads as frail.
+/// 1.5 px is the default displayed weight after pixel-centre snap when LWDISPLAY is off.
+pub const HAIRLINE_POINTS: f32 = 1.5;
+
+/// Turn hairline segments into screen-space quads, in the same draw order.
 ///
 /// Hardware line lists leave gaps on diagonals and draw a single device pixel, which is thinner
 /// than one logical pixel on a scaled display. The quad shader strokes these in screen space.
 pub fn expand_hairlines(mesh: &mut MeshData) {
-    expand_hairlines_width(mesh, 1.0);
+    expand_hairlines_width(mesh, HAIRLINE_POINTS);
 }
 
 /// Like [`expand_hairlines`], with an explicit stroke width in points.
@@ -368,6 +374,6 @@ mod tests {
         assert_eq!(mesh.quad_instances(), 3);
         assert_eq!(mesh.breaks, vec![[0, 0, 2]]);
         let width = f32::from_le_bytes(mesh.quads[20..24].try_into().expect("width bytes"));
-        assert_eq!(width, 1.0);
+        assert_eq!(width, HAIRLINE_POINTS);
     }
 }

@@ -32,6 +32,14 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["i", "-insert", "ddinsert"])
             .params("{name (\"*NAME\": exploded), file?: DXF/DWG path (defines or redefines block `name`, default the file name, from its model space; base point $INSBASE), at: [x,y], scale?: number | [x, y], rotation? (degrees), basePoint?: [x,y] (block coordinates), attribs?: {TAG: value}, explode?: bool}")
             .interactive(|_| Ok(Box::new(InsertM::default()))),
+        // Blocks panel / catalog: name then one insertion point; scale 1 and rotation 0 (drawing units).
+        CommandSpec::new("insert.place", "Place Block", run_insert)
+            .alias(&["iplace"])
+            .params("{name (or name=path for a DXF/DWG), at?: [x,y] (scripted), scale?: (default 1), rotation?: (default 0)} → insert at drawing scale; interactive: name then point only")
+            .interactive(|_| Ok(Box::new(InsertM { quick: true, ..InsertM::default() }))),
+        CommandSpec::new("blocks.preview", "Block Preview", run_preview)
+            .params("{name? | path?: DXF/DWG} → {strokes: [{color: \"#RRGGBB\", points: [[x,y],…]}], segments: [[[x,y],…],…] (compat), solid: false} — DesignCenter-style coloured line swatch in the unit square")
+            .noundo(),
         CommandSpec::new("attdef", "Define Attributes...", run_attdef)
             .menu(&["Draw", "Block", "Define Attributes..."])
             .alias(&["att", "-attdef"])
@@ -319,6 +327,87 @@ fn run_list(s: &mut Session, _p: &Value) -> Result<Value> {
     )
 }
 
+/// Line swatch of a block definition or library DXF/DWG, fitted into the unit square (Y-up).
+fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
+    if let Some(path) = str_param(p, "path") {
+        return preview_path(path);
+    }
+    let name = str_param(p, "name").ok_or_else(|| bad("blocks.preview", "`name` or `path` is required"))?;
+    let d = s.doc()?;
+    let b = d.block(name).ok_or_else(|| bad("blocks.preview", format!("no block `{name}`")))?;
+    Ok(preview_entities(d, b.entities.iter().map(|e| e.as_ref())))
+}
+
+/// Read a DXF/DWG without touching the open drawing; used for furniture / library thumbnails.
+fn preview_path(path: &str) -> Result<Value> {
+    if path.is_empty() || path.len() > 4096 {
+        return Err(bad("blocks.preview", "missing path"));
+    }
+    let hooks = super::file::io().ok_or_else(|| bad("blocks.preview", "file formats are not available in this build"))?;
+    let bytes = std::fs::read(path).map_err(|e| bad("blocks.preview", format!("{path}: {e}")))?;
+    let d = (hooks.read)(&bytes, path).map_err(|e| bad("blocks.preview", e))?;
+    Ok(preview_entities(&d, d.model.iter().map(|e| e.as_ref())))
+}
+
+fn preview_entities<'a>(d: &aad_doc::Drawing, entities: impl Iterator<Item = &'a Entity>) -> Value {
+    // One display-list pass keeps layer/block colours (AutoCAD DesignCenter style).
+    let ents: Vec<&Entity> = entities
+        .take(400)
+        .filter(|e| !matches!(e.kind, EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::AttDef(_)))
+        .collect();
+    let list = aad_render::build_entities(
+        d,
+        ents,
+        &aad_render::Options { tolerance: 0.05, text: false, fill: false, ..Default::default() },
+    );
+    let paper = aad_color::Rgb(245, 245, 245);
+    let mut strokes: Vec<(aad_color::Rgb, Vec<Vec2>)> = Vec::new();
+    for p in &list.prims {
+        match p.kind {
+            aad_render::Kind::Polyline => {
+                let pts = list.points(p);
+                if pts.len() >= 2 {
+                    strokes.push((p.display_rgb(paper), pts.to_vec()));
+                }
+            }
+            aad_render::Kind::Point => {
+                if let Some(&q) = list.points(p).first() {
+                    strokes.push((p.display_rgb(paper), vec![q, q]));
+                }
+            }
+            aad_render::Kind::Tris | aad_render::Kind::Mask | aad_render::Kind::Infinite { .. } => {}
+        }
+    }
+    let pts = strokes.iter().flat_map(|(_, pts)| pts.iter());
+    let (mut lo, mut hi) = (Vec2::new(f64::INFINITY, f64::INFINITY), Vec2::new(f64::NEG_INFINITY, f64::NEG_INFINITY));
+    for p in pts {
+        lo = Vec2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Vec2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    if !(lo.x.is_finite() && hi.x.is_finite()) {
+        return json!({ "solid": false, "paper": paper.hex(), "strokes": [], "segments": [] });
+    }
+    let (w, h) = ((hi.x - lo.x).max(1e-9), (hi.y - lo.y).max(1e-9));
+    let pad = 0.08;
+    let span = w.max(h);
+    let map = |p: Vec2| {
+        let nx = pad + (1.0 - 2.0 * pad) * ((p.x - lo.x) / span + (span - w) / (2.0 * span));
+        let ny = pad + (1.0 - 2.0 * pad) * ((p.y - lo.y) / span + (span - h) / (2.0 * span));
+        [((nx * 1_000_000.0).round() / 1_000_000.0), ((ny * 1_000_000.0).round() / 1_000_000.0)]
+    };
+    let mut segments: Vec<Value> = Vec::new();
+    let strokes_json: Vec<Value> = strokes
+        .into_iter()
+        .take(500)
+        .map(|(color, l)| {
+            let points: Vec<_> = l.into_iter().take(64).map(map).collect();
+            segments.push(json!(points));
+            json!({ "color": color.hex(), "points": points })
+        })
+        .collect();
+    json!({ "solid": false, "paper": paper.hex(), "strokes": strokes_json, "segments": segments })
+}
+
 fn run_battman(s: &mut Session, p: &Value) -> Result<Value> {
     let name = str_param(p, "name").ok_or_else(|| bad("battman", "`name` is required"))?;
     let b = s.doc()?.block(name).cloned().ok_or_else(|| bad("battman", "no such block"))?;
@@ -470,6 +559,8 @@ struct InsertM {
     explode: bool,
     /// The file waiting for the Redefine answer.
     file: Option<insert_file::FileRef>,
+    /// Blocks panel / furniture: after the name, only ask for the insertion point (scale 1, angle 0).
+    quick: bool,
 }
 
 impl InsertM {
@@ -517,6 +608,10 @@ impl InsertM {
         };
         s.doc_mut()?.header.set_str("INSNAME", &b.name);
         self.name = Some(b.name.clone());
+        if self.quick {
+            self.scale = Some(Vec2::new(1.0, 1.0));
+            self.rotation = Some(0.0);
+        }
         self.stage = InsStage::Point;
         Ok(())
     }
@@ -562,7 +657,13 @@ impl Interactive for InsertM {
                 let name = self.file.as_ref().map(|f| f.name.clone()).unwrap_or_default();
                 Prompt::new(format!("Block \"{name}\" already exists. Redefine it?"), super::curves::KW).kw(&["Yes", "No"]).default("N")
             }
-            InsStage::Point => Prompt::new("Specify insertion point", Accept::POINT).kw(&["Basepoint", "Scale", "Rotate"]),
+            InsStage::Point => {
+                let p = Prompt::new(
+                    if self.quick { "Specify insertion point (drawing scale)" } else { "Specify insertion point" },
+                    Accept::POINT,
+                );
+                if self.quick { p.kw(&["Basepoint"]) } else { p.kw(&["Basepoint", "Scale", "Rotate"]) }
+            }
             InsStage::BasePoint => Prompt::new("Specify base point", Accept::POINT),
             InsStage::PresetScale => Prompt::new("Specify scale factor for XYZ axes", Accept::NUMBER).default("1"),
             InsStage::PresetRotation => Prompt::new("Specify rotation angle", Accept::NUMBER).default("0"),

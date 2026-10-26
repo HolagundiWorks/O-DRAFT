@@ -131,10 +131,23 @@ impl DisplayList {
     }
 }
 
+/// Tessellation cache band for a given world-units-per-pixel size (`floor(log2(px))`).
+pub fn tessellation_band(world_per_pixel: f64) -> i32 {
+    world_per_pixel.max(1e-300).log2().floor() as i32
+}
+
+/// Chord error for [`tessellation_band`]: about a fifth of a screen pixel.
+///
+/// Tight enough that arcs and circles read as smooth on the GPU path without exploding
+/// segment counts (each zoom octave still shares one display-list cache key).
+pub fn tessellation_tolerance(band: i32) -> f64 {
+    2f64.powi(band) * 0.2
+}
+
 /// Build options.
 #[derive(Clone, Debug)]
 pub struct Options {
-    /// Chord tolerance in world units (about half a pixel at the current zoom).
+    /// Chord tolerance in world units (about a fifth of a pixel at the current zoom).
     pub tolerance: f64,
     /// Dashes shorter than this (world units) are drawn as continuous lines.
     pub min_dash: f64,
@@ -180,13 +193,18 @@ pub fn world_per_pixel(view_height: f64, pixel_height: f64) -> f64 {
 
 /// LOD flags for interactive display: `(draw_text, draw_fill)`.
 /// When zoomed out (`world_per_pixel` large), skip text then fills so far views stay light.
+///
+/// Thresholds are in world units per pixel. Metric floor plans (mm) sit around 5–20 wpp at a
+/// whole-building view; the old cutoffs of 2 / 1 dropped all dimension and table text there.
+/// Drop text only when a typical ~2.5-unit character is well under a pixel (~50 wpp), and fills
+/// a little sooner.
 pub fn lod_for_view(view_height: f64, pixel_height: f64) -> (bool, bool) {
     let wpp = world_per_pixel(view_height, pixel_height);
     if wpp <= 0.0 {
         return (true, true);
     }
-    let text = wpp < 2.0;
-    let fill = wpp < 1.0;
+    let text = wpp < 50.0;
+    let fill = wpp < 25.0;
     (text, fill)
 }
 
@@ -295,6 +313,10 @@ impl Builder<'_> {
         self.list.prims.push(DPrim { handle: ctx.top, color: color.rgb, aci7: color.aci7, lw: 0.0, kind: Kind::Tris, start, len: tris.len() as u32 });
     }
     /// Shaped text: strokes as polylines; TrueType glyphs filled (TEXTFILL) or outlined.
+    ///
+    /// TrueType fill follows `TEXTFILL` and whether text is drawn at all — not the hatch/solid
+    /// fill LOD (`opts.fill`). AutoCAD keeps TEXTFILL independent of FILLMODE; tying them made
+    /// glyphs turn into hollow outlines whenever hatch fill was dropped for zoom performance.
     fn shaped(&mut self, ctx: &Ctx, color: Ink, lw: f32, sh: &aad_fonts::Shaped) {
         for s in &sh.strokes {
             self.polyline(ctx, color, lw, s);
@@ -302,7 +324,7 @@ impl Builder<'_> {
         if sh.glyphs.is_empty() {
             return;
         }
-        let fill = self.opts.fill && ctx.d.header.i64("TEXTFILL", 1) != 0;
+        let fill = self.opts.text && ctx.d.header.i64("TEXTFILL", 1) != 0;
         for g in &sh.glyphs {
             if fill {
                 let tris = fill::triangulate_outline(g);

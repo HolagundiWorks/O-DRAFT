@@ -61,16 +61,22 @@ fn a_title_block_starts_from_the_project_and_its_fields_can_be_edited() {
 }
 
 #[test]
-fn a_new_drawing_has_one_title_plate_layout() {
+fn a_new_drawing_has_landscape_and_portrait_nameplates() {
     let mut s = Session::new();
     let r = s.execute("sheet.designer", &json!({})).unwrap();
-    assert_eq!(r["layouts"], json!(["Title plate"]));
+    let names = r["layouts"].as_array().unwrap();
+    assert!(names.iter().any(|n| n == "Nameplate L"));
+    assert!(names.iter().any(|n| n == "Nameplate P"));
+    assert_eq!(r["name"], "Nameplate L");
     assert_eq!(r["created"], true);
-    assert_eq!(r["fields"]["SHEET"], "Title plate");
     assert!(matches!(s.layout_space(), aad_engine::doc::Space::Model), "preparing the plate stays in model space");
-    let again = s.execute("sheet.designer", &json!({})).unwrap();
-    assert_eq!(again["layouts"], json!(["Title plate"]));
-    assert_eq!(again["created"], false);
+    let again = s.execute("sheet.designer", &json!({"landscape": false, "open": true})).unwrap();
+    assert_eq!(again["name"], "Nameplate P");
+    assert!(matches!(s.layout_space(), aad_engine::doc::Space::Paper(n) if n == "Nameplate P"));
+    let page = s.doc().unwrap().layouts.iter().find(|l| l.name == "Nameplate P").unwrap().page.clone();
+    assert!(!page.landscape, "portrait plate");
+    let page_l = s.doc().unwrap().layouts.iter().find(|l| l.name == "Nameplate L").unwrap().page.clone();
+    assert!(page_l.landscape, "landscape plate");
 
     let mut drawn = Session::new();
     drawn.execute("layout.set", &json!({"name": "Layout1"})).unwrap();
@@ -78,10 +84,40 @@ fn a_new_drawing_has_one_title_plate_layout() {
     let kept = drawn.execute("sheet.designer", &json!({})).unwrap();
     let names = kept["layouts"].as_array().unwrap();
     assert!(names.iter().any(|n| n == "Layout1"));
-    assert!(names.iter().all(|n| n != "Title plate"));
+    assert!(names.iter().any(|n| n == "Nameplate L") && names.iter().any(|n| n == "Nameplate P"));
+}
 
-    s.execute("sheet.designer", &json!({"open": true})).unwrap();
-    assert!(matches!(s.layout_space(), aad_engine::doc::Space::Paper(n) if n == "Title plate"));
+#[test]
+fn plot_window_fits_the_model_at_a_standard_scale_on_the_nameplate() {
+    let mut s = Session::new();
+    s.execute("drawing.units", &json!({"units": "mm", "mode": "metadata"})).unwrap();
+    // Apartment-sized extents → needs about 1:100 on A1 landscape above the title block.
+    s.execute("line", &json!({"points": [[0.0, 0.0], [12000.0, 0.0]]})).unwrap();
+    s.execute("line", &json!({"points": [[0.0, 0.0], [0.0, 7000.0]]})).unwrap();
+    s.execute("sheet.designer", &json!({})).unwrap();
+    let r = s.execute("sheet.plotwindow", &json!({"layout": "Nameplate L"})).unwrap();
+    assert_eq!(r["layout"], "Nameplate L");
+    assert_eq!(r["created"], true);
+    assert!(r["locked"].as_bool().unwrap());
+    let scale = r["scaleText"].as_str().unwrap();
+    assert!(scale.starts_with("1:"), "standard shrink scale, got {scale}");
+    assert_eq!(s.execute("sheet.fields", &json!({"layout": "Nameplate L"})).unwrap()["fields"]["SCALE"], scale);
+    assert!(matches!(s.layout_space(), aad_engine::doc::Space::Paper(n) if n == "Nameplate L"));
+    let again = s.execute("sheet.plotwindow", &json!({"layout": "Nameplate L"})).unwrap();
+    assert_eq!(again["created"], false);
+    assert_eq!(again["handle"], r["handle"]);
+    assert_eq!(s.execute("viewport.list", &json!({"layout": "Nameplate L"})).unwrap()["viewports"].as_array().unwrap().len(), 1);
+
+    let win = s.execute("sheet.plotwindow", &json!({"layout": "Nameplate L", "window": [0.0, 0.0, 4000.0, 3000.0]})).unwrap();
+    assert_eq!(win["created"], false);
+    let v = &s.execute("viewport.list", &json!({"layout": "Nameplate L"})).unwrap()["viewports"][0];
+    assert!((v["viewCenter"][0].as_f64().unwrap() - 2000.0).abs() < 1.0);
+    assert!((v["viewCenter"][1].as_f64().unwrap() - 1500.0).abs() < 1.0);
+
+    // Portrait nameplate is independent.
+    let p = s.execute("sheet.plotwindow", &json!({"layout": "Nameplate P"})).unwrap();
+    assert_eq!(p["layout"], "Nameplate P");
+    assert_eq!(p["created"], true);
 }
 
 #[test]

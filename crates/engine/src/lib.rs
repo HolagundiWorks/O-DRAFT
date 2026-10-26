@@ -1320,11 +1320,16 @@ fn form_factory(s: &Session) -> Result<Box<dyn Interactive>> {
     Ok(Box::new(forms::FormRun::new(form, &preset)))
 }
 
-/// What `plot.window` asked for: the whole drawing (`window` None) or a model-space rectangle
-/// `[x0, y0, x1, y1]`. The application turns it into a file dialog and a `plot` call.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// What `plot.window` / `plotl` / `plotp` asked for. The application fits `window` into the
+/// nameplate (`layout`) and either saves a PDF or shows a preview.
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlotRequest {
+    /// Whole drawing when `None`; otherwise a model-space rectangle `[x0, y0, x1, y1]`.
     pub window: Option<[f64; 4]>,
+    /// Nameplate layout to plot through (`Nameplate L` / `Nameplate P`). Empty = model-space plot.
+    pub layout: String,
+    /// When true, the shell shows a PDF preview instead of a save dialog.
+    pub preview: bool,
 }
 
 impl Session {

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text;
 using System.Text.Json;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
@@ -514,7 +515,7 @@ public sealed partial class MainWindow : Window
     private bool CloseOpenComboBoxes()
     {
         var closed = false;
-        foreach (var box in new ComboBox?[] { LayerBox, FloorBox, UnitsBox, PaperBox })
+        foreach (var box in new ComboBox?[] { LayerBox, ColorBox, LinetypeBox, FloorBox, UnitsBox, PaperBox, OrientBox })
         {
             if (box is { IsDropDownOpen: true })
             {
@@ -703,11 +704,69 @@ public sealed partial class MainWindow : Window
         var form = Native.ReadForm(_host, id);
         if (form != null)
         {
+            if ((id is "wall.door" or "wall.window") && !string.IsNullOrEmpty(_selectedBlock))
+            {
+                form = InjectFormField(form, "block", _selectedBlock!);
+            }
             FormDialog.Show(this, _host, form, AfterCommand);
             return;
         }
         Native.CommandLine(_host, id);
         AfterCommand();
+    }
+
+    /// <summary>Set a scalar form field's value (e.g. door/window block from the Blocks panel).</summary>
+    private static string InjectFormField(string formJson, string key, string value)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(formJson);
+            var root = doc.RootElement.Clone();
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                foreach (var prop in root.EnumerateObject())
+                {
+                    if (prop.NameEquals("fields"))
+                    {
+                        writer.WritePropertyName("fields");
+                        writer.WriteStartArray();
+                        foreach (var field in prop.Value.EnumerateArray())
+                        {
+                            writer.WriteStartObject();
+                            foreach (var fp in field.EnumerateObject())
+                            {
+                                if (fp.NameEquals("value") && field.TryGetProperty("key", out var k) && k.GetString() == key)
+                                {
+                                    writer.WriteString("value", value);
+                                }
+                                else
+                                {
+                                    fp.WriteTo(writer);
+                                }
+                            }
+                            if (!field.TryGetProperty("value", out _) && field.TryGetProperty("key", out var fk) && fk.GetString() == key)
+                            {
+                                writer.WriteString("value", value);
+                            }
+                            writer.WriteEndObject();
+                        }
+                        writer.WriteEndArray();
+                    }
+                    else
+                    {
+                        prop.WriteTo(writer);
+                    }
+                }
+                writer.WriteEndObject();
+            }
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
+        catch (JsonException)
+        {
+            return formJson;
+        }
     }
 
     private void OnShellKey(object sender, KeyRoutedEventArgs e)
@@ -1289,23 +1348,57 @@ public sealed partial class MainWindow : Window
             or "cal" or "quickcalc" or "qc" or "calc";
     }
 
+    /// <summary>Pending plot command while the user picks the window (`plot` / `exportpdf`).</summary>
+    private string _pendingPlotCommand = "plot";
+    /// <summary>When true, finish with an on-screen PDF preview instead of a save dialog.</summary>
+    private bool _pendingPlotPreview;
+    /// <summary>Nameplate layout from <c>plotl</c> / <c>plotp</c> (or OrientBox).</summary>
+    private string _pendingPlotLayout = "Nameplate L";
+
+    private string PlotCommandForOrientation()
+    {
+        var portrait = string.Equals(OrientBox.SelectedItem as string, "Portrait", StringComparison.OrdinalIgnoreCase);
+        return portrait ? "plotp" : "plotl";
+    }
+
+    private string NameplateForOrientation()
+    {
+        var portrait = string.Equals(OrientBox.SelectedItem as string, "Portrait", StringComparison.OrdinalIgnoreCase);
+        return portrait ? "Nameplate P" : "Nameplate L";
+    }
+
     private async Task BeginPlot(string id)
     {
         if (_host == IntPtr.Zero || _plotBusy)
         {
             return;
         }
-        // Model space: ask what to plot (window / extents / display), then finish with a save picker.
-        if (_space.Equals("Model", StringComparison.OrdinalIgnoreCase))
+        _pendingPlotCommand = id == "exportpdf" ? "exportpdf" : "plot";
+        _pendingPlotPreview = false;
+        _pendingPlotLayout = NameplateForOrientation();
+        // plotl / plotp: pick window, then finish on the matching nameplate.
+        if (Native.CommandLine(_host, PlotCommandForOrientation()) != 0)
         {
-            if (Native.CommandLine(_host, "plot.window") != 0)
-            {
-                History.Text = Native.LastError(_host);
-            }
-            AfterCommand();
+            History.Text = Native.LastError(_host);
+        }
+        AfterCommand();
+        await Task.CompletedTask;
+    }
+
+    private void OnPlotPreview(object sender, RoutedEventArgs e)
+    {
+        if (_host == IntPtr.Zero || _plotBusy)
+        {
             return;
         }
-        await FinishPlot(id == "exportpdf" ? "exportpdf" : "plot", window: null);
+        _pendingPlotCommand = "plot";
+        _pendingPlotPreview = true;
+        _pendingPlotLayout = NameplateForOrientation();
+        if (Native.CommandLine(_host, PlotCommandForOrientation()) != 0)
+        {
+            History.Text = Native.LastError(_host);
+        }
+        AfterCommand();
     }
 
     private async Task<bool> PlotFileAsync(string command, string parameters)
@@ -1391,6 +1484,8 @@ public sealed partial class MainWindow : Window
             return;
         }
         double[]? window = null;
+        var layout = _pendingPlotLayout;
+        var preview = _pendingPlotPreview;
         try
         {
             using var doc = JsonDocument.Parse(json);
@@ -1402,14 +1497,98 @@ public sealed partial class MainWindow : Window
                     window[i] = win[i].GetDouble();
                 }
             }
+            if (doc.RootElement.TryGetProperty("layout", out var lay) && lay.GetString() is string name && name.Length > 0)
+            {
+                layout = name;
+            }
+            if (doc.RootElement.TryGetProperty("preview", out var prev) && prev.ValueKind == JsonValueKind.True)
+            {
+                preview = true;
+            }
         }
         catch (JsonException)
         {
             History.Text = "The plot window could not be read.";
             return;
         }
-        // Model-space finish always uses plot (same as the egui shell).
-        _ = FinishPlot("plot", window);
+        _pendingPlotPreview = false;
+        _ = FinishPlotOnNameplate(_pendingPlotCommand, window, layout, preview);
+    }
+
+    private async Task FinishPlotOnNameplate(string command, double[]? window, string layout, bool preview)
+    {
+        if (_host == IntPtr.Zero || _plotBusy)
+        {
+            return;
+        }
+        var landscape = !layout.Equals("Nameplate P", StringComparison.OrdinalIgnoreCase);
+        if (Native.Execute(_host, "sheet.designer", JsonSerializer.Serialize(new Dictionary<string, object> { ["landscape"] = landscape })) != 0)
+        {
+            History.Text = Native.LastError(_host);
+            AfterCommand();
+            return;
+        }
+        var fit = new Dictionary<string, object?> { ["layout"] = layout };
+        if (window is { Length: 4 })
+        {
+            fit["window"] = window;
+        }
+        if (Native.Execute(_host, "sheet.plotwindow", JsonSerializer.Serialize(fit)) != 0)
+        {
+            History.Text = Native.LastError(_host);
+            AfterCommand();
+            return;
+        }
+        if (preview)
+        {
+            await PreviewPlotOnNameplate(command);
+        }
+        else
+        {
+            await FinishPlot(command, window: null);
+        }
+        if (_host != IntPtr.Zero)
+        {
+            Native.Execute(_host, "layout.set", JsonSerializer.Serialize(new Dictionary<string, object> { ["name"] = "Model" }));
+            AfterCommand();
+        }
+    }
+
+    private async Task PreviewPlotOnNameplate(string command)
+    {
+        if (_host == IntPtr.Zero || _plotBusy)
+        {
+            return;
+        }
+        _plotBusy = true;
+        try
+        {
+            var path = Path.Combine(Path.GetTempPath(), "odraft-plot-preview-" + Guid.NewGuid().ToString("N") + ".pdf");
+            History.Text = "Building plot preview...";
+            if (!await PlotFileAsync(command, JsonSerializer.Serialize(new Dictionary<string, object> { ["path"] = path })))
+            {
+                History.Text = Native.LastError(_host);
+                return;
+            }
+            try
+            {
+                var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
+                await ShowPdfAsync(null, file);
+                if (_pdfWindow != null)
+                {
+                    _pdfWindow.Title = "Plot preview";
+                }
+                History.Text = "Plot preview ready.";
+            }
+            catch (Exception ex)
+            {
+                History.Text = ex.Message;
+            }
+        }
+        finally
+        {
+            _plotBusy = false;
+        }
     }
 
     /// Drawing undo and redo. These win over a text field's own undo, including the command line.
@@ -1537,17 +1716,47 @@ public sealed partial class MainWindow : Window
         AfterCommand();
     }
 
-    private void OnNameplateDesigner(object sender, RoutedEventArgs e)
+    private void OnNameplateMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement anchor)
+        {
+            return;
+        }
+        var flyout = new MenuFlyout();
+        var landscape = new MenuFlyoutItem { Text = "Nameplate L (landscape)" };
+        landscape.Click += (_, _) => OpenNameplate(landscape: true);
+        var portrait = new MenuFlyoutItem { Text = "Nameplate P (portrait)" };
+        portrait.Click += (_, _) => OpenNameplate(landscape: false);
+        flyout.Items.Add(landscape);
+        flyout.Items.Add(portrait);
+        flyout.ShowAt(anchor);
+    }
+
+    private void OnNameplateDesigner(object sender, RoutedEventArgs e) => OpenNameplate(landscape: true);
+
+    private void OpenNameplate(bool landscape)
     {
         if (_host == IntPtr.Zero)
         {
             return;
         }
-        // Title-plate / nameplate sheet designer (paper space). Drafting stays in model space otherwise.
-        if (Native.Execute(_host, "sheet.designer", JsonSerializer.Serialize(new Dictionary<string, object> { ["open"] = true })) != 0)
+        if (Native.Execute(_host, "sheet.designer", JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["open"] = true,
+                ["landscape"] = landscape,
+            })) != 0)
         {
             History.Text = Native.LastError(_host);
             return;
+        }
+        _filling = true;
+        try
+        {
+            OrientBox.SelectedItem = landscape ? "Landscape" : "Portrait";
+        }
+        finally
+        {
+            _filling = false;
         }
         _docKey = "";
         AfterCommand();
@@ -2815,11 +3024,13 @@ public sealed partial class MainWindow : Window
         FillProperties(snapshot);
         FillLayers(snapshot);
         FillBlocks(snapshot);
+        FillProject();
         FillContext(snapshot);
         UpdateSideTabHeaders(snapshot);
         Density.Apply(PropertiesPanel);
         Density.Apply(LayersPanel);
         Density.Apply(BlocksPanel);
+        Density.Apply(ProjectPanel);
         _layersWindow?.OnDocumentRevision(snapshot.Uid, snapshot.Revision);
         UpdateQuick();
     }
@@ -2942,6 +3153,7 @@ public sealed partial class MainWindow : Window
 
     private static readonly string[] DraftingUnitChoices = ["mm", "cm", "m", "in", "ft"];
     private static readonly string[] PaperChoices = ["A0", "A1", "A2", "A3", "A4"];
+    private static readonly string[] OrientChoices = ["Landscape", "Portrait"];
 
     private void EnsureUnitsBox()
     {
@@ -2967,17 +3179,115 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void SyncPaperSize()
+    private void EnsureOrientBox()
     {
-        EnsurePaperBox();
-        if (PaperBox.SelectedItem != null)
+        if (OrientBox.Items.Count > 0)
         {
             return;
         }
+        foreach (var orient in OrientChoices)
+        {
+            OrientBox.Items.Add(orient);
+        }
+    }
+
+    private void SyncPaperSize()
+    {
+        EnsurePaperBox();
+        EnsureOrientBox();
         _filling = true;
-        PaperBox.SelectedItem = "A1";
-        PaperBox.PlaceholderText = null;
-        _filling = false;
+        try
+        {
+            if (PaperBox.SelectedItem == null)
+            {
+                PaperBox.SelectedItem = "A1";
+                PaperBox.PlaceholderText = null;
+            }
+            if (OrientBox.SelectedItem == null)
+            {
+                OrientBox.SelectedItem = "Landscape";
+            }
+            SyncOrientFromNameplate();
+        }
+        finally
+        {
+            _filling = false;
+        }
+    }
+
+    private void SyncOrientFromNameplate()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        // Prefer Nameplate L / P (or legacy Title plate) so the status bar matches the active plate.
+        if (Native.Execute(_host, "pagesetup", "{}") != 0)
+        {
+            return;
+        }
+        try
+        {
+            using var doc = JsonDocument.Parse(Native.ReadResult(_host));
+            if (!doc.RootElement.TryGetProperty("layouts", out var layouts) || layouts.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+            JsonElement? page = null;
+            var preferL = !string.Equals(OrientBox.SelectedItem as string, "Portrait", StringComparison.OrdinalIgnoreCase);
+            string[] prefer = preferL
+                ? ["Nameplate L", "Title plate", "Nameplate P"]
+                : ["Nameplate P", "Title plate", "Nameplate L"];
+            foreach (var wantName in prefer)
+            {
+                foreach (var layout in layouts.EnumerateArray())
+                {
+                    var name = layout.TryGetProperty("name", out var n) ? n.GetString() : null;
+                    if (string.Equals(name, wantName, StringComparison.OrdinalIgnoreCase)
+                        && layout.TryGetProperty("page", out var tp))
+                    {
+                        page = tp;
+                        break;
+                    }
+                }
+                if (page != null)
+                {
+                    break;
+                }
+            }
+            if (page == null)
+            {
+                foreach (var layout in layouts.EnumerateArray())
+                {
+                    if (layout.TryGetProperty("page", out var first))
+                    {
+                        page = first;
+                        break;
+                    }
+                }
+            }
+            if (page is not { } p)
+            {
+                return;
+            }
+            if (p.TryGetProperty("paper", out var paperEl) && paperEl.GetString() is string paper && paper.Length > 0)
+            {
+                var match = PaperChoices.FirstOrDefault(c => paper.Contains(c, StringComparison.OrdinalIgnoreCase));
+                if (match != null && !Equals(PaperBox.SelectedItem, match))
+                {
+                    PaperBox.SelectedItem = match;
+                }
+            }
+            var landscape = !p.TryGetProperty("landscape", out var land) || land.ValueKind != JsonValueKind.False;
+            var want = landscape ? "Landscape" : "Portrait";
+            if (!Equals(OrientBox.SelectedItem, want))
+            {
+                OrientBox.SelectedItem = want;
+            }
+        }
+        catch (JsonException)
+        {
+        }
     }
 
     private void OnPaperPicked(object sender, SelectionChangedEventArgs e)
@@ -2998,7 +3308,47 @@ public sealed partial class MainWindow : Window
                 return;
             }
         }
+        ApplyNameplatePage();
         AfterCommand();
+    }
+
+    private void OnOrientPicked(object sender, SelectionChangedEventArgs e)
+    {
+        if (_filling || _host == IntPtr.Zero || OrientBox.SelectedItem is not string)
+        {
+            return;
+        }
+        ApplyNameplatePage();
+        AfterCommand();
+    }
+
+    /// <summary>Push paper size onto Nameplate L and Nameplate P; orientation picks which plate Orient uses.</summary>
+    private void ApplyNameplatePage()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        var paper = PaperBox.SelectedItem as string ?? "A1";
+        var landscape = !string.Equals(OrientBox.SelectedItem as string, "Portrait", StringComparison.OrdinalIgnoreCase);
+        Native.Execute(_host, "sheet.designer", JsonSerializer.Serialize(new Dictionary<string, object> { ["landscape"] = landscape }));
+        foreach (var (name, land) in new (string, bool)[] { ("Nameplate L", true), ("Nameplate P", false) })
+        {
+            var setup = new Dictionary<string, object>
+            {
+                ["layout"] = name,
+                ["paper"] = paper,
+                ["landscape"] = land,
+            };
+            Native.Execute(_host, "pagesetup", JsonSerializer.Serialize(setup));
+        }
+        // Legacy single Title plate, if still present.
+        Native.Execute(_host, "pagesetup", JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["layout"] = "Title plate",
+            ["paper"] = paper,
+            ["landscape"] = landscape,
+        }));
     }
 
     private void SyncDraftingUnits(string chromeLabel)
@@ -4060,12 +4410,107 @@ public sealed partial class MainWindow : Window
     }
 
     private string? _selectedBlock;
+    private ulong _blockPreviewUid;
+    private ulong _blockPreviewRevision;
+    private readonly Dictionary<string, string> _blockPreviewJson = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Library DXF/DWG previews keyed by absolute path (stable across drawing revision).</summary>
+    private readonly Dictionary<string, string> _filePreviewJson = new(StringComparer.OrdinalIgnoreCase);
+    private bool _fillingProject;
+    private string _projectPanelKey = "";
+
+    private void FillProject()
+    {
+        if (_host == IntPtr.Zero || _fillingProject)
+        {
+            return;
+        }
+        if (Native.Execute(_host, "project", "{}") != 0)
+        {
+            return;
+        }
+        string title = "";
+        string slab = "150";
+        string beam = "450";
+        try
+        {
+            using var doc = JsonDocument.Parse(Native.ReadResult(_host));
+            if (doc.RootElement.TryGetProperty("details", out var det) && det.TryGetProperty("title", out var t))
+            {
+                title = t.GetString() ?? "";
+            }
+            if (doc.RootElement.TryGetProperty("structure", out var st))
+            {
+                if (st.TryGetProperty("slabMm", out var s) && s.TryGetDouble(out var sv))
+                {
+                    slab = sv.ToString("0.###");
+                }
+                if (st.TryGetProperty("beamMm", out var b) && b.TryGetDouble(out var bv))
+                {
+                    beam = bv.ToString("0.###");
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+        var key = title + "|" + slab + "|" + beam;
+        if (key == _projectPanelKey && ProjectPanel.Children.Count > 0)
+        {
+            return;
+        }
+        _projectPanelKey = key;
+        _fillingProject = true;
+        try
+        {
+            ProjectPanel.Children.Clear();
+            ProjectPanel.Children.Add(Heading("Project settings"));
+            if (!string.IsNullOrEmpty(title))
+            {
+                ProjectPanel.Children.Add(FieldLabel(title));
+            }
+            ProjectPanel.Children.Add(FieldLabel("Default slab thickness (mm)"));
+            var slabBox = Density.DialogField(slab, "Slab thickness");
+            ProjectPanel.Children.Add(slabBox);
+            ProjectPanel.Children.Add(FieldLabel("Default beam depth including slab (mm)"));
+            var beamBox = Density.DialogField(beam, "Beam depth");
+            ProjectPanel.Children.Add(beamBox);
+            void SaveStructure()
+            {
+                if (!double.TryParse(slabBox.Text.Trim(), out var sm) || !double.TryParse(beamBox.Text.Trim(), out var bm))
+                {
+                    History.Text = "Slab and beam must be positive millimetres.";
+                    return;
+                }
+                var body = JsonSerializer.Serialize(new Dictionary<string, object> { ["slabMm"] = sm, ["beamMm"] = bm });
+                if (Native.Execute(_host, "project", body) != 0)
+                {
+                    History.Text = Native.LastError(_host);
+                    return;
+                }
+                _projectPanelKey = "";
+                AfterCommand();
+            }
+            slabBox.LostFocus += (_, _) => SaveStructure();
+            beamBox.LostFocus += (_, _) => SaveStructure();
+            var details = Density.DialogAction("Project details?");
+            details.Click += (_, _) => StartCommand("project");
+            ProjectPanel.Children.Add(details);
+            var floors = Density.DialogAction("Floors?");
+            floors.Click += (_, _) => StartCommand("floors");
+            ProjectPanel.Children.Add(floors);
+            ProjectPanel.Children.Add(FieldLabel("Door and Window take the selected Blocks-panel block; opening width on the drawing updates the schedule."));
+        }
+        finally
+        {
+            _fillingProject = false;
+        }
+    }
 
     private void FillBlocks(PanelSnapshot snapshot)
     {
         BlocksPanel.Children.Clear();
-        AddFurnitureCatalog();
-        // Canvas selection/hover wins over the last clicked list row.
+        // Canvas selection/hover wins over the last clicked thumbnail.
         if (!string.IsNullOrEmpty(snapshot.FocusBlock))
         {
             _selectedBlock = snapshot.FocusBlock;
@@ -4074,53 +4519,46 @@ public sealed partial class MainWindow : Window
         {
             _selectedBlock = null;
         }
+
+        BlocksPanel.Children.Add(Heading(string.IsNullOrEmpty(snapshot.FocusBlock) ? "Current drawing" : "Current drawing � " + snapshot.FocusBlock));
         if (!string.IsNullOrEmpty(snapshot.FocusBlock))
         {
-            var why = snapshot.Selection > 0 ? "Selected insert" : "Under cursor";
-            BlocksPanel.Children.Add(Heading("Blocks � " + snapshot.FocusBlock));
-            BlocksPanel.Children.Add(FieldLabel(why));
-        }
-        else
-        {
-            BlocksPanel.Children.Add(Heading("Blocks"));
+            BlocksPanel.Children.Add(FieldLabel(snapshot.Selection > 0 ? "Selected insert" : "Under cursor"));
         }
         if (snapshot.Blocks.Count == 0)
         {
             BlocksPanel.Children.Add(FieldLabel("This drawing defines no blocks."));
         }
-        var ordered = snapshot.Blocks
-            .OrderByDescending(b => b.Focus || b.Selected || b.Hovered || string.Equals(b.Name, _selectedBlock, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        foreach (var block in ordered)
+        else
         {
-            var name = block.Name;
-            var selected = string.Equals(_selectedBlock, name, StringComparison.OrdinalIgnoreCase) || block.Focus || block.Selected || block.Hovered;
-            var line = new Border
+            // AutoCAD Blocks palette: medium thumbnails with title (click = select, double-click = insert).
+            var ordered = snapshot.Blocks
+                .OrderByDescending(b => b.Focus || b.Selected || b.Hovered || string.Equals(b.Name, _selectedBlock, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var grid = new Grid { ColumnSpacing = Density.SpaceMd, RowSpacing = Density.SpaceMd };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            for (var i = 0; i < ordered.Count; i++)
             {
-                Padding = new Thickness(4, 4, 4, 4),
-                CornerRadius = new CornerRadius(Density.CornerControl),
-                Background = selected ? SelectedBlockBrush() : null,
-            };
-            var stack = new StackPanel { Spacing = Density.SpaceXs };
-            stack.Children.Add(new TextBlock { Text = name, FontWeight = selected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal });
-            if (!string.IsNullOrEmpty(block.Description))
-            {
-                stack.Children.Add(FieldLabel(block.Description));
+                var row = i / 2;
+                while (grid.RowDefinitions.Count <= row)
+                {
+                    grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                }
+                var card = MakeBlockThumbnail(ordered[i], snapshot);
+                Grid.SetRow(card, row);
+                Grid.SetColumn(card, i % 2);
+                grid.Children.Add(card);
             }
-            stack.Children.Add(FieldLabel(block.Entities + " objects � " + block.References + " references"));
-            line.Child = stack;
-            line.PointerPressed += (_, _) =>
-            {
-                _selectedBlock = name;
-                _panelKey = "";
-                RefreshPanels();
-            };
-            BlocksPanel.Children.Add(line);
+            BlocksPanel.Children.Add(grid);
         }
+
         var focus = snapshot.Blocks.FirstOrDefault(b => string.Equals(b.Name, _selectedBlock, StringComparison.OrdinalIgnoreCase));
         if (focus != null)
         {
             BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+            BlocksPanel.Children.Add(FieldLabel(focus.Entities + " objects � " + focus.References + " references"));
             if (!string.IsNullOrEmpty(focus.Description))
             {
                 BlocksPanel.Children.Add(FieldLabel("Description"));
@@ -4129,6 +4567,7 @@ public sealed partial class MainWindow : Window
             var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceMd };
             var insert = new Button { Content = "Insert", MinHeight = Density.ControlHeight };
             Density.Name(insert, "Insert block " + focus.Name);
+            ToolTipService.SetToolTip(insert, "Place at the picked point at drawing scale (1:1)");
             insert.Click += (_, _) => InsertBlock(focus.Name);
             actions.Children.Add(insert);
             var select = new Button
@@ -4155,21 +4594,314 @@ public sealed partial class MainWindow : Window
         {
             BlocksPanel.Children.Add(FieldLabel("Further blocks are not listed."));
         }
-        BlocksPanel.Children.Add(FieldLabel("External references are not supported."));
+        BlocksPanel.Children.Add(FieldLabel("Double-click a thumbnail to insert. External references are not supported."));
+        BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+        AddFurnitureCatalog();
     }
 
-    private static Brush? SelectedBlockBrush()
+    private Border MakeBlockThumbnail(BlockRow block, PanelSnapshot snapshot)
     {
-        if (Density.ThemeBrush("SubtleFillColorSecondaryBrush") is { } brush)
+        var name = block.Name;
+        var selected = string.Equals(_selectedBlock, name, StringComparison.OrdinalIgnoreCase) || block.Focus || block.Selected || block.Hovered;
+        var card = DesignCenterCard(selected, "Block " + name, name + " ? click to select, double-click to insert");
+        var stack = new StackPanel { Spacing = 2 };
+        stack.Children.Add(BlockPreview(name, snapshot, 96));
+        stack.Children.Add(new TextBlock
         {
-            return brush;
+            Text = name,
+            FontSize = Density.FontCaption,
+            FontWeight = selected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+        });
+        card.Child = stack;
+        card.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(card).Properties.IsLeftButtonPressed)
+            {
+                _selectedBlock = name;
+                _panelKey = "";
+                RefreshPanels();
+            }
+        };
+        card.DoubleTapped += (_, _) => InsertBlock(name);
+        return card;
+    }
+
+    /// <summary>AutoCAD DesignCenter-style tile: quiet chrome, light-blue selection, hover wash.</summary>
+    private Border DesignCenterCard(bool selected, string a11yName, string tip)
+    {
+        var idle = Density.ThemeBrush("CardBackgroundFillColorDefaultBrush")
+            ?? new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        var hover = Density.ThemeBrush("SubtleFillColorSecondaryBrush")
+            ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 232, 232, 232));
+        var picked = Density.ThemeBrush("AccentFillColorSecondaryBrush")
+            ?? Density.ThemeBrush("SubtleFillColorTertiaryBrush")
+            ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 204, 228, 247));
+        var card = new Border
+        {
+            Padding = new Thickness(4, 6, 4, 4),
+            CornerRadius = new CornerRadius(2),
+            BorderThickness = new Thickness(0),
+            Background = selected ? picked : idle,
+        };
+        Density.Name(card, a11yName);
+        ToolTipService.SetToolTip(card, tip);
+        card.PointerEntered += (_, _) =>
+        {
+            if (!selected)
+            {
+                card.Background = hover;
+            }
+        };
+        card.PointerExited += (_, _) =>
+        {
+            card.Background = selected ? picked : idle;
+        };
+        return card;
+    }
+
+    private string? CachedBlockPreviewJson(string name, PanelSnapshot snapshot)
+    {
+        if (snapshot.Uid != _blockPreviewUid || snapshot.Revision != _blockPreviewRevision)
+        {
+            _blockPreviewJson.Clear();
+            _blockPreviewUid = snapshot.Uid;
+            _blockPreviewRevision = snapshot.Revision;
         }
-        return null;
+        if (_blockPreviewJson.TryGetValue(name, out var cached))
+        {
+            return cached;
+        }
+        if (_host == IntPtr.Zero)
+        {
+            return null;
+        }
+        if (Native.Execute(_host, "blocks.preview", JsonSerializer.Serialize(new Dictionary<string, object> { ["name"] = name })) != 0)
+        {
+            return null;
+        }
+        var json = Native.ReadResult(_host);
+        if (!string.IsNullOrEmpty(json))
+        {
+            _blockPreviewJson[name] = json;
+        }
+        return json;
+    }
+
+    private string? CachedFilePreviewJson(string path)
+    {
+        if (_filePreviewJson.TryGetValue(path, out var cached))
+        {
+            return cached;
+        }
+        if (_host == IntPtr.Zero || string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+        if (Native.Execute(_host, "blocks.preview", JsonSerializer.Serialize(new Dictionary<string, object> { ["path"] = path })) != 0)
+        {
+            return null;
+        }
+        var json = Native.ReadResult(_host);
+        if (!string.IsNullOrEmpty(json))
+        {
+            _filePreviewJson[path] = json;
+        }
+        return json;
+    }
+
+    private UIElement BlockPreview(string name, PanelSnapshot snapshot, double size)
+        => PreviewCanvas("Block preview " + name, CachedBlockPreviewJson(name, snapshot), size);
+
+    private UIElement FilePreview(string path, string a11yName, double size)
+        => PreviewCanvas(a11yName, CachedFilePreviewJson(path), size);
+
+    private UIElement PreviewCanvas(string a11yName, string? json, double size)
+    {
+        var canvas = new Microsoft.UI.Xaml.Controls.Canvas
+        {
+            Width = size,
+            Height = size,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        AutomationProperties.SetName(canvas, a11yName);
+        // DesignCenter paper: light grey field, no heavy frame (geometry carries the edge).
+        var paper = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 245, 245, 245));
+        var fallbackInk = new SolidColorBrush(Microsoft.UI.Colors.Black);
+        var frame = new Microsoft.UI.Xaml.Shapes.Rectangle
+        {
+            Width = size,
+            Height = size,
+            Stroke = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 210, 210, 210)),
+            StrokeThickness = 0.5,
+            Fill = paper,
+            RadiusX = 1,
+            RadiusY = 1,
+        };
+        Microsoft.UI.Xaml.Controls.Canvas.SetLeft(frame, 0);
+        Microsoft.UI.Xaml.Controls.Canvas.SetTop(frame, 0);
+        canvas.Children.Add(frame);
+        if (!string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("paper", out var paperHex) && paperHex.ValueKind == JsonValueKind.String
+                    && ParsePreviewHex(paperHex.GetString()) is { } paperColor)
+                {
+                    frame.Fill = new SolidColorBrush(paperColor);
+                }
+                DrawBlockPreview(canvas, doc.RootElement, fallbackInk, size);
+            }
+            catch (JsonException)
+            {
+            }
+        }
+        return canvas;
+    }
+
+    private static void DrawBlockPreview(Microsoft.UI.Xaml.Controls.Canvas canvas, JsonElement preview, Brush fallbackInk, double size)
+    {
+        var pad = 4.0;
+        var draw = size - pad * 2;
+        if (preview.TryGetProperty("strokes", out var strokes) && strokes.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var stroke in strokes.EnumerateArray())
+            {
+                if (stroke.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+                var ink = fallbackInk;
+                if (stroke.TryGetProperty("color", out var colorEl) && colorEl.ValueKind == JsonValueKind.String
+                    && ParsePreviewHex(colorEl.GetString()) is { } rgb)
+                {
+                    ink = new SolidColorBrush(rgb);
+                }
+                if (!stroke.TryGetProperty("points", out var points) || points.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+                AddPreviewStroke(canvas, points, ink, pad, draw);
+            }
+            return;
+        }
+        if (!preview.TryGetProperty("segments", out var segments) || segments.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+        foreach (var seg in segments.EnumerateArray())
+        {
+            AddPreviewStroke(canvas, seg, fallbackInk, pad, draw);
+        }
+    }
+
+    private static void AddPreviewStroke(Microsoft.UI.Xaml.Controls.Canvas canvas, JsonElement points, Brush ink, double pad, double draw)
+    {
+        if (points.ValueKind != JsonValueKind.Array || points.GetArrayLength() == 0)
+        {
+            return;
+        }
+        if (points.GetArrayLength() == 1
+            || (points.GetArrayLength() == 2
+                && NearlySamePreviewPoint(points[0], points[1])))
+        {
+            var p = BlockPreviewPoint(points[0], pad, draw);
+            var dot = new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 2.0, Height = 2.0, Fill = ink };
+            Microsoft.UI.Xaml.Controls.Canvas.SetLeft(dot, p.X - 1.0);
+            Microsoft.UI.Xaml.Controls.Canvas.SetTop(dot, p.Y - 1.0);
+            canvas.Children.Add(dot);
+            return;
+        }
+        var geo = new Microsoft.UI.Xaml.Media.PathGeometry();
+        var fig = new Microsoft.UI.Xaml.Media.PathFigure { IsClosed = false, IsFilled = false };
+        var first = true;
+        foreach (var pt in points.EnumerateArray())
+        {
+            var p = BlockPreviewPoint(pt, pad, draw);
+            if (first)
+            {
+                fig.StartPoint = p;
+                first = false;
+            }
+            else
+            {
+                fig.Segments.Add(new Microsoft.UI.Xaml.Media.LineSegment { Point = p });
+            }
+        }
+        geo.Figures.Add(fig);
+        canvas.Children.Add(new Microsoft.UI.Xaml.Shapes.Path
+        {
+            Data = geo,
+            Stroke = ink,
+            StrokeThickness = 1.0,
+            StrokeStartLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Flat,
+            StrokeEndLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Flat,
+            StrokeLineJoin = Microsoft.UI.Xaml.Media.PenLineJoin.Miter,
+        });
+    }
+
+    private static bool NearlySamePreviewPoint(JsonElement a, JsonElement b)
+    {
+        if (a.ValueKind != JsonValueKind.Array || b.ValueKind != JsonValueKind.Array
+            || a.GetArrayLength() < 2 || b.GetArrayLength() < 2)
+        {
+            return false;
+        }
+        var ax = a[0].TryGetDouble(out var axv) ? axv : 0;
+        var ay = a[1].TryGetDouble(out var ayv) ? ayv : 0;
+        var bx = b[0].TryGetDouble(out var bxv) ? bxv : 0;
+        var by = b[1].TryGetDouble(out var byv) ? byv : 0;
+        return Math.Abs(ax - bx) < 1e-9 && Math.Abs(ay - by) < 1e-9;
+    }
+
+    private static Windows.UI.Color? ParsePreviewHex(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return null;
+        }
+        var s = hex.Trim().TrimStart('#');
+        if (s.Length != 6)
+        {
+            return null;
+        }
+        try
+        {
+            var r = Convert.ToByte(s[..2], 16);
+            var g = Convert.ToByte(s[2..4], 16);
+            var b = Convert.ToByte(s[4..6], 16);
+            return Windows.UI.Color.FromArgb(255, r, g, b);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        catch (OverflowException)
+        {
+            return null;
+        }
+    }
+
+    private static Windows.Foundation.Point BlockPreviewPoint(JsonElement pt, double pad, double draw)
+    {
+        var x = 0.0;
+        var y = 0.0;
+        if (pt.ValueKind == JsonValueKind.Array && pt.GetArrayLength() >= 2)
+        {
+            x = pt[0].TryGetDouble(out var xv) ? xv : 0;
+            y = pt[1].TryGetDouble(out var yv) ? yv : 0;
+        }
+        // Engine preview is Y-up; WinUI Canvas is Y-down.
+        return new Windows.Foundation.Point(pad + x * draw, pad + (1.0 - y) * draw);
     }
 
     private void InsertBlock(string name)
     {
-        if (_host == IntPtr.Zero || Native.CommandLine(_host, "insert") != 0)
+        if (_host == IntPtr.Zero || Native.CommandLine(_host, "insert.place") != 0)
         {
             History.Text = Native.LastError(_host);
             return;
@@ -4188,30 +4920,83 @@ public sealed partial class MainWindow : Window
             return;
         BlocksPanel.Children.Add(Heading(FurnitureCatalog.Name));
         BlocksPanel.Children.Add(FieldLabel("Plan blocks � millimetres � CC0 (Innerscene)"));
+        BlocksPanel.Children.Add(FieldLabel("Click a thumbnail to insert."));
         string? lastCat = null;
+        Grid? grid = null;
+        var col = 0;
+        var row = 0;
+        void EnsureGrid()
+        {
+            if (grid != null)
+                return;
+            grid = new Grid { ColumnSpacing = Density.SpaceMd, RowSpacing = Density.SpaceMd };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            BlocksPanel.Children.Add(grid);
+            col = 0;
+            row = 0;
+        }
         foreach (var entry in entries)
         {
             if (!string.Equals(lastCat, entry.Item.Category, StringComparison.Ordinal))
             {
                 lastCat = entry.Item.Category;
+                grid = null;
                 BlocksPanel.Children.Add(FieldLabel(lastCat.ToUpperInvariant()));
             }
-            var label = string.IsNullOrEmpty(entry.Item.SizeMm)
-                ? entry.Item.Title
-                : entry.Item.Title + " � " + entry.Item.SizeMm + " mm";
-            var btn = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = Density.ControlHeight };
-            Density.Name(btn, "Insert furniture " + entry.Item.Title);
-            var path = entry.Path;
-            var blockName = System.IO.Path.GetFileNameWithoutExtension(entry.Item.File);
-            btn.Click += (_, _) => InsertFurnitureFile(blockName, path);
-            BlocksPanel.Children.Add(btn);
+            EnsureGrid();
+            while (grid!.RowDefinitions.Count <= row)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            }
+            var card = MakeFurnitureThumbnail(entry);
+            Grid.SetRow(card, row);
+            Grid.SetColumn(card, col);
+            grid.Children.Add(card);
+            col++;
+            if (col >= 2)
+            {
+                col = 0;
+                row++;
+            }
         }
         BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
     }
 
+    private Border MakeFurnitureThumbnail(FurnitureCatalog.Entry entry)
+    {
+        var path = entry.Path;
+        var blockName = System.IO.Path.GetFileNameWithoutExtension(entry.Item.File);
+        var caption = string.IsNullOrEmpty(entry.Item.SizeMm)
+            ? entry.Item.Title
+            : entry.Item.Title + " � " + entry.Item.SizeMm + " mm";
+        var tip = string.IsNullOrEmpty(entry.Item.Note) ? caption : caption + " ? " + entry.Item.Note;
+        var card = DesignCenterCard(false, "Insert furniture " + entry.Item.Title, tip);
+        var stack = new StackPanel { Spacing = 2 };
+        stack.Children.Add(FilePreview(path, "Furniture preview " + entry.Item.Title, 96));
+        stack.Children.Add(new TextBlock
+        {
+            Text = entry.Item.Title,
+            FontSize = Density.FontCaption,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxLines = 1,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+        });
+        card.Child = stack;
+        card.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(card).Properties.IsLeftButtonPressed)
+            {
+                InsertFurnitureFile(blockName, path);
+            }
+        };
+        return card;
+    }
+
     private void InsertFurnitureFile(string blockName, string path)
     {
-        if (_host == IntPtr.Zero || Native.CommandLine(_host, "insert") != 0)
+        if (_host == IntPtr.Zero || Native.CommandLine(_host, "insert.place") != 0)
         {
             History.Text = Native.LastError(_host);
             return;
@@ -4322,12 +5107,104 @@ public sealed partial class MainWindow : Window
         {
             var current = snapshot.Layers.FirstOrDefault(layer => layer.Current)?.Name;
             FillCombo(LayerBox, snapshot.Layers.Select(layer => (layer.Name, layer.Name)), current);
+            FillColorBox(snapshot);
+            FillLinetypeBox(snapshot);
             FillFloor();
             SyncPaperSize();
         }
         finally
         {
             _filling = false;
+        }
+    }
+
+    private static readonly (string Tag, string Label, byte R, byte G, byte B)[] StandardColors =
+    [
+        ("ByLayer", "ByLayer", 160, 160, 160),
+        ("ByBlock", "ByBlock", 120, 120, 120),
+        ("Red", "Red", 255, 0, 0),
+        ("Yellow", "Yellow", 255, 255, 0),
+        ("Green", "Green", 0, 255, 0),
+        ("Cyan", "Cyan", 0, 255, 255),
+        ("Blue", "Blue", 0, 0, 255),
+        ("Magenta", "Magenta", 255, 0, 255),
+        ("White", "White", 255, 255, 255),
+    ];
+
+    private void FillColorBox(PanelSnapshot snapshot)
+    {
+        var current = string.IsNullOrEmpty(snapshot.Cecolor) ? "ByLayer" : snapshot.Cecolor;
+        var list = StandardColors.Select(c => (c.Tag, c.Label, c.R, c.G, c.B)).ToList();
+        if (!list.Any(c => c.Tag.Equals(current, StringComparison.OrdinalIgnoreCase)))
+        {
+            list.Add((current, current, 180, 180, 180));
+        }
+        FillColorCombo(ColorBox, list, current);
+    }
+
+    private void FillLinetypeBox(PanelSnapshot snapshot)
+    {
+        var current = string.IsNullOrEmpty(snapshot.Celtype) ? "ByLayer" : snapshot.Celtype;
+        var items = new List<(string, string)> { ("ByLayer", "ByLayer"), ("ByBlock", "ByBlock"), ("Continuous", "Continuous") };
+        if (!items.Any(c => c.Item1.Equals(current, StringComparison.OrdinalIgnoreCase)))
+        {
+            items.Add((current, current));
+        }
+        FillCombo(LinetypeBox, items, current);
+    }
+
+    private static void FillColorCombo(ComboBox box, List<(string Tag, string Label, byte R, byte G, byte B)> list, string? selected)
+    {
+        var sameItems = box.Items.Count == list.Count;
+        if (sameItems)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (box.Items[i] is not ComboBoxItem existing || existing.Tag as string != list[i].Tag)
+                {
+                    sameItems = false;
+                    break;
+                }
+            }
+        }
+        if (!sameItems)
+        {
+            box.Items.Clear();
+            foreach (var (tag, label, r, g, b) in list)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                row.Children.Add(new Border
+                {
+                    Width = 14,
+                    Height = 14,
+                    CornerRadius = new CornerRadius(2),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = Density.ThemeBrush("ControlStrokeColorDefaultBrush")
+                        ?? new SolidColorBrush(Microsoft.UI.Colors.Gray),
+                    Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+                row.Children.Add(new TextBlock
+                {
+                    Text = label,
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+                box.Items.Add(new ComboBoxItem { Content = row, Tag = tag });
+            }
+        }
+        box.IsEnabled = box.Items.Count > 0;
+        var want = -1;
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem item && item.Tag is string tag && tag.Equals(selected, StringComparison.OrdinalIgnoreCase))
+            {
+                want = i;
+                break;
+            }
+        }
+        if (box.SelectedIndex != want)
+        {
+            box.SelectedIndex = want;
         }
     }
 
@@ -4405,6 +5282,10 @@ public sealed partial class MainWindow : Window
     private void OnLayerPicked(object sender, SelectionChangedEventArgs e) => PickContext(LayerBox, "layer.current", "name");
 
     private void OnFloorPicked(object sender, SelectionChangedEventArgs e) => PickContext(FloorBox, "floor.current", "name");
+
+    private void OnColorPicked(object sender, SelectionChangedEventArgs e) => PickContext(ColorBox, "color", "color");
+
+    private void OnLinetypePicked(object sender, SelectionChangedEventArgs e) => PickContext(LinetypeBox, "linetype", "current");
 
     private void PickContext(ComboBox box, string command, string key)
     {
@@ -4590,7 +5471,6 @@ public sealed partial class MainWindow : Window
     /// <summary>Drawing tools on the Architecture bar. Layer set lives under Format (not here).</summary>
     private static readonly (string Id, string Label)[] ArchitectureTools =
     [
-        ("wall.draw", "Wall"),
         ("wall.door", "Door"),
         ("wall.window", "Window"),
         ("room", "Room"),
@@ -4604,10 +5484,10 @@ public sealed partial class MainWindow : Window
     private void RebuildArchitectureBar()
     {
         ArchBar.Children.Clear();
-        // Openings � rooms � structure ? thin dividers between sections.
+        // Openings � rooms � structure ? thin dividers between sections. Wall draw is command-line only.
         string[][] groups =
         [
-            ["wall.draw", "wall.door", "wall.window"],
+            ["wall.door", "wall.window"],
             ["room", "rarea", "north.arrow"],
             ["grid.axis", "column.place", "stair.plan"],
         ];
@@ -4867,6 +5747,7 @@ public sealed partial class MainWindow : Window
         {
             var t when ReferenceEquals(t, LayersTab) => "Layer",
             var t when ReferenceEquals(t, BlocksTab) => "Blocks",
+            var t when ReferenceEquals(t, ProjectTab) => "Project",
             _ => "Properties",
         };
 
@@ -4901,6 +5782,7 @@ public sealed partial class MainWindow : Window
         {
             var t when ReferenceEquals(t, LayersTab) => SideTab.Layers,
             var t when ReferenceEquals(t, BlocksTab) => SideTab.Blocks,
+            var t when ReferenceEquals(t, ProjectTab) => SideTab.Project,
             _ => SideTab.Properties,
         };
         ShowSidePanel(tab);
@@ -5031,6 +5913,7 @@ public sealed partial class MainWindow : Window
         CommandItem(window, "Properties", () => ShowSidePanel(SideTab.Properties));
         CommandItem(window, "Layers palette", () => ShowSidePanel(SideTab.Layers));
         CommandItem(window, "Blocks", () => ShowSidePanel(SideTab.Blocks));
+        CommandItem(window, "Project settings", () => ShowSidePanel(SideTab.Project));
         CommandItem(window, "Parameters Manager", OpenParameters);
         CommandItem(window, "Classic workspace", () => SwitchWorkspace(classic: true));
         CommandItem(window, "Pro workspace", () => SwitchWorkspace(classic: false));
@@ -5038,7 +5921,8 @@ public sealed partial class MainWindow : Window
         CommandItem(window, "Calculator", OpenCalculator);
         CommandItem(window, "Pomodoro", OpenPomodoro);
         CommandItem(window, "Customize tool bar", OpenTools);
-        CommandItem(window, "Nameplate designer", () => OnNameplateDesigner(this, new RoutedEventArgs()));
+        CommandItem(window, "Nameplate L (landscape)", () => OpenNameplate(landscape: true));
+        CommandItem(window, "Nameplate P (portrait)", () => OpenNameplate(landscape: false));
         CommandItem(window, "UCS icon", () =>
         {
             _ucs = !_ucs;
@@ -5052,6 +5936,7 @@ public sealed partial class MainWindow : Window
         Properties,
         Layers,
         Blocks,
+        Project,
     }
 
     /// Expands the side column (and floats it back if needed), then selects a panel tab.
@@ -5072,11 +5957,13 @@ public sealed partial class MainWindow : Window
         {
             SideTab.Layers => LayersTab,
             SideTab.Blocks => BlocksTab,
+            SideTab.Project => ProjectTab,
             _ => PropertiesTab,
         };
         PropertiesTab.Visibility = Visibility.Visible;
         LayersTab.Visibility = Visibility.Visible;
         BlocksTab.Visibility = Visibility.Visible;
+        ProjectTab.Visibility = Visibility.Visible;
         SideTabs.SelectedItem = item;
     }
 
@@ -5681,6 +6568,8 @@ public sealed partial class MainWindow : Window
         public string FocusLayer { get; set; } = "";
         public string FocusBlock { get; set; } = "";
         public bool Layiso { get; set; }
+        public string Cecolor { get; set; } = "ByLayer";
+        public string Celtype { get; set; } = "ByLayer";
         public List<PropertyRow> Properties { get; set; } = new();
         public List<LayerRow> Layers { get; set; } = new();
         public bool LayersTruncated { get; set; }

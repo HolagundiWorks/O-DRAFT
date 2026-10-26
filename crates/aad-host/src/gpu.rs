@@ -1,7 +1,11 @@
 //! Presents the shared canvas mesh into the child window.
 //!
 //! The vertex layout and shader are [`aad_render::mesh`]. This module only uploads them and
-//! issues the draw.
+//! issues the draw. On Windows the instance prefers Direct3D 12 so geometry hits the GPU path
+//! with the lowest compositor latency; overlay uploads are skipped when the mesh fingerprint is
+//! unchanged.
+
+use std::hash::{Hash, Hasher};
 
 use aad_render::mesh::{CANVAS_SHADER, INSTANCE_SIZE, MeshData, VERTEX_SIZE};
 use wgpu::util::DeviceExt;
@@ -10,6 +14,7 @@ use crate::surface;
 
 const CHUNK: usize = 4_194_300;
 const UNIFORM_SIZE: u64 = 48;
+const SAMPLE_COUNT: u32 = 1;
 
 struct Batch {
     buffer: wgpu::Buffer,
@@ -37,28 +42,31 @@ pub struct Gpu {
     over_tris: Vec<Batch>,
     over_quads: Vec<Batch>,
     over_breaks: Vec<[usize; 3]>,
+    over_key: Option<u64>,
+    /// Multisampled colour target resolved into the swapchain each frame.
+    msaa: Option<(wgpu::Texture, wgpu::TextureView)>,
 }
 
 impl Gpu {
     pub fn open(hwnd: isize, width: u32, height: u32) -> Result<Self, String> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let surface = surface::from_hwnd(&instance, hwnd)?;
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-            apply_limit_buckets: false,
-        }))
-        .map_err(|e| e.to_string())?;
+        let (instance, surface, adapter) = open_adapter(hwnd)?;
+        let _ = instance;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).map_err(|e| e.to_string())?;
+        let caps = surface.get_capabilities(&adapter);
         let mut config = surface.get_default_config(&adapter, width.max(1), height.max(1)).ok_or("the drawing surface is not supported")?;
-        if let Some(format) = surface.get_capabilities(&adapter).formats.iter().copied().find(|f| f.is_srgb()) {
+        if let Some(format) = caps.formats.iter().copied().find(|f| f.is_srgb()) {
             config.format = format;
         }
+        // Crosshair is drawn in the overlay; a deep swapchain queue reads as pointer lag.
+        // AutoNoVsync picks Immediate → Mailbox → Fifo and is valid on every surface.
+        // AAD_VSYNC=1/on forces tear-free FIFO; =0/off keeps the low-latency mode.
+        config.present_mode = present_mode_from_env();
+        config.desired_maximum_frame_latency = 1;
         let format = config.format;
         surface.configure(&device, &config);
         let linear_out = format.is_srgb();
-        let (line_pipeline, tri_pipeline, quad_pipeline, uniform, bind_group) = pipelines(&device, format);
+        let (line_pipeline, tri_pipeline, quad_pipeline, uniform, bind_group) = pipelines(&device, format, SAMPLE_COUNT);
+        let msaa = if SAMPLE_COUNT > 1 { Some(msaa_target(&device, &config)) } else { None };
         Ok(Gpu {
             surface,
             device,
@@ -80,6 +88,8 @@ impl Gpu {
             over_tris: Vec::new(),
             over_quads: Vec::new(),
             over_breaks: Vec::new(),
+            over_key: None,
+            msaa,
         })
     }
 
@@ -92,6 +102,7 @@ impl Gpu {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+        self.msaa = if SAMPLE_COUNT > 1 { Some(msaa_target(&self.device, &self.config)) } else { None };
         Ok(())
     }
 
@@ -99,11 +110,22 @@ impl Gpu {
         self.clear = wgpu::Color { r: f64::from(rgb.0) / 255.0, g: f64::from(rgb.1) / 255.0, b: f64::from(rgb.2) / 255.0, a: 1.0 };
     }
 
+    /// Upload overlay vertices when their content fingerprint changes.
     pub fn set_overlay(&mut self, mesh: &MeshData) {
+        let key = mesh_fingerprint(mesh);
+        if self.over_key == Some(key) {
+            return;
+        }
         self.over_lines = upload(&self.device, "cad_over_lines", &mesh.lines, VERTEX_SIZE);
         self.over_tris = upload(&self.device, "cad_over_fills", &mesh.tris, VERTEX_SIZE);
         self.over_quads = upload(&self.device, "cad_over_quads", &mesh.quads, INSTANCE_SIZE);
         self.over_breaks = mesh.breaks.clone();
+        self.over_key = Some(key);
+    }
+
+    /// Fingerprint used by the host to skip a full present when nothing changed.
+    pub fn overlay_key(mesh: &MeshData) -> u64 {
+        mesh_fingerprint(mesh)
     }
 
     pub fn present(&mut self, key: u64, mesh: &MeshData, uniform: &[f32; 12]) -> Result<(), String> {
@@ -130,15 +152,19 @@ impl Gpu {
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
             other => return Err(format!("drawing surface: {other:?}")),
         };
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let resolve = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let msaa_view = self.msaa.as_ref().map(|(_, v)| v);
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("cad") });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cad"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(self.clear), store: wgpu::StoreOp::Store },
+                    view: msaa_view.unwrap_or(&resolve),
+                    resolve_target: msaa_view.map(|_| &resolve),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear),
+                        store: if msaa_view.is_some() { wgpu::StoreOp::Discard } else { wgpu::StoreOp::Store },
+                    },
                     depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
@@ -182,6 +208,7 @@ impl Gpu {
 fn pipelines(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
+    sample_count: u32,
 ) -> (wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::Buffer, wgpu::BindGroup) {
     let module = device
         .create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("cad_canvas"), source: wgpu::ShaderSource::Wgsl(CANVAS_SHADER.into()) });
@@ -215,7 +242,7 @@ fn pipelines(
             vertex: wgpu::VertexState { module: &module, entry_point: Some(vs), buffers: &[Some(buffer)], compilation_options: Default::default() },
             primitive: wgpu::PrimitiveState { topology, ..Default::default() },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState { count: sample_count, mask: !0, alpha_to_coverage_enabled: false },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some("fs_main"),
@@ -277,4 +304,73 @@ fn batch_ranges(counts: impl IntoIterator<Item = u32>, range: std::ops::Range<us
         off += n;
     }
     out
+}
+
+
+fn msaa_target(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("cad_msaa"),
+        size: wgpu::Extent3d { width: config.width.max(1), height: config.height.max(1), depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: SAMPLE_COUNT,
+        dimension: wgpu::TextureDimension::D2,
+        format: config.format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
+fn mesh_fingerprint(mesh: &MeshData) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    mesh.lines.len().hash(&mut h);
+    mesh.tris.len().hash(&mut h);
+    mesh.quads.len().hash(&mut h);
+    mesh.breaks.hash(&mut h);
+    h.write(&mesh.lines);
+    h.write(&mesh.tris);
+    h.write(&mesh.quads);
+    h.finish()
+}
+
+fn present_mode_from_env() -> wgpu::PresentMode {
+    match std::env::var("AAD_VSYNC").ok().as_deref().map(str::trim).map(|v| v.to_ascii_lowercase()).as_deref() {
+        Some("1" | "on" | "true" | "yes") => wgpu::PresentMode::AutoVsync,
+        Some("0" | "off" | "false" | "no") => wgpu::PresentMode::AutoNoVsync,
+        _ => wgpu::PresentMode::AutoNoVsync,
+    }
+}
+
+fn open_adapter(hwnd: isize) -> Result<(wgpu::Instance, wgpu::Surface<'static>, wgpu::Adapter), String> {
+    // Prefer DX12 on Windows (native hardware path). WGPU_BACKEND overrides; fall back to all
+    // primary backends if the preferred set cannot create a surface adapter.
+    let preferred = wgpu::Backends::from_env().unwrap_or(wgpu::Backends::DX12);
+    let try_backends = [preferred, wgpu::Backends::PRIMARY];
+    let mut last = String::from("no GPU adapter");
+    for backends in try_backends {
+        if backends.is_empty() {
+            continue;
+        }
+        let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+        desc.backends = backends;
+        let instance = wgpu::Instance::new(desc);
+        let surface = match surface::from_hwnd(&instance, hwnd) {
+            Ok(s) => s,
+            Err(e) => {
+                last = e;
+                continue;
+            }
+        };
+        match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+            apply_limit_buckets: false,
+        })) {
+            Ok(adapter) => return Ok((instance, surface, adapter)),
+            Err(e) => last = e.to_string(),
+        }
+    }
+    Err(last)
 }

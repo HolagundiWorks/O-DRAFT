@@ -98,7 +98,7 @@ fn block_references_are_counted_and_the_table_and_bill_are_produced() {
     assert!(
         texts.contains(&"DOOR AND WINDOW SCHEDULE".to_string())
             && texts.contains(&"TOTAL DOOR".to_string())
-            && texts.contains(&"FLOOR HEIGHTS".to_string()),
+            && texts.contains(&"FLOORS".to_string()),
         "{texts:?}"
     );
 

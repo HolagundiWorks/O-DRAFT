@@ -28,10 +28,14 @@
             BorderBrush="{ThemeResource BorderSubtleBrush}"
             BorderThickness="0,0,0,1"
             Padding="6,0,4,0"
-            AutomationProperties.Name="Layer, floor and architecture toolbar"
+            AutomationProperties.Name="Layer, color, linetype, floor and architecture toolbar"
             AutomationProperties.LandmarkType="Navigation">
             <Grid VerticalAlignment="Center" ColumnSpacing="0">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -64,6 +68,50 @@
                     Orientation="Horizontal"
                     Spacing="6"
                     VerticalAlignment="Center"
+                    AutomationProperties.Name="Color">
+                    <TextBlock
+                        Text="Color"
+                        FontSize="{StaticResource FontSizeCaption}"
+                        Foreground="{ThemeResource TextSecondaryBrush}"
+                        VerticalAlignment="Center" />
+                    <ComboBox
+                        x:Name="ColorBox"
+                        MinWidth="110"
+                        MaxWidth="160"
+                        MinHeight="{StaticResource ControlHeight}"
+                        VerticalAlignment="Center"
+                        SelectionChanged="OnColorPicked"
+                        AutomationProperties.Name="Current color"
+                        ToolTipService.ToolTip="Color for new objects (CECOLOR)" />
+                </StackPanel>
+                <Border Grid.Column="3" Style="{StaticResource ArchBarDividerStyle}" Margin="8,0,8,0" />
+                <StackPanel
+                    Grid.Column="4"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Linetype">
+                    <TextBlock
+                        Text="Linetype"
+                        FontSize="{StaticResource FontSizeCaption}"
+                        Foreground="{ThemeResource TextSecondaryBrush}"
+                        VerticalAlignment="Center" />
+                    <ComboBox
+                        x:Name="LinetypeBox"
+                        MinWidth="110"
+                        MaxWidth="160"
+                        MinHeight="{StaticResource ControlHeight}"
+                        VerticalAlignment="Center"
+                        SelectionChanged="OnLinetypePicked"
+                        AutomationProperties.Name="Current linetype"
+                        ToolTipService.ToolTip="Linetype for new objects (CELTYPE)" />
+                </StackPanel>
+                <Border Grid.Column="5" Style="{StaticResource ArchBarDividerStyle}" Margin="8,0,8,0" />
+                <StackPanel
+                    Grid.Column="6"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    VerticalAlignment="Center"
                     AutomationProperties.Name="Floor">
                     <TextBlock
                         Text="Floor"
@@ -82,12 +130,12 @@
                 </StackPanel>
                 <Border
                     x:Name="ArchToolsDivider"
-                    Grid.Column="3"
+                    Grid.Column="7"
                     Style="{StaticResource ArchBarDividerStyle}"
                     Margin="8,0,8,0"
                     Visibility="Collapsed" />
                 <ScrollViewer
-                    Grid.Column="4"
+                    Grid.Column="8"
                     HorizontalScrollBarVisibility="Auto"
                     VerticalScrollBarVisibility="Disabled"
                     VerticalAlignment="Center"
@@ -159,6 +207,11 @@
                     <TabViewItem x:Name="BlocksTab" Header="Blocks" IsClosable="False" AutomationProperties.Name="Blocks">
                         <ScrollViewer x:Name="BlocksHost">
                             <StackPanel x:Name="BlocksPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
+                        </ScrollViewer>
+                    </TabViewItem>
+                    <TabViewItem x:Name="ProjectTab" Header="Project" IsClosable="False" AutomationProperties.Name="Project settings">
+                        <ScrollViewer x:Name="ProjectHost">
+                            <StackPanel x:Name="ProjectPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
                         </ScrollViewer>
                     </TabViewItem>
                 </TabView>
@@ -324,9 +377,9 @@
                         MinHeight="{StaticResource ControlHeight}"
                         FontSize="{StaticResource FontSizeCaption}"
                         Padding="8,2"
-                        Click="OnNameplateDesigner"
+                        Click="OnNameplateMenu"
                         AutomationProperties.Name="Nameplate designer"
-                        ToolTipService.ToolTip="Open the nameplate (title plate) designer" />
+                        ToolTipService.ToolTip="Design Nameplate L (landscape) or Nameplate P (portrait)" />
                     <TextBlock x:Name="Coords" VerticalAlignment="Center" Margin="8,0,0,0" FontFamily="{StaticResource FontFamilyMono}" FontSize="{StaticResource FontSizeMono}" AutomationProperties.Name="Cursor coordinates" />
                 </StackPanel>
             </ScrollViewer>
@@ -372,12 +425,25 @@
                     PlaceholderText="Paper"
                     SelectionChanged="OnPaperPicked"
                     AutomationProperties.Name="Page size"
-                    ToolTipService.ToolTip="ISO page size (A0–A4). Updates dimension text and arrow sizes to printable standards." />
+                    ToolTipService.ToolTip="ISO page size (A0–A4) for the nameplate" />
+                <ComboBox
+                    x:Name="OrientBox"
+                    MinWidth="96"
+                    MinHeight="{StaticResource ControlHeight}"
+                    FontSize="{StaticResource FontSizeBody}"
+                    SelectionChanged="OnOrientPicked"
+                    AutomationProperties.Name="Page orientation"
+                    ToolTipService.ToolTip="Landscape or portrait for the nameplate" />
 
                 <Button x:Name="LayersButton" Click="OnLayers" AutomationProperties.Name="Open layer manager" ToolTipService.ToolTip="Layers" Style="{StaticResource IconButtonStyle}">
                     <local:DrawnIcon Kind="layers" />
                 </Button>
-                <Button x:Name="PdfButton" Click="OnPdf" AutomationProperties.Name="PDF preview" ToolTipService.ToolTip="PDF" Style="{StaticResource IconButtonStyle}">
+                <Button
+                    x:Name="PdfButton"
+                    Click="OnPlotPreview"
+                    AutomationProperties.Name="Plot preview"
+                    ToolTipService.ToolTip="Plot preview — pick a window, then preview the nameplate PDF"
+                    Style="{StaticResource IconButtonStyle}">
                     <local:DrawnIcon Kind="pdf" />
                 </Button>
                 <Button x:Name="WorkspaceButton" Click="OnWorkspace" AutomationProperties.Name="Classic or Pro workspace" ToolTipService.ToolTip="Classic" Style="{StaticResource IconButtonStyle}">

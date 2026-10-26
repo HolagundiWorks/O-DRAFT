@@ -210,17 +210,27 @@ fn run_sync(s: &mut Session, _p: &Value) -> Result<Value> {
     let mut list = openings(&o);
     let counts = block_counts(s.doc()?);
     let mut map: Map<String, Value> = o.get("map").and_then(Value::as_object).cloned().unwrap_or_default();
+    // Opening widths on the drawing (OWIDTH) drive schedule length when blocks are linked.
+    let to_m = ua::drawing_unit(s.doc()?).map_or(0.0254, |u| u.metres());
+    let mut widths: std::collections::BTreeMap<String, f64> = std::collections::BTreeMap::new();
+    for e in std::iter::once(&s.doc()?.model).chain(s.doc()?.layouts.iter().map(|l| &l.entities)).flat_map(|st| st.iter()) {
+        if let EntityKind::Insert(i) = &e.kind
+            && let Some(w) = i.opening_width().filter(|w| w.is_finite() && *w > 0.0)
+        {
+            widths.insert(i.block.to_ascii_uppercase(), w * to_m);
+        }
+    }
     // Block counts: an entry's `block` field may name several blocks separated by `;`.
     let mut by_name = Map::new();
     for e in &mut list {
-        let n: u64 = text(e, "block")
-            .split(';')
-            .map(str::trim)
-            .filter(|b| !b.is_empty())
-            .map(|b| counts.get(&b.to_ascii_uppercase()).copied().unwrap_or(0))
-            .sum();
+        let block_field = text(e, "block");
+        let blocks: Vec<String> = block_field.split(';').map(str::trim).filter(|b| !b.is_empty()).map(str::to_string).collect();
+        let n: u64 = blocks.iter().map(|b| counts.get(&b.to_ascii_uppercase()).copied().unwrap_or(0)).sum();
         e["count"] = json!(n);
         by_name.insert(text(e, "name"), json!(n));
+        if let Some(w) = blocks.iter().find_map(|b| widths.get(&b.to_ascii_uppercase()).copied()) {
+            e["length"] = json!((w * 1000.0).round() / 1000.0);
+        }
     }
     // Measured openings from the saved take-offs, mapped to the entry of nearest length.
     let mut mapped = 0;
@@ -271,21 +281,20 @@ fn run_table(s: &mut Session, p: &Value) -> Result<Value> {
     let origin = point_param(p, "at").unwrap_or(if ext.is_empty() { Vec2::ZERO } else { Vec2::new(ext.min.x, ext.min.y - 6.0 * th) });
     let c = takeoff::table_ctx(th);
     let floors = project::floors(s.doc()?);
+    let (slab_def, beam_def) = project::structure_mm(s.doc()?);
     let frows: Vec<Vec<String>> = floors
         .iter()
         .map(|f| {
             vec![
                 text(f, "name"),
-                format!("{:.2}", num(f, "floorToFloor").unwrap_or(0.0)),
-                format!("{:.2}", num(f, "ceiling").unwrap_or(0.0)),
-                format!("{:.2}", num(f, "lintel").unwrap_or(0.0)),
-                format!("{:.0}", num(f, "slab").unwrap_or(0.0)),
+                format!("{:.0}", num(f, "slab").unwrap_or(slab_def)),
+                format!("{:.0}", num(f, "beam").unwrap_or(beam_def)),
             ]
         })
         .collect();
-    let fh: Vec<String> = ["Floor", "Floor to floor", "Ceiling", "Lintel bottom", "Slab (mm)"].iter().map(|x| (*x).to_string()).collect();
+    let fh: Vec<String> = ["Floor", "Slab (mm)", "Beam incl. slab (mm)"].iter().map(|x| (*x).to_string()).collect();
     let mut y = origin;
-    takeoff::table(s, &c, y, "FLOOR HEIGHTS", &fh, &frows)?;
+    takeoff::table(s, &c, y, "FLOORS", &fh, &frows)?;
     y.y -= th * 1.8 * (frows.len() as f64 + 3.0);
     let mut orows: Vec<Vec<String>> = Vec::new();
     for kind in ["door", "window", "ventilator"] {

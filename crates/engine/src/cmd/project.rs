@@ -1,6 +1,9 @@
-//! Project data kept in the drawing: details, floors, beam depths and levels (the kit's
-//! HCWPROJECT, HCWFLOORS, HCWBEAMS and HCWLEVELS). Stored in `Drawing::project` as JSON text and
-//! written to DXF/DWG with the drawing, so schedules and take-off read what is entered once.
+//! Project data kept in the drawing: details, structure defaults, floors, beam depths and levels
+//! (the kit's HCWPROJECT, HCWFLOORS, HCWBEAMS and HCWLEVELS). Stored in `Drawing::project` as JSON
+//! text and written to DXF/DWG with the drawing, so schedules and take-off read what is entered once.
+//!
+//! Slab thickness and beam depth (including slab) are project settings. Floor-to-floor, ceiling and
+//! lintel heights stay in storage for take-off/bridge with defaults; they are not edited in the UI.
 
 use aad_doc::Drawing;
 use serde_json::{Map, Value, json};
@@ -10,16 +13,16 @@ use crate::{Result, Session};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("project", "Project Details", run_project)
-            .menu(&["Architecture", "Project", "Project Details"])
+        CommandSpec::new("project", "Project Settings", run_project)
+            .menu(&["Architecture", "Project", "Project Settings"])
             .alias(&["hcwproject"])
-            .params("{details?: {title, owner, architect, engineer, pid, siteArea, plotUse, address, authority, date, summary}} → {details} (set merges the given fields)"),
-        CommandSpec::new("floors", "Floors and Heights", run_floors)
-            .menu(&["Architecture", "Project", "Floors and Heights"])
+            .params("{details?: {title, owner, …}, slabMm?, beamMm?, structure?: {slabMm, beamMm}} → {details, structure}"),
+        CommandSpec::new("floors", "Floors", run_floors)
+            .menu(&["Architecture", "Project", "Floors"])
             .alias(&["hcwfloors"])
-            .params("{count?: 1..60, floors?: [{name, floorToFloor, ceiling, lintel, slab, beam}] (metres; slab and beam in mm)} → {floors}"),
-        CommandSpec::new("beams", "Beam Depths", run_beams)
-            .menu(&["Architecture", "Project", "Beam Depths"])
+            .params("{count?: 1..60, floors?: [{name, floorToFloor?, ceiling?, lintel?, slab?, beam?}]} → {floors} (names in the dialog; heights default from project settings)"),
+        CommandSpec::new("beams", "Beam Depth List", run_beams)
+            .menu(&["Architecture", "Project", "Beam Depth List"])
             .alias(&["hcwbeams"])
             .params("{depths?: [mm, ...]} → {depths}"),
         CommandSpec::new("levels", "Building Levels", run_levels)
@@ -41,20 +44,56 @@ pub(crate) fn set(d: &mut Drawing, key: &str, v: &Value) {
 }
 
 const FLOOR_NAMES: [&str; 5] = ["Ground", "First", "Second", "Third", "Fourth"];
+const DETAIL_KEYS: [&str; 12] = [
+    "title", "owner", "architect", "engineer", "pid", "siteArea", "plotUse", "address", "authority", "date", "location", "summary",
+];
 
 fn floor_name(i: usize) -> String {
     FLOOR_NAMES.get(i).map_or_else(|| format!("Floor {i}"), |s| (*s).to_string())
 }
 
-fn default_floor(i: usize) -> Value {
-    json!({ "name": floor_name(i), "floorToFloor": 3.0, "ceiling": 2.85, "lintel": 2.1, "slab": 150, "beam": 450 })
+/// Default slab thickness (mm) and beam depth including slab (mm).
+pub(crate) fn structure_mm(d: &Drawing) -> (f64, f64) {
+    let s = get(d, "structure");
+    let slab = s.get("slabMm").and_then(Value::as_f64).filter(|n| n.is_finite() && *n > 0.0).unwrap_or(150.0);
+    let beam = s.get("beamMm").and_then(Value::as_f64).filter(|n| n.is_finite() && *n > 0.0).unwrap_or(450.0);
+    (slab, beam)
+}
+
+fn default_floor(i: usize, slab: f64, beam: f64) -> Value {
+    json!({ "name": floor_name(i), "floorToFloor": 3.0, "ceiling": 2.85, "lintel": 2.1, "slab": slab, "beam": beam })
 }
 
 /// The stored floors, or a single default floor.
 pub(crate) fn floors(d: &Drawing) -> Vec<Value> {
+    let (slab, beam) = structure_mm(d);
     match get(d, "floors") {
-        Value::Array(a) if !a.is_empty() => a,
-        _ => vec![default_floor(0)],
+        Value::Array(a) if !a.is_empty() => a
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut f)| {
+                if f.get("slab").and_then(Value::as_f64).is_none() {
+                    f["slab"] = json!(slab);
+                }
+                if f.get("beam").and_then(Value::as_f64).is_none() {
+                    f["beam"] = json!(beam);
+                }
+                if f.get("name").and_then(Value::as_str).is_none() {
+                    f["name"] = json!(floor_name(i));
+                }
+                if f.get("floorToFloor").and_then(Value::as_f64).is_none() {
+                    f["floorToFloor"] = json!(3.0);
+                }
+                if f.get("ceiling").and_then(Value::as_f64).is_none() {
+                    f["ceiling"] = json!(2.85);
+                }
+                if f.get("lintel").and_then(Value::as_f64).is_none() {
+                    f["lintel"] = json!(2.1);
+                }
+                f
+            })
+            .collect(),
+        _ => vec![default_floor(0, slab, beam)],
     }
 }
 
@@ -71,22 +110,57 @@ fn num(v: &Value, key: &str, default: f64) -> f64 {
     v.get(key).and_then(Value::as_f64).filter(|x| x.is_finite()).unwrap_or(default)
 }
 
+fn text_detail(v: &Value) -> Option<String> {
+    v.as_str()
+        .map(str::to_string)
+        .or_else(|| v.as_f64().map(|n| n.to_string()))
+}
+
+fn apply_structure(d: &mut Drawing, slab: f64, beam: f64) -> Result<()> {
+    if !(slab.is_finite() && slab > 0.0 && slab < 5000.0 && beam.is_finite() && beam > 0.0 && beam < 5000.0) {
+        return Err(bad("project", "slab and beam depths must be positive millimetres under 5000"));
+    }
+    set(d, "structure", &json!({ "slabMm": slab, "beamMm": beam }));
+    // Keep each floor's slab/beam in sync with the project defaults (take-off / bridge).
+    let mut fl = floors(d);
+    for f in &mut fl {
+        f["slab"] = json!(slab);
+        f["beam"] = json!(beam);
+    }
+    set(d, "floors", &Value::Array(fl));
+    Ok(())
+}
+
 pub(super) fn run_project(s: &mut Session, p: &Value) -> Result<Value> {
-    const KEYS: [&str; 12] = ["title", "owner", "architect", "engineer", "pid", "siteArea", "plotUse", "address", "authority", "date", "location", "summary"];
     let mut cur = match get(s.doc()?, "details") {
         Value::Object(o) => o,
         _ => Map::new(),
     };
+    // Flat Project Settings form fields, or a nested `details` object.
+    let mut incoming = Map::new();
+    let from_details = matches!(p.get("details"), Some(Value::Object(_)));
     if let Some(Value::Object(new)) = p.get("details") {
         for (k, v) in new {
-            if !KEYS.contains(&k.as_str()) {
-                return Err(bad("project", format!("unknown detail `{k}`")));
+            incoming.insert(k.clone(), v.clone());
+        }
+    }
+    for k in DETAIL_KEYS {
+        if let Some(v) = p.get(k) {
+            incoming.insert(k.to_string(), v.clone());
+        }
+    }
+    if !incoming.is_empty() {
+        for (k, v) in &incoming {
+            if k == "slabMm" || k == "beamMm" {
+                continue;
             }
-            let text = v
-                .as_str()
-                .map(str::to_string)
-                .or_else(|| v.as_f64().map(|n| n.to_string()))
-                .ok_or_else(|| bad("project", format!("`{k}` must be text")))?;
+            if !DETAIL_KEYS.contains(&k.as_str()) {
+                if from_details {
+                    return Err(bad("project", format!("unknown detail `{k}`")));
+                }
+                continue;
+            }
+            let text = text_detail(v).ok_or_else(|| bad("project", format!("`{k}` must be text")))?;
             if text.len() > 500 {
                 return Err(bad("project", format!("`{k}` is too long")));
             }
@@ -94,10 +168,36 @@ pub(super) fn run_project(s: &mut Session, p: &Value) -> Result<Value> {
         }
         set(s.doc_mut()?, "details", &Value::Object(cur.clone()));
     }
-    Ok(json!({ "details": cur }))
+
+    let mut structure_changed = false;
+    let (mut slab, mut beam) = structure_mm(s.doc()?);
+    if let Some(Value::Object(st)) = p.get("structure") {
+        if let Some(n) = st.get("slabMm").and_then(Value::as_f64) {
+            slab = n;
+            structure_changed = true;
+        }
+        if let Some(n) = st.get("beamMm").and_then(Value::as_f64) {
+            beam = n;
+            structure_changed = true;
+        }
+    }
+    if let Some(n) = p.get("slabMm").and_then(Value::as_f64).or_else(|| incoming.get("slabMm").and_then(Value::as_f64)) {
+        slab = n;
+        structure_changed = true;
+    }
+    if let Some(n) = p.get("beamMm").and_then(Value::as_f64).or_else(|| incoming.get("beamMm").and_then(Value::as_f64)) {
+        beam = n;
+        structure_changed = true;
+    }
+    if structure_changed {
+        apply_structure(s.doc_mut()?, slab, beam)?;
+    }
+    let (slab, beam) = structure_mm(s.doc()?);
+    Ok(json!({ "details": cur, "structure": { "slabMm": slab, "beamMm": beam } }))
 }
 
 pub(super) fn run_floors(s: &mut Session, p: &Value) -> Result<Value> {
+    let (slab_def, beam_def) = structure_mm(s.doc()?);
     let mut fl = floors(s.doc()?);
     let mut changed = false;
     if let Some(Value::Array(given)) = p.get("floors") {
@@ -108,14 +208,14 @@ pub(super) fn run_floors(s: &mut Session, p: &Value) -> Result<Value> {
             .iter()
             .enumerate()
             .map(|(i, f)| {
-                let def = default_floor(i);
+                let prev = fl.get(i).cloned().unwrap_or_else(|| default_floor(i, slab_def, beam_def));
                 json!({
                     "name": f.get("name").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| floor_name(i)),
-                    "floorToFloor": num(f, "floorToFloor", num(&def, "floorToFloor", 3.0)),
-                    "ceiling": num(f, "ceiling", num(&def, "ceiling", 2.85)),
-                    "lintel": num(f, "lintel", num(&def, "lintel", 2.1)),
-                    "slab": num(f, "slab", 150.0),
-                    "beam": num(f, "beam", 450.0),
+                    "floorToFloor": num(f, "floorToFloor", num(&prev, "floorToFloor", 3.0)),
+                    "ceiling": num(f, "ceiling", num(&prev, "ceiling", 2.85)),
+                    "lintel": num(f, "lintel", num(&prev, "lintel", 2.1)),
+                    "slab": num(f, "slab", num(&prev, "slab", slab_def)),
+                    "beam": num(f, "beam", num(&prev, "beam", beam_def)),
                 })
             })
             .collect();
@@ -143,7 +243,7 @@ pub(super) fn run_floors(s: &mut Session, p: &Value) -> Result<Value> {
         let n = n as usize;
         fl.truncate(n);
         while fl.len() < n {
-            let mut next = fl.last().cloned().unwrap_or_else(|| default_floor(0));
+            let mut next = fl.last().cloned().unwrap_or_else(|| default_floor(0, slab_def, beam_def));
             next["name"] = json!(floor_name(fl.len()));
             fl.push(next);
         }

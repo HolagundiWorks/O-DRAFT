@@ -193,7 +193,7 @@ fn list_options(app: &CadApp, st: &aad_engine::DocState, band: i32, px: f64) -> 
     // `px` is already world units per screen pixel.
     let (text, fill) = aad_render::lod_for_view(px.max(1e-300), 1.0);
     aad_render::Options {
-        tolerance: 2f64.powi(band) * 0.5,
+        tolerance: aad_render::tessellation_tolerance(band),
         min_dash: px * 2.0,
         text,
         fill,
@@ -232,7 +232,7 @@ fn ensure_list(app: &mut CadApp, ctx: &egui::Context, px: f64) {
         }
     }
     // Rebuild when the drawing changes or the zoom moves by more than 2x (tessellation band).
-    let band = px.max(1e-300).log2().floor() as i32;
+    let band = aad_render::tessellation_band(px);
     let key: ListKey = (st.uid, st.revision, band, app.session.settings.lwdisplay, std::sync::Arc::as_ptr(&st.doc) as usize);
     if app.canvas.list.is_some() && app.canvas.key == key {
         return;
@@ -884,7 +884,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             hs.extend(app.canvas.hover.filter(|h| !sel.contains(h)));
             let ents: Vec<_> = hs.iter().filter_map(|h| st.doc.model.get(*h)).map(|e| e.as_ref()).collect();
             if !ents.is_empty() {
-                let list = aad_render::build_entities(&st.doc, ents, &aad_render::Options { tolerance: 0.5 / scale, ..Default::default() });
+                let list = aad_render::build_entities(&st.doc, ents, &aad_render::Options { tolerance: 0.2 / scale, ..Default::default() });
                 let clipped = painter.with_clip_rect(r.intersect(rect));
                 if let Some(h) = app.canvas.hover
                     && !sel.contains(&h)
@@ -951,7 +951,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             let list = aad_render::build_entities(
                 &st.doc,
                 std::iter::once(&ent),
-                &aad_render::Options { tolerance: 0.5 / scale, min_dash: 2.0 / scale, ..Default::default() },
+                &aad_render::Options { tolerance: 0.2 / scale, min_dash: 2.0 / scale, ..Default::default() },
             );
             draw_list(&painter, &xf, &list, bg, false);
         }
@@ -966,7 +966,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             let mut list = aad_render::build_entities(
                 &st.doc,
                 ents.iter(),
-                &aad_render::Options { tolerance: 0.5 / scale, min_dash: 2.0 / scale, ..Default::default() },
+                &aad_render::Options { tolerance: 0.2 / scale, min_dash: 2.0 / scale, ..Default::default() },
             );
             for prim in &mut list.prims {
                 prim.color = aad_color::Rgb(0x00, 0xe6, 0xff);

@@ -99,14 +99,7 @@ impl Form {
 }
 
 const UNITS: &[&str] = &["", "mm", "cm", "m", "in", "ft"];
-const FLOOR_COLS: &[Col] = &[
-    Col { key: "name", label: "Name", numeric: false },
-    Col { key: "floorToFloor", label: "Floor to floor (m)", numeric: true },
-    Col { key: "ceiling", label: "Ceiling (m)", numeric: true },
-    Col { key: "lintel", label: "Lintel bottom (m)", numeric: true },
-    Col { key: "slab", label: "Slab (mm)", numeric: true },
-    Col { key: "beam", label: "Beam (mm)", numeric: true },
-];
+const FLOOR_COLS: &[Col] = &[Col { key: "name", label: "Name", numeric: false }];
 const OPENING_COLS: &[Col] = &[
     Col { key: "name", label: "Mark", numeric: false },
     Col { key: "kind", label: "Kind (door, window, ventilator)", numeric: false },
@@ -151,8 +144,8 @@ const TAKEOFF_COLUMNS: &[Field] = &[
 pub static FORMS: &[Form] = &[
     Form {
         id: "project",
-        title: "Project Details",
-        wrap: Some("details"),
+        title: "Project Settings",
+        wrap: None,
         fields: &[
             field("title", "Project title", Kind::Text),
             field("owner", "Owner / client", Kind::Text),
@@ -165,12 +158,14 @@ pub static FORMS: &[Form] = &[
             field("address", "Address", Kind::Text),
             field("authority", "Approving authority", Kind::Text),
             field("date", "Date", Kind::Text),
+            field("slabMm", "Default slab thickness (mm)", Kind::Number).def("150"),
+            field("beamMm", "Default beam depth including slab (mm)", Kind::Number).def("450"),
         ],
     },
-    Form { id: "floors", title: "Floors and Heights", wrap: None, fields: &[field("floors", "Floors", Kind::Table(FLOOR_COLS)).req()] },
+    Form { id: "floors", title: "Floors", wrap: None, fields: &[field("floors", "Floor names", Kind::Table(FLOOR_COLS)).req()] },
     Form {
         id: "beams",
-        title: "Beam Depths",
+        title: "Beam Depth List",
         wrap: None,
         fields: &[field("depths", "Beam depths in mm (for example 300, 375, 450)", Kind::Numbers).req()],
     },
@@ -304,9 +299,10 @@ pub static FORMS: &[Form] = &[
         title: "Door",
         wrap: None,
         fields: &[
+            field("block", "Block (from the Blocks panel; opening width comes from the block)", Kind::Text),
             field("name", "Schedule mark (for example D2)", Kind::Text),
             field("openingType", "Type", Kind::Choice(&["single", "double", "sliding", "folding"])).def("single"),
-            field("width", "Width (drawing units; used when no mark)", Kind::Number),
+            field("width", "Width override (drawing units; blank: block width)", Kind::Number),
             field("openingHeight", "Opening height (drawing units; blank: up to the lintel)", Kind::Number),
             field("sill", "Sill height (drawing units; blank: 0)", Kind::Number),
             field("lintelMode", "Lintel", Kind::Choice(&["standard", "custom"])).def("standard"),
@@ -323,9 +319,10 @@ pub static FORMS: &[Form] = &[
         title: "Window",
         wrap: None,
         fields: &[
+            field("block", "Block (from the Blocks panel; opening width comes from the block)", Kind::Text),
             field("name", "Schedule mark (for example W3)", Kind::Text),
             field("openingType", "Type", Kind::Choice(&["fixed", "casement", "sliding", "ventilator"])).def("casement"),
-            field("width", "Width (drawing units; used when no mark)", Kind::Number),
+            field("width", "Width override (drawing units; blank: block width)", Kind::Number),
             field("openingHeight", "Opening height (drawing units; blank: up to the lintel)", Kind::Number),
             field("sill", "Sill height (drawing units; blank: 0.9 m)", Kind::Number),
             field("lintelMode", "Lintel", Kind::Choice(&["standard", "custom"])).def("standard"),
@@ -367,12 +364,12 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[
             field("kind", "Kind", Kind::Choice(&["straight", "dogleg"])).def("straight"),
-            field("rise", "Floor-to-floor rise (metres)", Kind::Number).req(),
+            field("rise", "Floor-to-floor rise (drawing units)", Kind::Number).req(),
             field("width", "Flight width (drawing units)", Kind::Number).req(),
-            field("going", "Going (mm; blank: 250)", Kind::Number),
-            field("riserMax", "Largest riser (mm; blank: 175)", Kind::Number),
+            field("going", "Going (drawing units; blank: ~250 mm)", Kind::Number),
+            field("riserMax", "Largest riser (drawing units; blank: ~175 mm)", Kind::Number),
             field("landing", "Landing depth (dog-leg; drawing units)", Kind::Number),
-            field("waist", "Waist thickness (mm; blank: 150)", Kind::Number),
+            field("waist", "Waist thickness (drawing units; blank: ~150 mm)", Kind::Number),
             field("at", "Start of the stair", Kind::Point).req(),
         ],
     },
@@ -383,7 +380,7 @@ pub static FORMS: &[Form] = &[
         fields: &[
             field("width", "Clear shaft width (drawing units)", Kind::Number).req(),
             field("depth", "Clear shaft depth (drawing units)", Kind::Number).req(),
-            field("wall", "Wall thickness (blank: 230 mm)", Kind::Number),
+            field("wall", "Wall thickness (drawing units; blank: ~230 mm)", Kind::Number),
             field("at", "Lower-left corner of the clear shaft", Kind::Point).req(),
         ],
     },
@@ -392,8 +389,8 @@ pub static FORMS: &[Form] = &[
         title: "Handrail",
         wrap: None,
         fields: &[
-            field("post", "Post spacing (blank: 1.2 m)", Kind::Number),
-            field("size", "Post size (blank: 50 mm)", Kind::Number),
+            field("post", "Post spacing (drawing units; blank: ~1.2 m)", Kind::Number),
+            field("size", "Post size (drawing units; blank: ~50 mm)", Kind::Number),
             field("points", "Rail path: pick points, Enter to finish", Kind::Points).req(),
         ],
     },
@@ -680,6 +677,9 @@ pub fn prefill(s: &Session, form: &Form) -> Value {
                     o.insert(k, v);
                 }
             }
+            let (slab, beam) = crate::cmd::project_structure_mm(d);
+            o.insert("slabMm".into(), json!(slab));
+            o.insert("beamMm".into(), json!(beam));
         }
         "floors" => {
             o.insert("floors".into(), Value::Array(crate::cmd::project_floors(d)));

@@ -68,20 +68,31 @@ fn lintels_cover_each_opening_with_a_bearing_at_both_ends() {
 #[test]
 fn stairs_report_risers_goings_and_concrete_from_their_inputs() {
     let mut s = session();
-    let r = s.execute("stair.plan", &json!({"at": [0, 0], "rise": 3.0, "width": 1100})).unwrap();
+    let r = s.execute("stair.plan", &json!({"at": [0, 0], "rise": 3000.0, "width": 1100})).unwrap();
     assert_eq!((r["risers"].as_u64(), r["treads"].as_u64()), (Some(18), Some(17)), "3000 / 175 = 17.1, so 18 risers");
     assert!((r["riser"].as_f64().unwrap() - 166.7).abs() < 0.05);
+    assert_eq!(r["going"], 250.0);
     assert_eq!(r["run"], 4250.0);
     // Tread lines, the outline, the arrow and the notes were drawn on A-STAIR.
     assert!(count(&s, "A-STAIR") >= 16 + 1 + 1 + 2);
     let c = r["concrete"].as_f64().unwrap();
     assert!(c > 1.0 && c < 4.0, "{c}");
-    let d = s.execute("stair.plan", &json!({"at": [0, 5000], "rise": 3.0, "width": 1100, "kind": "dogleg"})).unwrap();
+    let d = s.execute("stair.plan", &json!({"at": [0, 5000], "rise": 3000.0, "width": 1100, "kind": "dogleg"})).unwrap();
     assert_eq!(d["flights"], 2.0);
     assert!(d["run"].as_f64().unwrap() < r["run"].as_f64().unwrap(), "two flights are shorter");
     assert!(s.execute("stair.plan", &json!({"at": [0, 0], "rise": 0, "width": 1100})).is_err());
-    assert!(s.execute("stair.plan", &json!({"at": [0, 0], "rise": 3, "width": 1100, "kind": "spiral"})).is_err());
+    assert!(s.execute("stair.plan", &json!({"at": [0, 0], "rise": 3000, "width": 1100, "kind": "spiral"})).is_err());
+
+    // Metre drawing: same real sizes, inputs in metres.
+    let mut m = Session::new();
+    m.execute("drawing.units", &json!({"units": "m", "mode": "metadata"})).unwrap();
+    let mr = m.execute("stair.plan", &json!({"at": [0, 0], "rise": 3.0, "width": 1.1})).unwrap();
+    assert_eq!((mr["risers"].as_u64(), mr["treads"].as_u64()), (Some(18), Some(17)));
+    assert!((mr["going"].as_f64().unwrap() - 0.25).abs() < 1e-9);
+    assert!((mr["run"].as_f64().unwrap() - 4.25).abs() < 1e-9);
+    assert!((mr["concrete"].as_f64().unwrap() - c).abs() < 0.02, "concrete m3 matches mm drawing");
 }
+
 
 #[test]
 fn lift_shafts_and_handrails() {

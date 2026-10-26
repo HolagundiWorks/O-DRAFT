@@ -54,6 +54,16 @@ struct FrameCache {
     pending: Option<PendingList>,
 }
 
+/// Identity of the last GPU present: document mesh, overlay, view uniform, and clear colour.
+#[cfg(windows)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct PaintStamp {
+    mesh_key: u64,
+    over_key: u64,
+    uniform: [u32; 12],
+    clear: (u8, u8, u8),
+}
+
 impl Default for FrameCache {
     fn default() -> Self {
         FrameCache {
@@ -269,6 +279,12 @@ pub struct Host {
     hwnd: isize,
     #[cfg(windows)]
     gpu: Option<gpu::Gpu>,
+    /// Last presented frame identity; when unchanged, `redraw` skips GPU work.
+    #[cfg(windows)]
+    paint: Option<PaintStamp>,
+    /// Set when the drawing must be presented (commands, resize, async list ready). Cleared after a paint attempt.
+    #[cfg(windows)]
+    paint_dirty: bool,
     /// `embed`, `move_child`, and `pump` present on the UI thread. A nested call from inside
     /// `Present` must not touch the surface again.
     #[cfg(windows)]
@@ -381,6 +397,10 @@ impl Host {
             #[cfg(windows)]
             gpu: None,
             #[cfg(windows)]
+            paint: None,
+            #[cfg(windows)]
+            paint_dirty: true,
+            #[cfg(windows)]
             in_call: false,
             #[cfg(windows)]
             pending_submit: Vec::new(),
@@ -455,6 +475,11 @@ impl Host {
         match imported {
             Ok(_) => {
                 self.fit_view();
+                #[cfg(windows)]
+                {
+                    self.paint = None;
+                    self.paint_dirty = true;
+                }
                 Ok(2)
             }
             Err(e) => {
@@ -784,8 +809,15 @@ impl Host {
 
     fn present_if_ready(&mut self) -> Result<(), String> {
         #[cfg(windows)]
-        if self.gpu.is_some() {
-            return self.redraw();
+        {
+            self.paint_dirty = true;
+            if self.gpu.is_some() {
+                let result = self.redraw();
+                if result.is_ok() {
+                    self.paint_dirty = false;
+                }
+                return result;
+            }
         }
         Ok(())
     }
@@ -1433,15 +1465,17 @@ impl Host {
         std::mem::take(&mut self.menu_request)
     }
 
-    /// JSON for a finished `plot.window` request. Empty when nothing is waiting.
-    /// `{"window":null}` means extents/display; `{"window":[x0,y0,x1,y1]}` is a rectangle.
+    /// JSON for a finished `plot.window` / `plotl` / `plotp` request. Empty when nothing is waiting.
+    /// `window` null means Extents; `layout` is the nameplate; `preview` asks for on-screen PDF.
     pub fn plot_request_json(&self) -> String {
         match &self.session.plot_request {
             None => String::new(),
-            Some(req) => match req.window {
-                Some(window) => serde_json::json!({ "window": window }).to_string(),
-                None => serde_json::json!({ "window": null }).to_string(),
-            },
+            Some(req) => serde_json::json!({
+                "window": req.window,
+                "layout": req.layout,
+                "preview": req.preview,
+            })
+            .to_string(),
         }
     }
 
@@ -1758,10 +1792,10 @@ impl Host {
         let state = self.session.state().map_err(|e| e.to_string())?;
         let view = state.view();
         let px = view.height / f64::from(self.height.max(1));
-        let band = px.max(1e-300).log2().floor() as i32;
+        let band = aad_render::tessellation_band(px);
         let (text, fill) = aad_render::lod_for_view(px.max(1e-300), 1.0);
         let opts = aad_render::Options {
-            tolerance: 2f64.powi(band) * 0.5,
+            tolerance: aad_render::tessellation_tolerance(band),
             min_dash: px * 2.0,
             text,
             fill,
@@ -1903,7 +1937,11 @@ impl Host {
         self.apply_size(width, height);
         self.fit_view();
         match gpu::Gpu::open(hwnd, self.width, self.height) {
-            Ok(gpu) => self.gpu = Some(gpu),
+            Ok(gpu) => {
+                self.gpu = Some(gpu);
+                self.paint = None;
+                self.paint_dirty = true;
+            }
             Err(e) => {
                 window::destroy(hwnd);
                 self.hwnd = 0;
@@ -1932,10 +1970,12 @@ impl Host {
         if let Some(gpu) = self.gpu.as_mut() {
             gpu.resize(self.width, self.height)?;
         }
+        self.paint = None;
+        self.paint_dirty = true;
         self.redraw()
     }
 
-    /// Apply a queued wheel event and present a frame.
+    /// Apply queued pointer events and present when the canvas is dirty.
     pub fn pump(&mut self) -> Result<(), String> {
         if self.in_call {
             return Ok(());
@@ -1947,11 +1987,17 @@ impl Host {
             if self.canvas_visible {
                 window::raise(self.hwnd);
             }
-            for ev in self.bridge.drain() {
+            let events = self.bridge.drain();
+            let had_events = !events.is_empty();
+            for ev in events {
                 self.pointer(ev)?;
             }
-            if self.gpu.is_some() {
+            // Idle pumps skip the GPU path: document/overlay only change on input, commands
+            // (`present_if_ready`), resize, or a background display-list band finishing.
+            let need = had_events || self.paint_dirty || self.frame.pending.is_some();
+            if self.gpu.is_some() && need {
                 self.redraw()?;
+                self.paint_dirty = false;
             }
             Ok(())
         })();
@@ -1986,11 +2032,23 @@ impl Host {
             self.show_ucs,
             f64::from(self.pixels_per_point),
         );
+        let over_key = gpu::Gpu::overlay_key(&overlay);
+        let stamp = PaintStamp {
+            mesh_key: key,
+            over_key,
+            uniform: std::array::from_fn(|i| uniform[i].to_bits()),
+            clear: (paper.0, paper.1, paper.2),
+        };
+        if self.paint.as_ref() == Some(&stamp) {
+            return Ok(());
+        }
         let built = self.frame.mesh.as_ref().ok_or("mesh missing")?;
         let gpu = self.gpu.as_mut().ok_or("no drawing surface")?;
         gpu.set_clear(paper);
         gpu.set_overlay(&overlay);
-        gpu.present(key, built, &uniform)
+        gpu.present(key, built, &uniform)?;
+        self.paint = Some(stamp);
+        Ok(())
     }
 
     /// Zoom to the extents and remember the view that gave, so a later change of the drawing area
@@ -2706,9 +2764,13 @@ mod tests {
     fn plot_window_request_json_is_exposed_to_the_shell() {
         let mut host = Host::create(false);
         assert!(host.plot_request_json().is_empty());
-        host.session.plot_request = Some(aad_engine::PlotRequest { window: None });
+        host.session.plot_request = Some(aad_engine::PlotRequest { window: None, layout: String::new(), preview: false });
         assert!(host.plot_request_json().contains("null"), "{}", host.plot_request_json());
-        host.session.plot_request = Some(aad_engine::PlotRequest { window: Some([1.0, 2.0, 3.0, 4.0]) });
+        host.session.plot_request = Some(aad_engine::PlotRequest {
+            window: Some([1.0, 2.0, 3.0, 4.0]),
+            layout: "Nameplate L".into(),
+            preview: true,
+        });
         let json = host.plot_request_json();
         assert!(json.contains('1') && json.contains('4'), "{json}");
         host.clear_plot_request();

@@ -106,6 +106,7 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
         if q.is_null() { None } else { Some(q) }
     });
     let layiso = !doc.header.str("AAD_LAYISO", "").is_empty();
+    let cecolor = Color::from_aci(i16::try_from(doc.header.i64("CECOLOR", 256)).unwrap_or(256));
     json!({
         "uid": state.uid,
         "revision": state.revision,
@@ -114,6 +115,8 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
         "focusLayer": focus_layer,
         "focusBlock": focus_block,
         "layiso": layiso,
+        "cecolor": cecolor.name(),
+        "celtype": doc.header.str("CELTYPE", "ByLayer"),
         "properties": properties(doc, &state.selection),
         "layers": layers,
         "layersTruncated": layers_truncated,

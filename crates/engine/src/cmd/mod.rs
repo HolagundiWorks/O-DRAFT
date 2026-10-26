@@ -371,3 +371,8 @@ pub(crate) fn project_value(d: &aad_doc::Drawing, key: &str) -> Value {
 pub(crate) fn project_floors(d: &aad_doc::Drawing) -> Vec<Value> {
     project::floors(d)
 }
+
+/// Default slab thickness and beam depth (mm) from project settings.
+pub(crate) fn project_structure_mm(d: &aad_doc::Drawing) -> (f64, f64) {
+    project::structure_mm(d)
+}

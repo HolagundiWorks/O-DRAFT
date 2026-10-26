@@ -96,7 +96,7 @@ pub fn mesh(
                     &state.doc,
                     std::iter::once(&ghost),
                     &aad_render::Options {
-                        tolerance: 0.5 / scale,
+                        tolerance: 0.2 / scale,
                         min_dash: 2.0 / scale,
                         text: false,
                         fill: false,
@@ -115,7 +115,7 @@ pub fn mesh(
                     &state.doc,
                     ents.iter(),
                     &aad_render::Options {
-                        tolerance: 0.5 / scale,
+                        tolerance: 0.2 / scale,
                         min_dash: 2.0 / scale,
                         text: true,
                         fill: true,
@@ -258,7 +258,7 @@ fn add_entity_outline(
         doc,
         ents.into_iter(),
         &aad_render::Options {
-            tolerance: 0.5 / scale,
+            tolerance: 0.2 / scale,
             min_dash: 2.0 / scale,
             text: true,
             fill: false,

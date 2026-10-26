@@ -48,6 +48,17 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{window?: [x0, y0, x1, y1] model-space corners} → {window} (checks a plot window; typed or from the menu it asks for the two corners, or Extents for the whole drawing, or Display for what is on screen, then the application asks where to save)")
             .noundo()
             .interactive(|_| Ok(Box::new(PlotWindowM::default()))),
+        // Print through the landscape / portrait nameplate after picking a model window.
+        CommandSpec::new("plotl", "Plot Landscape", run_plot_window)
+            .alias(&["plot.landscape"])
+            .params("{window?: [x0,y0,x1,y1]} → picks a window then plots through Nameplate L")
+            .noundo()
+            .interactive(|_| Ok(Box::new(PlotWindowM::nameplate(super::sheet::TITLE_PLATE_L, false)))),
+        CommandSpec::new("plotp", "Plot Portrait", run_plot_window)
+            .alias(&["plot.portrait"])
+            .params("{window?: [x0,y0,x1,y1]} → picks a window then plots through Nameplate P")
+            .noundo()
+            .interactive(|_| Ok(Box::new(PlotWindowM::nameplate(super::sheet::TITLE_PLATE_P, false)))),
         CommandSpec::new("plot", "Print...", |s, p| run_plot(s, p, "plot"))
             .menu(&["File", "Print..."])
             .key("Cmd+P")
@@ -815,17 +826,29 @@ fn run_plot_window(_s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "window": w }))
 }
 
-/// PLOT's first question: what part of the drawing. Two corners make the window; Extents plots the
-/// whole drawing and Display what is on screen. In a layout there is nothing to ask (the sheet is
-/// plotted as it is). The answer is left in [`Session::plot_request`] for the application.
+/// PLOT / PLOTL / PLOTP: what part of the drawing. Two corners make the window; Extents plots the
+/// whole drawing and Display what is on screen. The answer is left in [`Session::plot_request`].
 #[derive(Default)]
 struct PlotWindowM {
     first: Option<Vec2>,
+    /// When set, the shell fits the window into this nameplate layout before plotting.
+    layout: String,
+    preview: bool,
 }
 
-fn request(s: &mut Session, window: Option<[f64; 4]>) -> Result<Step> {
-    s.plot_request = Some(crate::PlotRequest { window });
-    Ok(Step::Done)
+impl PlotWindowM {
+    fn nameplate(layout: &str, preview: bool) -> Self {
+        PlotWindowM { first: None, layout: layout.to_string(), preview }
+    }
+
+    fn request(&self, s: &mut Session, window: Option<[f64; 4]>) -> Result<Step> {
+        s.plot_request = Some(crate::PlotRequest {
+            window,
+            layout: self.layout.clone(),
+            preview: self.preview,
+        });
+        Ok(Step::Done)
+    }
 }
 
 impl Interactive for PlotWindowM {
@@ -833,7 +856,18 @@ impl Interactive for PlotWindowM {
         "PLOT"
     }
     fn begin(&mut self, s: &mut Session) -> Result<Step> {
-        if matches!(s.space(), Space::Model) { Ok(Step::Continue) } else { request(s, None) }
+        if !self.layout.is_empty() {
+            // Ensure both nameplates exist and we start the pick from model space.
+            let _ = s.execute("sheet.designer", &json!({}));
+            if !matches!(s.space(), Space::Model) {
+                let _ = s.execute("layout.set", &json!({ "name": "Model" }));
+            }
+        }
+        if matches!(s.space(), Space::Model) {
+            Ok(Step::Continue)
+        } else {
+            self.request(s, None)
+        }
     }
     fn prompt(&self, _s: &Session) -> Prompt {
         match self.first {
@@ -844,13 +878,13 @@ impl Interactive for PlotWindowM {
     fn input(&mut self, s: &mut Session, i: Input) -> Result<Step> {
         match (self.first, i) {
             (_, Input::Cancel) => Ok(Step::Cancel),
-            (None, Input::Enter) => request(s, None),
-            (None, Input::Keyword(k)) if k.eq_ignore_ascii_case("Extents") => request(s, None),
+            (None, Input::Enter) => self.request(s, None),
+            (None, Input::Keyword(k)) if k.eq_ignore_ascii_case("Extents") => self.request(s, None),
             (None, Input::Keyword(k)) if k.eq_ignore_ascii_case("Display") => {
                 let v = s.state()?.view();
                 let aspect = s.viewport_px.0 / s.viewport_px.1.max(1.0);
                 let (h, w) = (v.height, v.height * aspect);
-                request(s, Some([v.center.x - w / 2.0, v.center.y - h / 2.0, v.center.x + w / 2.0, v.center.y + h / 2.0]))
+                self.request(s, Some([v.center.x - w / 2.0, v.center.y - h / 2.0, v.center.x + w / 2.0, v.center.y + h / 2.0]))
             }
             (None, Input::Point(a)) => {
                 self.first = Some(a);
@@ -859,7 +893,7 @@ impl Interactive for PlotWindowM {
             (Some(a), Input::Point(c)) => {
                 let w = parse_window("plot", &json!({ "window": [a.x, a.y, c.x, c.y] }))
                     .map_err(|_| crate::EngineError::Other("The two corners must differ in both x and y.".into()))?;
-                request(s, w)
+                self.request(s, w)
             }
             _ => Err(crate::EngineError::Other("Pick the corners of the plot window, or choose Extents or Display.".into())),
         }
