@@ -47,6 +47,17 @@ pub use aad_render as render;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use prompt::{Accept, Input, Interactive, Prompt, Step};
 
+/// Drawn cursor in the drawing area (AutoCAD: crosshairs, pickbox, or both).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorShape {
+    /// Specify a point — full crosshairs, no pickbox.
+    Crosshairs,
+    /// Select objects — small square pickbox only (`PICKBOX`).
+    Pickbox,
+    /// No command active — crosshairs with pickbox at the intersection.
+    CrosshairsAndPickbox,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
     #[error("unknown command `{0}`")]
@@ -966,13 +977,23 @@ impl Session {
         self.running.as_ref().map(|r| r.machine.prompt(self))
     }
 
-    /// Whether the cursor picks objects right now, so the UI shows the pick box (PICKBOX) at the
-    /// crosshair: at prompts that select objects, and with no command running when PICKFIRST is on
-    /// (noun-verb selection).
+    /// Whether a click picks objects right now (hit-test / hover): select prompts, and idle when
+    /// PICKFIRST is on (noun-verb selection). Distinct from [`Self::cursor_shape`], which follows
+    /// AutoCAD's drawn cursor (idle always shows the pickbox even when PICKFIRST is off).
     pub fn picking_objects(&self) -> bool {
         match self.current_prompt() {
             Some(p) => p.picks_objects(),
             None => self.settings.pickfirst,
+        }
+    }
+
+    /// AutoCAD drawing-area cursor: idle = crosshairs+pickbox; point prompt = crosshairs only;
+    /// select-objects prompt = pickbox only.
+    pub fn cursor_shape(&self) -> CursorShape {
+        match self.current_prompt() {
+            Some(p) if p.picks_objects() => CursorShape::Pickbox,
+            Some(_) => CursorShape::Crosshairs,
+            None => CursorShape::CrosshairsAndPickbox,
         }
     }
 

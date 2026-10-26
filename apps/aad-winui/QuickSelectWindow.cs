@@ -41,7 +41,8 @@ internal sealed class QuickSelectWindow : Window
         Density.Name(_operator, "Operator");
         Density.Name(_value, "Value");
         Density.Name(_mode, "How to apply");
-        var ok = new Button { Content = "OK", HorizontalAlignment = HorizontalAlignment.Right, MinWidth = 72, MinHeight = Density.ControlHeight };
+        var ok = Density.DialogAction("OK", primary: true);
+        ok.HorizontalAlignment = HorizontalAlignment.Right;
         Density.Name(ok, "Apply quick select");
         ok.Click += (_, _) => ApplyFilter();
         stack.Children.Add(ok);

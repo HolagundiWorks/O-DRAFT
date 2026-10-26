@@ -1,8 +1,10 @@
 # WinUI design tokens
 
-Canonical token system for `apps/aad-winui`. Visual direction: **professional CAD density** with
-**Fluent** restraint — graphite/charcoal dark workspace, neutral off-white light workspace, and a
-restrained Windows blue accent.
+Canonical token system for `apps/aad-winui`. Visual direction: **compact CAD density**
+(AutoCAD 2007–inspired chrome sizing) with **Fluent** restraint — graphite/charcoal dark
+workspace, neutral off-white light workspace, and a restrained Windows blue accent.
+
+Full inventory, acceptance checklist, and exceptions: [COMPACT_CAD_UI.md](COMPACT_CAD_UI.md).
 
 ## Resource dictionaries
 
@@ -12,9 +14,9 @@ Merged from `App.xaml`:
 |---|---|
 | `Themes/ColorTokens.xaml` | Semantic brushes + title-bar colours (Light / Default / Dark) |
 | `Themes/TypographyTokens.xaml` | Font sizes; default faces Segoe UI / Consolas |
-| `Themes/SpacingTokens.xaml` | 4 px scale + common paddings |
-| `Themes/ControlTokens.xaml` | Control height, icon button, splitter, radii |
-| `Themes/ControlStyles.xaml` | Icon buttons, status/side-panel chrome, AI/CAD channel labels |
+| `Themes/SpacingTokens.xaml` | Compact space scale + paddings |
+| `Themes/ControlTokens.xaml` | Heights, icon size, radii, Fluent min overrides |
+| `Themes/ControlStyles.xaml` | Icon buttons, menus, status/side-panel chrome, inputs |
 
 Code-built UI uses `Density`. At launch, `ShellFonts.Resolve()` upgrades to **Segoe UI Variable** and
 **Cascadia Mono** when those font files are installed (WinUI has no CSS-style `FontFamily` fallbacks).
@@ -30,7 +32,7 @@ Code-built UI uses `Density`. At launch, `ShellFonts.Resolve()` upgrades to **Se
 | Drawing canvas | `#000000` | `#FFFFFF` (CAD preference; not shell chrome) |
 | Splash text | `#FFFFFF` on splash background (`SplashForegroundBrush`) | same |
 | Selection zebra | Accent at 25% alpha (`Density.SelectionFill`) | Accent at 25% alpha |
-| Side panel | `SidePanelWidth` / `Density.SidePanelWidth` = 280 DIP | same |
+| Side panel | `SidePanelWidth` / `Density.SidePanelWidth` = **240** DIP | same |
 | AI channel edge | Accent blue | Accent blue |
 | CAD channel edge | Success green | Success green |
 
@@ -42,24 +44,38 @@ readable over the canvas.
 | Channel | Cue |
 |---|---|
 | Fixed AI bar | Top accent border + `AiChannelLabelStyle` (“Ask”) |
-| Cursor CAD field | Left green edge + mono type (`CadChannelBrush`) |
+| Cursor CAD field | Transparent overlay + mono type (`CommandChrome`; no box) |
 
 Behaviour: [COMMAND_BAR.md](COMMAND_BAR.md).
+
+## Compact sizing (DIP)
+
+| Token | Value |
+|---|---|
+| `MenuBarHeight` / `MenuItemHeight` | 24 / 22 |
+| `FileTabHeight` / `StatusBarHeight` / `CommandLineHeight` | 24 / 22 / 22 |
+| `ControlHeight` / `DialogButtonHeight` | 24 / 26 |
+| `IconButtonSize` / `IconSize` | 26 / 16 |
+| `PropertyRowHeight` / `PanelHeaderHeight` | 24 / 24 |
+| `FontSizeCaption` / `FontSizeBody` / `FontSizeSection` | 11 / 12 / 13 |
 
 ## Spacing scale
 
 | Token | DIP |
 |---|---|
-| `SpaceXs` … `SpaceXxl` | 2, 4, 8, 12, 16, 24 |
+| `SpaceXs` … `SpaceXxl` | 2, 4, 6, 10, 12, 14, 16 |
+| Panel padding | 6×4 (`PaddingPanel`) |
+| Dialog padding | 10 (`PaddingDialog` / `Density.DialogMargin`) |
 
 ## Intentionally out of scope
 
 - CAD canvas entity colours (host renderer).
-- Drawn icon geometry.
+- Drawn icon geometry (paths stay the same; display size is 16).
 - A permanent large chat panel (would steal drawing space).
 
 ## Related
 
+- [COMPACT_CAD_UI.md](COMPACT_CAD_UI.md) — audit, checklist, exceptions
 - [WINDOW_SIZING.md](WINDOW_SIZING.md) — content-fit + persisted tool window sizes
 - [COMMAND_BAR.md](COMMAND_BAR.md)
 - [UI_UX.md](UI_UX.md)

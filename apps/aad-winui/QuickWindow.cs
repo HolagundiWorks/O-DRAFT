@@ -128,7 +128,8 @@ internal sealed class QuickWindow : Window
                 _stack.Children.Add(Row(label, box));
             }
         }
-        var close = new Button { Content = "Turn off", HorizontalAlignment = HorizontalAlignment.Right, MinHeight = Density.ControlHeight };
+        var close = Density.DialogAction("Turn off");
+        close.HorizontalAlignment = HorizontalAlignment.Right;
         Density.Name(close, "Turn off quick properties");
         close.Click += (_, _) => _run("qpmode", "{\"on\":false}");
         _stack.Children.Add(close);

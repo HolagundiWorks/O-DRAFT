@@ -86,7 +86,20 @@ internal static class ShellFit
                 }
                 if (options.Mode == ShellFitMode.Adaptive)
                 {
-                    root.SizeChanged += (_, _) => Queue(window, state);
+                    // Only re-fit when content grows/shrinks by a real amount — not our own Resize.
+                    root.SizeChanged += (_, args) =>
+                    {
+                        if (state.Applying || state.UserSized)
+                        {
+                            return;
+                        }
+                        if (Math.Abs(args.PreviousSize.Width - args.NewSize.Width) < 1
+                            && Math.Abs(args.PreviousSize.Height - args.NewSize.Height) < 1)
+                        {
+                            return;
+                        }
+                        Queue(window, state);
+                    };
                 }
             }
             if (root.IsLoaded)
@@ -246,7 +259,15 @@ internal static class ShellFit
         var pixelH = (int)Math.Ceiling(contentH * scale) + frameH;
         ClampToWorkArea(window, ref pixelW, ref pixelH);
         var current = window.AppWindow.Size;
-        if (Math.Abs(current.Width - pixelW) < 2 && Math.Abs(current.Height - pixelH) < 2)
+        if (!force
+            && Math.Abs(current.Width - pixelW) < 2
+            && Math.Abs(current.Height - pixelH) < 2)
+        {
+            return;
+        }
+        if (!force
+            && state.LastPixelW == pixelW
+            && state.LastPixelH == pixelH)
         {
             return;
         }
@@ -254,6 +275,8 @@ internal static class ShellFit
         try
         {
             window.AppWindow.Resize(new Windows.Graphics.SizeInt32(pixelW, pixelH));
+            state.LastPixelW = pixelW;
+            state.LastPixelH = pixelH;
         }
         finally
         {
@@ -308,7 +331,8 @@ internal static class ShellFit
         public double MinHeightDip { get; init; } = 120;
         public double MaxWidthDip { get; init; } = 900;
         public double MaxHeightDip { get; init; } = 720;
-        public double PadDip { get; init; } = 12;
+        /// <summary>Outer chrome around measured content. Keep small — dialogs already use <see cref="Density.DialogMargin"/>.</summary>
+        public double PadDip { get; init; } = 6;
         public string? PersistKey { get; init; }
     }
 
@@ -317,6 +341,8 @@ internal static class ShellFit
         public Options Options { get; set; } = new();
         public bool UserSized;
         public bool Applying;
+        public int LastPixelW;
+        public int LastPixelH;
         public DispatcherTimer? Timer;
         public DispatcherTimer? PersistTimer;
         public EventHandler<object>? Tick;

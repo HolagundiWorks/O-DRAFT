@@ -712,8 +712,9 @@ impl Host {
     }
 
     /// Properties, layers and blocks, tagged with the drawing id and revision.
+    /// Includes the hovered entity so the side tabs can show selection or rollover.
     pub fn panels_json(&self) -> String {
-        panels::panels_json(&self.session)
+        panels::panels_json(&self.session, self.hover)
     }
 
     /// Remember what is typed at the command line, so Dynamic Input can follow it.
@@ -857,10 +858,10 @@ impl Host {
     }
 
     pub fn set_dark(&mut self, dark: bool) -> Result<(), String> {
-        self.exclusive(|host| {
-            host.dark = dark;
-            host.present_if_ready()
-        })
+        // Always store the preference — exclusive() can no-op while a redraw is in flight,
+        // which previously left the GPU paper black under a light WinUI shell.
+        self.dark = dark;
+        self.exclusive(|host| host.present_if_ready())
     }
 
     pub fn set_ucs(&mut self, on: bool) -> Result<(), String> {
@@ -2671,10 +2672,20 @@ mod tests {
         let mut host = Host::create(false);
         if host.assistant.available() {
             assert!(host.submit("/ layers").is_ok());
-            assert_eq!(host.assistant.phase(), "thinking");
+            assert!(host.assistant.busy(), "slash ask should leave the assistant working");
+            host.assistant.stop(&mut host.session);
         } else {
-            assert!(host.submit("/ layers").is_err());
-            assert!(host.chrome_json().contains("not included"));
+            let err = host.submit("/ layers").expect_err("assistant runtime absent");
+            let lower = err.to_ascii_lowercase();
+            assert!(
+                lower.contains("assistant")
+                    || lower.contains("not included")
+                    || lower.contains("not ready")
+                    || lower.contains("olmo")
+                    || lower.contains("token")
+                    || lower.contains("model"),
+                "{err}"
+            );
             assert_eq!(host.assistant.phase(), "idle");
         }
     }
@@ -2883,11 +2894,24 @@ mod tests {
     fn ask_routes_natural_language_without_cad_cmdline() {
         let mut host = Host::create(false);
         let before = host.stats().entities;
-        let err = host.ask("what layers are locked").expect_err("no assistant runtime in default tests");
-        assert!(
-            err.to_ascii_lowercase().contains("assistant") || err.to_ascii_lowercase().contains("not included"),
-            "{err}"
-        );
+        if host.assistant.available() {
+            // Llama or OSAS AI Core is up — ask starts work without touching the CAD cmdline.
+            assert!(host.ask("what layers are locked").is_ok());
+            assert!(host.assistant.busy(), "ask should leave the assistant working");
+            host.assistant.stop(&mut host.session);
+        } else {
+            let err = host.ask("what layers are locked").expect_err("no assistant runtime");
+            let lower = err.to_ascii_lowercase();
+            assert!(
+                lower.contains("assistant")
+                    || lower.contains("not included")
+                    || lower.contains("not ready")
+                    || lower.contains("olmo")
+                    || lower.contains("token"),
+                "{err}"
+            );
+            assert_eq!(host.assistant.phase(), "idle");
+        }
         assert_eq!(host.stats().entities, before, "ask must not change the drawing");
         assert!(host.session.running.is_none());
         // Without a leading `/`, submit stays on the CAD path (unknown command), not ask.

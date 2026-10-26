@@ -1,6 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using WinRT.Interop;
 
 namespace Aad.WinUi;
@@ -14,22 +15,61 @@ internal static class SavePrompt
     {
         var done = new TaskCompletionSource<int>();
         var theme = owner.Content is FrameworkElement shell ? shell.RequestedTheme : ElementTheme.Default;
-        var stack = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin };
-        var prompt = new TextBlock { Text = "Save changes to " + title + "?", TextWrapping = TextWrapping.Wrap };
+
+        var prompt = new TextBlock
+        {
+            Text = "Save changes to " + title + "?",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = Density.FontBody,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, Density.SpaceMd),
+        };
         Density.Name(prompt, "Save changes to " + title + "?");
-        stack.Children.Add(prompt);
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm, HorizontalAlignment = HorizontalAlignment.Right };
-        var save = Action("Save");
-        var discard = Action("Don't save");
-        var cancel = Action("Cancel");
-        row.Children.Add(save);
-        row.Children.Add(discard);
-        row.Children.Add(cancel);
-        stack.Children.Add(row);
+
+        var save = Density.DialogAction("Save", primary: true);
+        var discard = Density.DialogAction("Don't save");
+        var cancel = Density.DialogAction("Cancel");
+        // Equal columns fill the row — no empty left gutter from right-only packing.
+        foreach (var button in new[] { save, discard, cancel })
+        {
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+            button.MinWidth = 0;
+            button.Margin = new Thickness(0);
+        }
+
+        var actions = new Grid { ColumnSpacing = Density.SpaceSm };
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(save, 0);
+        Grid.SetColumn(discard, 1);
+        Grid.SetColumn(cancel, 2);
+        actions.Children.Add(save);
+        actions.Children.Add(discard);
+        actions.Children.Add(cancel);
+
+        var stack = new StackPanel
+        {
+            Spacing = 0,
+            Margin = Density.DialogMargin,
+            VerticalAlignment = VerticalAlignment.Top,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Children = { prompt, actions },
+        };
+        Density.Apply(stack);
+
+        var root = new Grid
+        {
+            RequestedTheme = theme,
+            VerticalAlignment = VerticalAlignment.Top,
+            Background = Density.AppBackground(),
+            Children = { stack },
+        };
+
         var window = new Window
         {
             Title = "O-Draft",
-            Content = new Grid { RequestedTheme = theme, Children = { stack } },
+            Content = root,
         };
         var answered = false;
         void Finish(int answer)
@@ -56,6 +96,8 @@ internal static class SavePrompt
         if (window.AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsResizable = false;
+            presenter.IsMaximizable = false;
+            presenter.IsMinimizable = false;
             presenter.IsAlwaysOnTop = true;
         }
         window.Closed += (_, _) =>
@@ -72,16 +114,10 @@ internal static class SavePrompt
         };
         _window = window;
         ShellIcon.Apply(window, theme);
-        ShellFit.ToContent(window, minWidthDip: 320, minHeightDip: 120, maxWidthDip: 480, maxHeightDip: 220);
+        // Hug content — avoid a tall empty client area under the buttons.
+        ShellFit.ToContent(window, minWidthDip: 340, minHeightDip: 72, maxWidthDip: 440, maxHeightDip: 160);
         window.Activate();
         Native.ShowWindow(WindowNative.GetWindowHandle(window), 8);
         return done.Task;
-    }
-
-    private static Button Action(string label)
-    {
-        var button = new Button { Content = label, MinWidth = 72, MinHeight = Density.ControlHeight, FontSize = Density.Font };
-        Density.Name(button, label);
-        return button;
     }
 }

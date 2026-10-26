@@ -5,7 +5,7 @@
 
 use aad_color::Color;
 use aad_engine::Session;
-use aad_engine::doc::{EntityKind, Handle, Lineweight};
+use aad_engine::doc::{Entity, EntityKind, Handle, Lineweight};
 use serde_json::{Value, json};
 
 const MAX_LAYERS: usize = 400;
@@ -15,13 +15,30 @@ const MAX_BLOCK_REFS: usize = 200;
 const MAX_BLOCK_ATTRS: usize = 50;
 
 /// The Classic panels: current properties, the layer table and block definitions.
-pub fn panels_json(session: &Session) -> String {
+/// `hover` is the entity under the cursor (not in the selection); the shell shows it when nothing is selected.
+pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
     let Ok(state) = session.state() else {
-        return json!({ "uid": 0, "revision": 0, "selection": 0, "properties": [], "layers": [], "blocks": [] }).to_string();
+        return json!({
+            "uid": 0, "revision": 0, "selection": 0, "hover": null,
+            "focusLayer": "", "focusBlock": "",
+            "properties": [], "layers": [], "blocks": []
+        })
+        .to_string();
     };
     let doc = &state.doc;
     let selection = state.selection.len();
     let current = doc.header.str("CLAYER", "0");
+    // Prefer the selection for tab focus; fall back to the hovered entity.
+    let focus = focus_entity(doc, &state.selection, hover);
+    let focus_layer = focus.as_ref().map(|e| e.common.layer.clone()).unwrap_or_default();
+    let focus_block = focus
+        .as_ref()
+        .and_then(|e| match &e.kind {
+            EntityKind::Insert(i) => Some(i.block.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let hover_handle = hover.filter(|h| !state.selection.iter().any(|s| s == h));
     let mut layers_truncated = false;
     let mut layers = Vec::new();
     for layer in doc.layers.iter().take(MAX_LAYERS + 1) {
@@ -30,6 +47,7 @@ pub fn panels_json(session: &Session) -> String {
             break;
         }
         let rgb = layer.color.resolve(Color::Index(7), Color::Index(7));
+        let on_focus = !focus_layer.is_empty() && layer.name.eq_ignore_ascii_case(&focus_layer);
         layers.push(json!({
             "name": layer.name,
             "on": layer.on,
@@ -38,6 +56,9 @@ pub fn panels_json(session: &Session) -> String {
             "color": rgb.hex(),
             "colorName": layer.color.name(),
             "current": layer.name.eq_ignore_ascii_case(&current),
+            "focus": on_focus,
+            "selected": on_focus && selection > 0,
+            "hovered": on_focus && selection == 0 && hover_handle.is_some(),
         }));
     }
     let refs = reference_handles(doc);
@@ -62,27 +83,49 @@ pub fn panels_json(session: &Session) -> String {
                 })
                 .take(MAX_BLOCK_ATTRS)
                 .collect();
+            let on_focus = !focus_block.is_empty() && b.name.eq_ignore_ascii_case(&focus_block);
             json!({
                 "name": b.name,
+                "description": b.description,
                 "entities": b.entities.len(),
                 "references": count,
                 "handles": handles,
                 "attributes": attributes,
+                "focus": on_focus,
+                "selected": on_focus && selection > 0,
+                "hovered": on_focus && selection == 0 && hover_handle.is_some(),
             })
         })
         .collect();
+    let hover_quick = hover_handle.and_then(|h| {
+        let mut q = quick(doc, &[h]);
+        if let Value::Object(ref mut o) = q {
+            o.insert("source".into(), json!("hover"));
+            o.insert("readOnly".into(), json!(true));
+        }
+        if q.is_null() { None } else { Some(q) }
+    });
     json!({
         "uid": state.uid,
         "revision": state.revision,
         "selection": selection,
+        "hover": hover_handle.map(|h| h.hex()),
+        "focusLayer": focus_layer,
+        "focusBlock": focus_block,
         "properties": properties(doc, &state.selection),
         "layers": layers,
         "layersTruncated": layers_truncated,
         "blocks": blocks,
         "blocksTruncated": blocks_truncated,
         "quick": quick(doc, &state.selection),
+        "hoverQuick": hover_quick,
     })
     .to_string()
+}
+
+fn focus_entity<'a>(doc: &'a aad_engine::doc::Drawing, selection: &[Handle], hover: Option<Handle>) -> Option<&'a Entity> {
+    let handle = selection.first().copied().or(hover)?;
+    doc.entity(handle).map(|e| e.as_ref())
 }
 
 fn properties(doc: &aad_engine::doc::Drawing, selection: &[Handle]) -> Vec<Value> {

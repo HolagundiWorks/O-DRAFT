@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Aad.WinUi;
 
-/// <summary>Format &gt; Point Styleâ€¦ â€” PDMODE / PDSIZE via <c>ddptype</c>.</summary>
+/// <summary>Format &gt; Point Style… — PDMODE / PDSIZE via <c>ddptype</c>.</summary>
 internal static class PointStyleWindow
 {
     private static readonly long[] Modes = [0, 1, 2, 3, 4, 32, 33, 34, 35, 36, 64, 65, 66, 67, 68, 96, 97, 98, 99, 100];
@@ -192,9 +192,8 @@ internal static class PointStyleWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 

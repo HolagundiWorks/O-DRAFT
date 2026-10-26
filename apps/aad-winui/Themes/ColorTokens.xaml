@@ -41,7 +41,7 @@
             <SolidColorBrush x:Key="DestructiveBrush" Color="#C42B1C" />
             <Color x:Key="TitleBarBackgroundColor">#E4EAF2</Color>
             <Color x:Key="TitleBarForegroundColor">#1A2332</Color>
-            <Color x:Key="TitleBarInactiveForegroundColor">#64748B</Color>
+            <Color x:Key="TitleBarInactiveForegroundColor">#4A5668</Color>
             <Color x:Key="TitleBarHoverColor">#F1F5FA</Color>
             <Color x:Key="TitleBarPressedColor">#D8DEE8</Color>
         </ResourceDictionary>

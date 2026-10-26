@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Aad.WinUi;
 
-/// <summary>Dimension &gt; Dimension Style… — list, set current, create, and edit common fields via <c>dimstyle</c>.</summary>
+/// <summary>Dimension &gt; Dimension Style? ? list, set current, create, and edit common fields via <c>dimstyle</c>.</summary>
 internal static class DimStyleWindow
 {
     private static readonly (byte Value, string Label)[] LinearUnits =
@@ -37,7 +37,7 @@ internal static class DimStyleWindow
 
         var list = new ListBox { MinHeight = 160, MinWidth = 160 };
         Density.Name(list, "Dimension styles");
-        var currentLabel = Density.Secondary("Current style: —", TextWrapping.Wrap);
+        var currentLabel = Density.Secondary("Current style: ?", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current dimension style");
         var setCurrent = ActionButton("Set Current");
         var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = 140 };
@@ -263,12 +263,12 @@ internal static class DimStyleWindow
             if (!byte.TryParse((decimals.Text ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var dec)
                 && !byte.TryParse((decimals.Text ?? "").Trim(), NumberStyles.Integer, CultureInfo.CurrentCulture, out dec))
             {
-                Fail("Decimal places must be 0–8.");
+                Fail("Decimal places must be 0?8.");
                 return;
             }
             if (dec > 8)
             {
-                Fail("Decimal places must be 0–8.");
+                Fail("Decimal places must be 0?8.");
                 return;
             }
             var ts = (textStyle.Text ?? "").Trim();
@@ -393,12 +393,7 @@ internal static class DimStyleWindow
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static TextBox FieldBox(string name)
     {
@@ -419,9 +414,8 @@ internal static class DimStyleWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 

@@ -500,15 +500,11 @@ public sealed partial class LayerManagerWindow : Window
         var prompt = names.Count == 1
             ? "Delete layer " + names[0] + "? The command keeps the layer when it still has objects."
             : "Delete " + names.Count + " layers? Each deletion is its own undo step. A layer that still has objects stays.";
-        var dialog = new ContentDialog
-        {
-            Title = "Delete layers",
-            Content = new TextBlock { Text = prompt, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = "Delete",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = ViewRoot,
-        };
+        var dialog = CompactContentDialog(
+            "Delete layers",
+            new TextBlock { Text = prompt, TextWrapping = TextWrapping.Wrap, FontSize = Density.FontBody },
+            "Delete",
+            ContentDialogButton.Close);
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || !EnsureCurrent())
         {
             return;
@@ -725,13 +721,21 @@ public sealed partial class LayerManagerWindow : Window
                 Header.Children.Add(_nameSort);
                 continue;
             }
-            var title = new TextBlock { Text = Columns[i].Title, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+            var title = new TextBlock
+            {
+                Text = Columns[i].Title,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 4, 0),
+                FontSize = Density.FontBody,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            };
             Grid.SetColumn(title, i);
             Header.Children.Add(title);
         }
         // An explicit width stops the grid from shrinking its columns into the viewport.
         Header.Width = Columns.Sum(column => column.Width);
         Header.HorizontalAlignment = HorizontalAlignment.Left;
+        Density.Apply(Header);
     }
 
     private void BuildRows()
@@ -739,7 +743,7 @@ public sealed partial class LayerManagerWindow : Window
         Rows.Children.Clear();
         foreach (var row in _shown)
         {
-            var grid = new Grid { MinHeight = Density.ControlHeight, Width = Header.Width, HorizontalAlignment = HorizontalAlignment.Left, DataContext = row, Background = RowBrush(row.Name, Rows.Children.Count) };
+            var grid = new Grid { MinHeight = Density.PropertyRowHeight, Width = Header.Width, HorizontalAlignment = HorizontalAlignment.Left, DataContext = row, Background = RowBrush(row.Name, Rows.Children.Count) };
             AutomationProperties.SetName(grid, row.Name);
             grid.PointerPressed += OnRowPressed;
             grid.RightTapped += OnRowMenu;
@@ -1032,27 +1036,50 @@ public sealed partial class LayerManagerWindow : Window
         menu.ShowAt(anchor);
     }
 
-    private async Task<string?> Ask(string title, string label, string value, string primary)
+    private ContentDialog CompactContentDialog(string title, UIElement content, string primary, ContentDialogButton defaultButton)
     {
-        var box = new TextBox { Text = value, MinHeight = Density.ControlHeight };
-        AutomationProperties.SetName(box, label);
         var dialog = new ContentDialog
         {
             Title = title,
-            Content = new StackPanel
+            Content = content,
+            PrimaryButtonText = primary,
+            CloseButtonText = "Cancel",
+            DefaultButton = defaultButton,
+            XamlRoot = ViewRoot,
+            FontSize = Density.FontBody,
+            CornerRadius = new CornerRadius(Density.CornerControl),
+        };
+        dialog.Resources["ContentDialogTitleFontSize"] = Density.FontSection;
+        dialog.Resources["ContentDialogButtonHeight"] = Density.DialogButtonHeight;
+        dialog.Resources["ContentDialogPadding"] = Density.DialogMargin;
+        dialog.Resources["ContentDialogTopPadding"] = Density.SpaceLg;
+        dialog.Resources["ContentDialogBottomPadding"] = Density.SpaceLg;
+        dialog.Resources["ContentDialogLeftPadding"] = Density.SpaceLg;
+        dialog.Resources["ContentDialogRightPadding"] = Density.SpaceLg;
+        if (Density.TryFindStyle("CompactButtonStyle", out var btnStyle))
+        {
+            dialog.Resources["ContentDialogButtonStyle"] = btnStyle;
+            dialog.Resources["AccentButtonStyle"] = btnStyle;
+        }
+        return dialog;
+    }
+
+    private async Task<string?> Ask(string title, string label, string value, string primary)
+    {
+        var box = Density.DialogField(value, label);
+        var dialog = CompactContentDialog(
+            title,
+            new StackPanel
             {
                 Spacing = Density.SpaceMd,
                 Children =
                 {
-                    new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, FontSize = Density.FontBody },
                     box,
                 },
             },
-            PrimaryButtonText = primary,
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = ViewRoot,
-        };
+            primary,
+            ContentDialogButton.Primary);
         _acceptText = false;
         box.KeyDown += (_, args) =>
         {

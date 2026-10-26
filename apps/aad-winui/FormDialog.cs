@@ -47,8 +47,7 @@ internal static class FormDialog
                     break;
                 case "choice":
                 case "room":
-                    var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = Density.ControlHeight };
-                    Density.Name(combo, label);
+                    var combo = Density.DialogCombo(label);
                     if (kind == "room" && rooms.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var room in rooms.EnumerateArray())
@@ -84,7 +83,8 @@ internal static class FormDialog
                     {
                         rows.Children.Add(TableRow(columns, default));
                     }
-                    var add = new Button { Content = "Add row", HorizontalAlignment = HorizontalAlignment.Left, MinHeight = Density.ControlHeight };
+                    var add = Density.DialogAction("Add row");
+                    add.HorizontalAlignment = HorizontalAlignment.Left;
                     Density.Name(add, "Add row to " + label);
                     add.Click += (_, _) =>
                     {
@@ -98,8 +98,7 @@ internal static class FormDialog
                     stack.Children.Add(add);
                     break;
                 default:
-                    var input = new TextBox { Text = StringOf(field), MinHeight = Density.ControlHeight };
-                    Density.Name(input, label);
+                    var input = Density.DialogField(StringOf(field), label);
                     scalars[key] = input;
                     stack.Children.Add(input);
                     break;
@@ -109,25 +108,25 @@ internal static class FormDialog
         {
             stack.Children.Add(Density.Secondary("Points are picked on the drawing after OK.", TextWrapping.Wrap));
         }
-        var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = Density.FontBody };
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Assertive);
         Density.Name(error, "Form error");
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceMd };
-        var ok = new Button { Content = "OK", MinHeight = Density.ControlHeight };
-        var cancel = new Button { Content = "Cancel", MinHeight = Density.ControlHeight };
-        Density.Name(ok, "OK");
-        Density.Name(cancel, "Cancel");
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceMd, HorizontalAlignment = HorizontalAlignment.Right };
+        var ok = Density.DialogAction("OK", primary: true);
+        var cancel = Density.DialogAction("Cancel");
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
         stack.Children.Add(error);
         stack.Children.Add(buttons);
 
+        Density.Apply(stack);
         var page = new Grid { Padding = Density.DialogMargin, Children = { new ScrollViewer { Content = stack } } };
         var theme = ShellChrome.ThemeOf(owner);
         page.RequestedTheme = theme;
         var window = new Window { Title = title, Content = page };
         ShellIcon.Apply(window, theme);
-        ShellFit.Adaptive(window, minWidthDip: 400, minHeightDip: 320, maxWidthDip: 720, maxHeightDip: 800);
+        // UserResizable avoids Adaptive SizeChanged↔Resize flicker; scroll covers tall forms.
+        ShellFit.UserResizable(window, minWidthDip: 400, minHeightDip: 320, maxWidthDip: 720, maxHeightDip: 800);
         ok.Click += (_, _) =>
         {
             var preset = Collect(scalars, checks, choices, tables);
@@ -210,8 +209,9 @@ internal static class FormDialog
                 }
             }
             var label = column.GetProperty("label").GetString() ?? "Cell";
-            var box = new TextBox { Text = text, Width = 88, MinHeight = Density.ControlHeight, PlaceholderText = label };
-            Density.Name(box, label);
+            var box = Density.DialogField(text, label);
+            box.Width = 88;
+            box.PlaceholderText = label;
             line.Children.Add(box);
             i++;
         }

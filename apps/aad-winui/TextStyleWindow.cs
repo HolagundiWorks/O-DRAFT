@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 namespace Aad.WinUi;
 
-/// <summary>Format &gt; Text Style… — list, set current, create, and edit styles via <c>style</c> / <c>style.list</c>.</summary>
+/// <summary>Format &gt; Text Style? ? list, set current, create, and edit styles via <c>style</c> / <c>style.list</c>.</summary>
 internal static class TextStyleWindow
 {
     private static readonly string[] BaseFonts =
@@ -37,7 +37,7 @@ internal static class TextStyleWindow
 
         var list = new ListBox { MinHeight = 160, MinWidth = 160 };
         Density.Name(list, "Text styles");
-        var currentLabel = Density.Secondary("Current style: —", TextWrapping.Wrap);
+        var currentLabel = Density.Secondary("Current style: ?", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current text style");
         var setCurrent = ActionButton("Set Current");
         var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = 140 };
@@ -64,7 +64,7 @@ internal static class TextStyleWindow
         right.Children.Add(Labeled("Font", font));
         right.Children.Add(Labeled("Height", height));
         right.Children.Add(Labeled("Width factor", width));
-        right.Children.Add(Labeled("Oblique (°)", oblique));
+        right.Children.Add(Labeled("Oblique (?)", oblique));
 
         var columns = new Grid { ColumnSpacing = Density.SpaceXl };
         columns.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -84,14 +84,24 @@ internal static class TextStyleWindow
 
         void Fail(string message) => status.Text = message;
 
-        bool Run(string command, object body)
+        string? ExecuteJson(string command, object body)
         {
             if (Native.Execute(host, command, JsonSerializer.Serialize(body, JsonOpts)) != 0)
             {
                 Fail(Native.LastError(host));
+                return null;
+            }
+            var json = Native.ReadResult(host);
+            status.Text = "";
+            return json;
+        }
+
+        bool Run(string command, object body)
+        {
+            if (ExecuteJson(command, body) is null)
+            {
                 return false;
             }
-            status.Text = "";
             changed();
             return true;
         }
@@ -143,14 +153,15 @@ internal static class TextStyleWindow
 
         void Reload(string? prefer)
         {
-            if (!Run("style.list", new { }))
+            var listJson = ExecuteJson("style.list", new { });
+            if (listJson is null)
             {
                 return;
             }
             StyleList? payload;
             try
             {
-                payload = JsonSerializer.Deserialize<StyleList>(Native.ReadResult(host), JsonOpts);
+                payload = JsonSerializer.Deserialize<StyleList>(listJson, JsonOpts);
             }
             catch (JsonException)
             {
@@ -187,6 +198,7 @@ internal static class TextStyleWindow
                 loading = false;
             }
             ShowProps(SelectedStyle());
+            changed();
         }
 
         StyleRow? SelectedStyle()
@@ -216,7 +228,7 @@ internal static class TextStyleWindow
             }
             if (!TryNum(oblique.Text, out var o) || Math.Abs(o) > 85)
             {
-                Fail("Oblique angle must be between −85 and 85 degrees.");
+                Fail("Oblique angle must be between -85 and 85 degrees.");
                 return;
             }
             var fontName = (font.Text ?? "").Trim();
@@ -329,12 +341,7 @@ internal static class TextStyleWindow
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static TextBox FieldBox(string name)
     {
@@ -355,9 +362,8 @@ internal static class TextStyleWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 

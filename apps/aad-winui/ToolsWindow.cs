@@ -39,7 +39,7 @@ internal sealed class ToolsWindow : Window
         var fontHeading = Heading("Interface font");
         Density.Name(_font, "Interface font");
         _font.MinHeight = Density.ControlHeight;
-        var save = new Button { Content = "Apply", MinHeight = Density.ControlHeight };
+        var save = Density.DialogAction("Apply", primary: true);
         Density.Name(save, "Apply tool bar");
         save.Click += (_, _) =>
         {
@@ -81,9 +81,8 @@ internal sealed class ToolsWindow : Window
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 

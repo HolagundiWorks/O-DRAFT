@@ -122,6 +122,11 @@ const RATE_COLS: &[Col] = &[
     Col { key: "unit", label: "Unit", numeric: false },
     Col { key: "rate", label: "Rate", numeric: true },
 ];
+const NOTE_COLS: &[Col] = &[Col { key: "text", label: "Note", numeric: false }];
+const LEGEND_COLS: &[Col] = &[
+    Col { key: "name", label: "Layer or symbol", numeric: false },
+    Col { key: "description", label: "Description", numeric: false },
+];
 
 const TAKEOFF: &[Field] = &[
     field("units", "Units (blank: the drawing's)", Kind::Choice(UNITS)),
@@ -175,6 +180,27 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[field("openings", "Doors, windows and ventilators", Kind::Table(OPENING_COLS)).req()],
     },
+    Form {
+        id: "notes",
+        title: "Drawing Notes",
+        wrap: None,
+        fields: &[
+            field("name", "Set name", Kind::Text).def("General"),
+            field("items", "Numbered notes", Kind::Table(NOTE_COLS)).req(),
+        ],
+    },
+    Form {
+        id: "legend.edit",
+        title: "Legend Entries",
+        wrap: None,
+        fields: &[field("entries", "Layer and symbol descriptions", Kind::Table(LEGEND_COLS))],
+    },
+    Form {
+        id: "symbol.desc",
+        title: "Block Description",
+        wrap: None,
+        fields: &[field("name", "Block name", Kind::Text).req(), field("description", "Description", Kind::Text)],
+    },
     Form { id: "takeoff.rates", title: "Take-off Rates", wrap: None, fields: &[field("rates", "Rates", Kind::Table(RATE_COLS)).req()] },
     Form {
         id: "room",
@@ -208,6 +234,42 @@ pub static FORMS: &[Form] = &[
         fields: &[
             field("name", "Floor name", Kind::Text).req(),
             field("category", "Layout (beam, ceiling, furniture, electrical, plumbing; blank: the floor plan)", Kind::Text),
+        ],
+    },
+    Form {
+        id: "floor.declare",
+        title: "Declare Floor Region",
+        wrap: None,
+        fields: &[
+            field("name", "Floor name", Kind::Text).req(),
+            field("window", "Region: two corners", Kind::Points).req(),
+            field("crossing", "Crossing window (objects that touch the box)", Kind::Bool).def("true"),
+        ],
+    },
+    Form {
+        id: "floor.export",
+        title: "Export Floor Drawing",
+        wrap: None,
+        fields: &[field("name", "Floor name", Kind::Text).req(), field("path", "Output DXF/DWG path", Kind::Text)],
+    },
+    Form {
+        id: "floor.xref",
+        title: "Floor as Xref",
+        wrap: None,
+        fields: &[
+            field("name", "Floor name", Kind::Text).req(),
+            field("path", "Output DXF/DWG path (blank: beside the drawing)", Kind::Text),
+            field("overlay", "Overlay: only for this session, never saved", Kind::Bool),
+        ],
+    },
+    Form {
+        id: "takeoff.restore",
+        title: "Restore Take-off Tables",
+        wrap: None,
+        fields: &[
+            field("name", "One take-off (blank: every saved table)", Kind::Text),
+            field("path", "ShilpiDB .vdb (blank: use tables already in the drawing)", Kind::Text),
+            field("clear", "Clear MEASURE-TABLE first", Kind::Bool).def("true"),
         ],
     },
     Form {
@@ -621,6 +683,33 @@ pub fn prefill(s: &Session, form: &Form) -> Value {
             if let Some(a) = cur("schedule").get("openings").cloned() {
                 o.insert("openings".into(), a);
             }
+        }
+        "notes" => {
+            let notes = cur("notes");
+            let current = notes.get("current").and_then(Value::as_str).unwrap_or("General");
+            o.insert("name".into(), json!(current));
+            let items = notes
+                .get("sets")
+                .and_then(Value::as_object)
+                .and_then(|s| s.get(current))
+                .and_then(|set| set.get("items"))
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .map(|t| json!({ "text": t }))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            o.insert("items".into(), Value::Array(items));
+        }
+        "legend.edit" => {
+            let rows: Vec<Value> = cur("legend")
+                .get("entries")
+                .and_then(Value::as_object)
+                .map(|m| m.iter().map(|(k, v)| json!({ "name": k, "description": v.as_str().unwrap_or("") })).collect())
+                .unwrap_or_default();
+            o.insert("entries".into(), Value::Array(rows));
         }
         "takeoff.rates" => {
             let rows: Vec<Value> = cur("schedule")

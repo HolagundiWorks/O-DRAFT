@@ -7,51 +7,60 @@ namespace Aad.WinUi;
 
 /// <summary>
 /// Design tokens and helpers for code-built UI. XAML counterparts live in <c>Themes/*.xaml</c>.
-/// Values match a compact desktop developer-app density (IDE-like), not a tablet layout.
+/// Compact CAD density inspired by classic AutoCAD 2007 chrome (not tablet / Fluent default).
 /// </summary>
 internal static class Density
 {
-    // --- Spacing (aligned with Hcw.Ui SuiteStyles: 4 / 8 / 12 / 16 / 20 / 24) ---
+    // --- Spacing (panel 4–6 · dialog 10–12) ---
     public const double SpaceXs = 2;
     public const double SpaceSm = 4;
-    public const double SpaceMd = 8;
-    public const double SpaceLg = 12;
-    public const double SpaceXl = 16;
-    public const double SpaceSection = 20;
-    public const double SpaceXxl = 24;
+    public const double SpaceMd = 6;
+    public const double SpaceLg = 10;
+    public const double SpaceXl = 12;
+    public const double SpaceSection = 14;
+    public const double SpaceXxl = 16;
 
-    public static Thickness DialogMargin { get; } = new Thickness(SpaceLg, SpaceMd, SpaceLg, SpaceMd);
-    public static Thickness PanelPadding { get; } = new Thickness(SpaceLg, SpaceMd, SpaceLg, SpaceMd);
+    public static Thickness DialogMargin { get; } = new Thickness(10, 10, 10, 10);
+    public static Thickness PanelPadding { get; } = new Thickness(6, 4, 6, 4);
     public static Thickness PanelPaddingTight { get; } = new Thickness { Left = SpaceMd, Top = SpaceSm, Right = SpaceMd, Bottom = SpaceSm };
     public static Thickness CommandBarPadding { get; } = new Thickness { Left = SpaceLg, Top = SpaceSm, Right = SpaceLg, Bottom = SpaceSm };
-    public static Thickness StatusPadding { get; } = new Thickness { Left = SpaceLg, Top = 4, Right = SpaceLg, Bottom = SpaceSm };
+    public static Thickness StatusPadding { get; } = new Thickness { Left = 8, Top = 2, Right = 8, Bottom = 2 };
     public static Thickness LabelFieldGap { get; } = new Thickness { Left = 0, Top = 0, Right = 0, Bottom = SpaceXs };
-    public static Thickness ControlPadding { get; } = new Thickness(SpaceLg, 4, SpaceLg, 4);
-    public static Thickness PageMargin { get; } = new Thickness(12, 10, 12, 12);
+    public static Thickness ControlPadding { get; } = new Thickness(8, 2, 8, 2);
+    public static Thickness PageMargin { get; } = new Thickness(16, 12, 16, 16);
 
-    // --- Control sizing (suite canon: hit 36 · icons 0.6× · pane 260 · radius 2) ---
-    public const double MinTarget = 36;
-    public const double ControlHeight = 36;
-    public const double ControlHeightCompact = 36;
-    public const double IconButton = 24;
-    public const double IconSize = 13;
-    public const double IconSizeSm = 10;
-    public const double SplitterWidth = 8;
-    /// <summary>Default docked side-panel width (matches <c>SidePanelWidth</c> / SuitePaneWidth).</summary>
-    public const double SidePanelWidth = 260;
+    // --- Control sizing (menu 24 · toolbar btn 26 · icon 16 · input 24 · pane 240) ---
+    public const double MinTarget = 24;
+    public const double ControlHeight = 24;
+    public const double ControlHeightCompact = 22;
+    public const double IconButton = 26;
+    public const double IconSize = 16;
+    public const double IconSizeSm = 16;
+    public const double IconStroke = 1.5;
+    public const double MenuBarHeight = 24;
+    public const double MenuItemHeight = 22;
+    public const double FileTabHeight = 28;
+    public const double ArchBarHeight = 28;
+    public const double StatusBarHeight = 22;
+    public const double CommandLineHeight = 22;
+    public const double PropertyRowHeight = 24;
+    public const double DialogButtonHeight = 26;
+    public const double SplitterWidth = 4;
+    /// <summary>Default docked side-panel width (matches <c>SidePanelWidth</c>).</summary>
+    public const double SidePanelWidth = 240;
     public const double CornerChrome = 2;
     public const double CornerControl = 2;
 
-    // --- Typography (suite: body 13 · section 15 · title 22) ---
+    // --- Typography (body 12 · section 13 · page title 18) ---
     public static double Font = FontBody;
     public static bool OverrideFace;
     public static string Face = "Segoe UI Variable";
-    public const double FontCaption = 12;
-    public const double FontBody = 13;
-    public const double FontCommand = 13;
-    public const double FontSection = 15;
-    public const double FontHeading = 15;
-    public const double FontPageTitle = 22;
+    public const double FontCaption = 11;
+    public const double FontBody = 12;
+    public const double FontCommand = 12;
+    public const double FontSection = 13;
+    public const double FontHeading = 13;
+    public const double FontPageTitle = 18;
     /// <summary>Preferred UI face name; use <see cref="FontUiResolved"/> after <see cref="ShellFonts.Resolve"/>.</summary>
     public const string FontUi = "Segoe UI";
     /// <summary>Preferred mono face name; use <see cref="FontMonoResolved"/> after resolve.</summary>
@@ -73,9 +82,32 @@ internal static class Density
 
     public static void Apply(DependencyObject node)
     {
-        if (node is Control control)
+        if (node is Button button)
         {
-            control.FontSize = Font;
+            CompactDialogButton(button);
+        }
+        else if (node is TextBox box)
+        {
+            CompactDialogField(box);
+        }
+        else if (node is ComboBox combo)
+        {
+            CompactDialogCombo(combo);
+        }
+        else if (node is CheckBox check)
+        {
+            if (check.FontSize < FontSection)
+            {
+                check.FontSize = FontBody;
+            }
+        }
+        else if (node is Control control)
+        {
+            // Normalize Fluent defaults; keep section/page titles (≥ FontSection).
+            if (control.FontSize < FontSection)
+            {
+                control.FontSize = Font;
+            }
             if (OverrideFace)
             {
                 control.FontFamily = new FontFamily(Face);
@@ -83,7 +115,11 @@ internal static class Density
         }
         else if (node is TextBlock text)
         {
-            text.FontSize = Font;
+            // Normalize Fluent defaults (~14) to body; keep section/page titles (≥ FontSection).
+            if (text.FontSize < FontSection)
+            {
+                text.FontSize = Font;
+            }
             if (OverrideFace && text.FontFamily?.Source != FontMonoResolved)
             {
                 text.FontFamily = new FontFamily(Face);
@@ -98,6 +134,148 @@ internal static class Density
         {
             Apply(VisualTreeHelper.GetChild(node, i));
         }
+    }
+
+    /// <summary>Primary/secondary dialog action — compact CAD height, body type, consistent padding.</summary>
+    public static Button DialogAction(string label, bool primary = false)
+    {
+        var button = new Button
+        {
+            Content = label,
+            MinWidth = 72,
+            MinHeight = DialogButtonHeight,
+            Padding = new Thickness(10, 2, 10, 2),
+            FontSize = FontBody,
+            CornerRadius = new CornerRadius(CornerControl),
+            BorderThickness = new Thickness(0),
+        };
+        if (TryFindStyle(primary ? "PrimaryActionStyle" : "CompactButtonStyle", out var style))
+        {
+            button.Style = style;
+            // Style setters can leave MinWidth unset on BasedOn chains — keep compact floor.
+            button.MinWidth = 72;
+            button.MinHeight = DialogButtonHeight;
+            button.Padding = new Thickness(10, 2, 10, 2);
+            button.FontSize = FontBody;
+        }
+        Name(button, label);
+        return button;
+    }
+
+    public static TextBox DialogField(string text = "", string? name = null)
+    {
+        var box = new TextBox
+        {
+            Text = text,
+            MinHeight = ControlHeight,
+            Padding = ControlPadding,
+            FontSize = FontBody,
+            CornerRadius = new CornerRadius(CornerControl),
+        };
+        if (TryFindStyle("DialogFieldStyle", out var style))
+        {
+            box.Style = style;
+            box.MinHeight = ControlHeight;
+            box.Padding = ControlPadding;
+            box.FontSize = FontBody;
+        }
+        if (!string.IsNullOrEmpty(name))
+        {
+            Name(box, name);
+        }
+        return box;
+    }
+
+    public static ComboBox DialogCombo(string? name = null)
+    {
+        var combo = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MinHeight = ControlHeight,
+            Padding = ControlPadding,
+            FontSize = FontBody,
+            CornerRadius = new CornerRadius(CornerControl),
+        };
+        if (TryFindStyle("DialogComboStyle", out var style))
+        {
+            combo.Style = style;
+            combo.MinHeight = ControlHeight;
+            combo.Padding = ControlPadding;
+            combo.FontSize = FontBody;
+        }
+        if (!string.IsNullOrEmpty(name))
+        {
+            Name(combo, name);
+        }
+        return combo;
+    }
+
+    private static void CompactDialogButton(Button button)
+    {
+        if (button.FontSize < FontSection)
+        {
+            button.FontSize = FontBody;
+        }
+        // Leave explicit icon / tool-strip sizes alone; shrink Fluent defaults (~32).
+        if (double.IsNaN(button.MinHeight) || button.MinHeight > DialogButtonHeight + 2)
+        {
+            button.MinHeight = DialogButtonHeight;
+        }
+        if (button.Padding.Top > 4 || button.Padding.Bottom > 4)
+        {
+            button.Padding = new Thickness(10, 2, 10, 2);
+        }
+        if (OverrideFace)
+        {
+            button.FontFamily = new FontFamily(Face);
+        }
+    }
+
+    private static void CompactDialogField(TextBox box)
+    {
+        if (box.FontSize < FontSection)
+        {
+            box.FontSize = FontBody;
+        }
+        if (double.IsNaN(box.MinHeight) || box.MinHeight > ControlHeight + 2)
+        {
+            box.MinHeight = ControlHeight;
+        }
+        if (box.Padding.Top > 4 || box.Padding.Bottom > 4)
+        {
+            box.Padding = ControlPadding;
+        }
+        if (OverrideFace)
+        {
+            box.FontFamily = new FontFamily(Face);
+        }
+    }
+
+    private static void CompactDialogCombo(ComboBox combo)
+    {
+        if (combo.FontSize < FontSection)
+        {
+            combo.FontSize = FontBody;
+        }
+        if (double.IsNaN(combo.MinHeight) || combo.MinHeight > ControlHeight + 2)
+        {
+            combo.MinHeight = ControlHeight;
+        }
+        if (OverrideFace)
+        {
+            combo.FontFamily = new FontFamily(Face);
+        }
+    }
+
+    internal static bool TryFindStyle(string key, out Style style)
+    {
+        style = null!;
+        if (Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Style found)
+        {
+            style = found;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>The theme the shell is showing. Brushes are looked up in this theme's dictionary.</summary>

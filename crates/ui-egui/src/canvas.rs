@@ -1015,7 +1015,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         // Hide the OS cursor under the drawn crosshair, unless assistive tech needs it (#39).
         ui.ctx().set_cursor_icon(if app.ui.system_cursor { egui::CursorIcon::Crosshair } else { egui::CursorIcon::None });
         if let Some(hp) = hover_pos {
-            draw_crosshair(app, &painter, rect, hp, selecting);
+            draw_crosshair(app, &painter, rect, hp, app.session.cursor_shape());
         }
         if app.session.settings.dynmode
             && let Some(hp) = hover_pos
@@ -1096,18 +1096,26 @@ fn pickbox_half(pickbox: f64) -> Option<f32> {
     (half.is_finite() && half >= 1.0).then_some(half)
 }
 
-fn draw_crosshair(app: &CadApp, p: &egui::Painter, rect: Rect, at: Pos2, pickbox: bool) {
-    // AutoCAD-style thin hairlines: CURSORSIZE % of height; pick-box gap only while selecting.
+fn draw_crosshair(app: &CadApp, p: &egui::Painter, rect: Rect, at: Pos2, shape: aad_engine::CursorShape) {
+    // AutoCAD: idle = crosshairs+pickbox; point prompt = crosshairs; select prompt = pickbox only.
     let st = Stroke::new(0.5, Tokens::get().crosshair);
+    let pb = pickbox_half(app.session.settings.pickbox);
+    if shape == aad_engine::CursorShape::Pickbox {
+        if let Some(half) = pb {
+            p.rect_stroke(Rect::from_center_size(at, vec2(half * 2.0, half * 2.0)), 0.0, st, egui::StrokeKind::Middle);
+        }
+        return;
+    }
     let len = (rect.height() * app.session.settings.cursorsize as f32 / 100.0).max(12.0);
-    let pb = if pickbox { pickbox_half(app.session.settings.pickbox) } else { None };
-    let gap = pb.unwrap_or(0.0);
+    let gap = if shape == aad_engine::CursorShape::CrosshairsAndPickbox { pb.unwrap_or(0.0) } else { 0.0 };
     p.line_segment([pos2(at.x - len, at.y), pos2(at.x - gap, at.y)], st);
     p.line_segment([pos2(at.x + gap, at.y), pos2(at.x + len, at.y)], st);
     p.line_segment([pos2(at.x, at.y - len), pos2(at.x, at.y - gap)], st);
     p.line_segment([pos2(at.x, at.y + gap), pos2(at.x, at.y + len)], st);
-    if let Some(pb) = pb {
-        p.rect_stroke(Rect::from_center_size(at, vec2(pb * 2.0, pb * 2.0)), 0.0, st, egui::StrokeKind::Middle);
+    if shape == aad_engine::CursorShape::CrosshairsAndPickbox {
+        if let Some(half) = pb {
+            p.rect_stroke(Rect::from_center_size(at, vec2(half * 2.0, half * 2.0)), 0.0, st, egui::StrokeKind::Middle);
+        }
     }
 }
 

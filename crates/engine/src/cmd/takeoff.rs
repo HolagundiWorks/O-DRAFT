@@ -91,6 +91,14 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["mexport"])
             .params("{path? (file, or a folder), name? (one take-off; default every saved take-off, one CSV each)} → {files}")
             .noundo(),
+        CommandSpec::new("takeoff.restore", "Restore Take-off Tables", run_restore)
+            .menu(&["Architecture", "Take-off", "Restore Tables"])
+            .alias(&["mrestore"])
+            .params(
+                "{name?: one take-off (default every saved take-off), at?: [x,y], clear?: bool (default true; erase MEASURE-TABLE first), \
+                 path?: .vdb from takeoff.record, server?: \"host:port\", file?: true for <drawing>.takeoff.vdb} \
+                 → {restored: [name], tables, source: drawing|shilpidb}",
+            ),
     ]
 }
 
@@ -945,6 +953,111 @@ fn run_clear(s: &mut Session, _p: &Value) -> Result<Value> {
         d.remove_entity(*h);
     }
     Ok(json!({ "erased": hs.len() }))
+}
+
+/// Snapshot of every `takeoff:*` project entry (tables for ShilpiDB / restore).
+pub(crate) fn snapshot_tables(d: &Drawing) -> Value {
+    let mut m = serde_json::Map::new();
+    for k in d.project.keys() {
+        if let Some(name) = k.strip_prefix("takeoff:") {
+            let v = project::get(d, k);
+            if !v.is_null() {
+                m.insert(name.to_string(), v);
+            }
+        }
+    }
+    Value::Object(m)
+}
+
+/// Write `takeoff:*` project entries from a `takeoff_tables` object (name → saved result).
+pub(crate) fn apply_tables(d: &mut Drawing, tables: &Value) -> usize {
+    let Some(obj) = tables.as_object() else { return 0 };
+    let mut n = 0;
+    for (name, v) in obj {
+        if v.is_null() {
+            continue;
+        }
+        project::set(d, &format!("takeoff:{name}"), v);
+        n += 1;
+    }
+    n
+}
+
+/// Redraw MEASURE-TABLE from saved `takeoff:*` results. Returns the names redrawn.
+pub(crate) fn redraw_tables(s: &mut Session, p: &Value, names: &[String]) -> Result<Vec<String>> {
+    if bool_or(p, "clear", true) {
+        let hs: Vec<Handle> = {
+            let d = s.doc()?;
+            d.model.iter().filter(|e| on_layer(e, L_TABLE)).map(|e| e.handle).collect()
+        };
+        let d = s.doc_mut()?;
+        for h in &hs {
+            d.remove_entity(*h);
+        }
+    }
+    let c = match ctx(s, p, "takeoff.restore") {
+        Ok(c) => c,
+        Err(_) => table_ctx(s.doc()?.header.f64("TEXTSIZE", 0.2).max(0.05) * 2.5),
+    };
+    let mut at = table_origin(s, &c, p);
+    let mut restored = Vec::new();
+    for name in names {
+        let v = project::get(s.doc()?, &format!("takeoff:{name}"));
+        if v.is_null() {
+            continue;
+        }
+        let title = v.get("title").and_then(Value::as_str).unwrap_or(name).to_string();
+        let header: Vec<String> = v
+            .get("columns")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|c| c.as_str().map(str::to_string))
+            .collect();
+        let rows: Vec<Vec<String>> = v
+            .get("rows")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|r| r.as_array().map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_string)).collect()))
+            .collect();
+        if header.is_empty() || rows.is_empty() {
+            continue;
+        }
+        draw_table(s, &c, at, &title, &header, &rows)?;
+        // Stack the next table below this one (title + header + rows + gap).
+        let rh = c.th * 1.8;
+        at.y -= rh * (rows.len() as f64 + 2.5);
+        restored.push(name.clone());
+    }
+    Ok(restored)
+}
+
+fn run_restore(s: &mut Session, p: &Value) -> Result<Value> {
+    let from_db = p.get("path").is_some() || p.get("server").is_some() || p.get("file").and_then(Value::as_bool).unwrap_or(false);
+    let source = if from_db {
+        let tables = super::takeoffrec::load_tables(s, p)?;
+        let n = apply_tables(s.doc_mut()?, &tables);
+        if n == 0 {
+            return Err(bad(
+                "takeoff.restore",
+                "the ShilpiDB header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored",
+            ));
+        }
+        "shilpidb"
+    } else {
+        "drawing"
+    };
+    let names: Vec<String> = match str_param(p, "name") {
+        Some(n) => vec![n.to_string()],
+        None => s.doc()?.project.keys().filter_map(|k| k.strip_prefix("takeoff:").map(str::to_string)).collect(),
+    };
+    if names.is_empty() {
+        return Err(bad("takeoff.restore", "no saved take-offs; run takeoff.brick / takeoff.beams / … first"));
+    }
+    let restored = redraw_tables(s, p, &names)?;
+    s.echo(format!("Restored {} take-off table(s) from {source}.", restored.len()));
+    Ok(json!({ "restored": restored, "tables": restored.len(), "source": source }))
 }
 
 fn run_list(s: &mut Session, p: &Value) -> Result<Value> {

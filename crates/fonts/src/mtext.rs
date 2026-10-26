@@ -184,7 +184,8 @@ fn num(a: &str) -> Option<f64> {
     a.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// `\fArial|b1|i0|c0|p34;` → the font, trying a bold/italic face first.
+/// `\fArial|b1|i0|c0|p34;` → drawing face (Segoe UI) with bold/italic from the switch flags.
+/// The named family in `\f` is ignored so all drawing text stays on [`crate::DRAWING_FONT`].
 fn font_switch(a: &str) -> Option<TextFont> {
     let mut parts = a.split('|');
     let name = parts.next().unwrap_or("").trim();
@@ -199,20 +200,7 @@ fn font_switch(a: &str) -> Option<TextFont> {
             _ => {}
         }
     }
-    let style = match (bold, italic) {
-        (true, true) => Some("bold italic"),
-        (true, false) => Some("bold"),
-        (false, true) => Some("italic"),
-        _ => None,
-    };
-    if let Some(st) = style {
-        for cand in [format!("{name} {st}"), format!("{name}-{}", st.replace(' ', "")), format!("{name}{}", if bold { "bd" } else { "i" })] {
-            if let Some(f) = crate::ttf::find(&cand) {
-                return Some(TextFont::Outline(f));
-            }
-        }
-    }
-    Some(TextFont::resolve(name))
+    Some(TextFont::drawing_face(bold, italic))
 }
 
 /// Parse MTEXT contents into words, spaces and paragraph breaks with their formats.
@@ -677,10 +665,16 @@ mod tests {
     }
 
     #[test]
-    fn font_switch_falls_back_to_stroke() {
+    fn font_switch_uses_drawing_face_not_named_family() {
         let l = lay("{\\fNoSuchFontAnywhere|b1;AB}", 0.0);
-        assert!(!l.strokes.is_empty());
-        assert!(l.pieces.iter().all(|p| p.shaped.glyphs.is_empty()));
+        // Still produces geometry; with Segoe UI Bold installed, outline glyphs appear.
+        assert!(!l.pieces.is_empty() || !l.strokes.is_empty());
+        if crate::ttf::find("Segoe UI Bold").is_some() || crate::ttf::find("segoeuib").is_some() {
+            assert!(
+                l.pieces.iter().any(|p| !p.shaped.glyphs.is_empty()),
+                "bold MTEXT switch should use Segoe UI Bold outlines"
+            );
+        }
     }
 
     #[test]

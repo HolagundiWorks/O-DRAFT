@@ -35,6 +35,13 @@ layer `TAKEOFF-ANNOT` in the colour of its kind (walls red, openings green, colu
 rooms cyan, slabs orange) with its mark and measure beside it, and a title line (drawing, revision, date) and a
 legend with counts stand below the drawing. The drawing itself is not changed.
 
+### `takeoff.restore`
+`{name?, at?, clear?, path?, server?, file?}` (Architecture > Take-off > Restore Tables) redraws the
+`MEASURE-TABLE` summaries from the drawing's saved `takeoff:*` project entries. With `path` / `server` /
+`file: true` it first reloads those entries from the ShilpiDB header's `takeoff_tables` snapshot (written by
+`takeoff.record` whenever any take-off has been run), then redraws. Use this after `takeoff.clear` or to
+reproduce tables from a `.vdb` recorded earlier.
+
 ## Records
 
 Everything is millimetres, whatever the drawing units. The id is `(kind << 56) | (slot << 32) | n`.
@@ -110,5 +117,12 @@ Checked: `rows_carry_what_o_coreop_needs_to_use_them_without_guessing`; the fail
 - The header's `levels` rows also carry `ceiling_mm` and `lintel_bottom_mm` from the bridge file; O-CoreOp ignores them.
 - No menu entry yet in the WinUI shell other than the engine registry's (the commands appear under
   Architecture > Take-off from the registry).
-- Reading a recorded take-off back into the drawing, and selecting the measured item from its box.
+- Selecting a measured item from its ShilpiDB box (highlight / zoom to the recorded bounds) is not built yet.
 - A check for two drawings that measure the same floor (the double-count risk) is not built on either side.
+
+## Floor regions (single drawing)
+
+`floor.declare` / `floor.refresh` / `floor.regions` / `floor.export` / `floor.xref` assign a window (or
+selection) of objects to a named floor, store the assignment in the drawing (`floorRegions`,
+`entityFloors`), and can write each floor as a separate DXF then attach it as an xref. See the command
+help under Architecture > Floors.

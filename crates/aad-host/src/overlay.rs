@@ -178,13 +178,22 @@ pub fn mesh(
         if let Some(hit) = cursor.snap {
             add_snap_marker(&mut list, hit, scale);
         }
-        add_crosshair(&mut list, cursor.aim, scale, height, session.settings.cursorsize, session.picking_objects(), session.settings.pickbox);
+        add_crosshair(
+            &mut list,
+            cursor.aim,
+            scale,
+            height,
+            session.settings.cursorsize,
+            session.cursor_shape(),
+            session.settings.pickbox,
+            paper,
+        );
         if let Some(tip) = tip {
-            add_tip(&mut list, cursor.aim, scale, tip);
+            add_tip(&mut list, cursor.aim, scale, tip, paper);
         }
     }
     if show_ucs {
-        add_ucs(&mut list, view.center, width, height, scale, icon_px);
+        add_ucs(&mut list, view.center, width, height, scale, icon_px, paper);
     }
     let mut built = mesh::build_mesh(&list, origin, paper, false);
     if let Some((corners, rgba)) = window_fill {
@@ -437,7 +446,16 @@ fn grip_ghost(kind: &aad_engine::doc::EntityKind, hot: HotGrip, aim: Vec2) -> Op
     if hot.mode == grips::GripMode::Stretch { grips::stretch_grip(kind, hot.index, aim) } else { None }
 }
 
-fn add_ucs(list: &mut DisplayList, center: Vec2, width: u32, height: u32, scale: f64, icon_px: f64) {
+/// Overlay ink contrasted against the paper/canvas clear colour (egui Tokens crosshair).
+fn overlay_ink(paper: Rgb) -> Rgb {
+    if paper.0 < 128 && paper.1 < 128 && paper.2 < 128 {
+        Rgb(0xe8, 0xe8, 0xe8) // dark canvas → light crosshair
+    } else {
+        Rgb(0x1a, 0x23, 0x32) // light canvas → navy crosshair
+    }
+}
+
+fn add_ucs(list: &mut DisplayList, center: Vec2, width: u32, height: u32, scale: f64, icon_px: f64, paper: Rgb) {
     if !center.is_finite() || !scale.is_finite() || scale <= 0.0 || !icon_px.is_finite() || icon_px <= 0.0 {
         return;
     }
@@ -453,35 +471,47 @@ fn add_ucs(list: &mut DisplayList, center: Vec2, width: u32, height: u32, scale:
     if ![origin, axis_x, axis_y].into_iter().all(|point| point.is_finite()) {
         return;
     }
-    let ink = Rgb(255, 255, 255);
+    let ink = overlay_ink(paper);
     add_poly(list, &[origin, axis_x], ink, true);
     add_poly(list, &[origin, axis_y], ink, true);
     add_poly(list, &square(origin, px(4.5) / scale), ink, true);
-    add_label(list, to_world(px(36.0) + px(70.0), f64::from(height) - px(34.0)), scale, icon_px, "X");
-    add_label(list, to_world(px(36.0), f64::from(height) - px(34.0) - px(70.0)), scale, icon_px, "Y");
+    add_label(list, to_world(px(36.0) + px(70.0), f64::from(height) - px(34.0)), scale, icon_px, "X", paper);
+    add_label(list, to_world(px(36.0), f64::from(height) - px(34.0) - px(70.0)), scale, icon_px, "Y", paper);
 }
 
-fn add_label(list: &mut DisplayList, at: Vec2, scale: f64, icon_px: f64, text: &str) {
+fn add_label(list: &mut DisplayList, at: Vec2, scale: f64, icon_px: f64, text: &str, paper: Rgb) {
     if !at.is_finite() || !scale.is_finite() || scale <= 0.0 {
         return;
     }
-    let height = 13.0 * icon_px / scale;
-    let shaped = aad_fonts::shape_stroke(text, height, 1.0, 0.0);
-    for stroke in &shaped.strokes {
-        let pts: Vec<Vec2> = stroke.iter().map(|point| at + *point).collect();
-        add_poly(list, &pts, Rgb(255, 255, 255), true);
-    }
+    let height = 12.0 * icon_px / scale;
+    add_ui_text(list, at, height, text, overlay_ink(paper));
 }
 
-fn add_crosshair(list: &mut DisplayList, at: Vec2, scale: f64, height: u32, cursorsize: f64, picking: bool, pickbox: f64) {
+fn add_crosshair(
+    list: &mut DisplayList,
+    at: Vec2,
+    scale: f64,
+    height: u32,
+    cursorsize: f64,
+    shape: aad_engine::CursorShape,
+    pickbox: f64,
+    paper: Rgb,
+) {
     if !at.is_finite() || scale <= 0.0 {
         return;
     }
+    // PICKBOX is device pixels (AutoCAD); floor so the square stays visible on HiDPI.
+    let half = (pickbox.max(0.0) * 1.5).max(4.0) / scale;
+    let ink = overlay_ink(paper);
+    // Select-objects prompt: pickbox only (AutoCAD).
+    if shape == aad_engine::CursorShape::Pickbox {
+        add_poly(list, &square(at, half), ink, true);
+        return;
+    }
     let len = (f64::from(height) * cursorsize.max(1.0) / 100.0).max(12.0) / scale;
-    let gap = if picking { (pickbox.max(0.0) * 1.5) / scale } else { 0.0 };
+    let gap = if shape == aad_engine::CursorShape::CrosshairsAndPickbox { half } else { 0.0 };
     let x = |dx: f64| Vec2::new(at.x + dx, at.y);
     let y = |dy: f64| Vec2::new(at.x, at.y + dy);
-    let ink = Rgb(255, 255, 255);
     add_poly(list, &[x(-len), x(-gap)], ink, true);
     add_poly(list, &[x(gap), x(len)], ink, true);
     add_poly(list, &[y(-len), y(-gap)], ink, true);
@@ -501,14 +531,15 @@ fn square(c: Vec2, half: f64) -> [Vec2; 5] {
     ]
 }
 
-fn add_tip(list: &mut DisplayList, at: Vec2, scale: f64, text: &str) {
+fn add_tip(list: &mut DisplayList, at: Vec2, scale: f64, text: &str, paper: Rgb) {
     if !at.is_finite() || !scale.is_finite() || scale <= 0.0 || text.is_empty() {
         return;
     }
-    let height = 16.0 / scale;
-    let shaped = aad_fonts::shape_stroke(text, height, 1.0, 0.0);
-    let pad = 6.0 / scale;
-    let origin = Vec2::new(at.x + 22.0 / scale, at.y + 36.0 / scale);
+    // Match WinUI body text (~12 DIP), Segoe UI — not the legacy SHX stroke face.
+    let height = 12.0 / scale;
+    let shaped = aad_fonts::shape_line(&tip_font(), text, height, 1.0, 0.0);
+    let pad = 4.0 / scale;
+    let origin = Vec2::new(at.x + 18.0 / scale, at.y + 28.0 / scale);
     let x0 = origin.x - pad;
     let y0 = origin.y - pad;
     let x1 = origin.x + shaped.width + pad;
@@ -517,9 +548,28 @@ fn add_tip(list: &mut DisplayList, at: Vec2, scale: f64, text: &str) {
         return;
     }
     add_mask(list, &[Vec2::new(x0, y0), Vec2::new(x1, y0), Vec2::new(x1, y1), Vec2::new(x0, y1)]);
-    for stroke in &shaped.strokes {
-        let pts: Vec<Vec2> = stroke.iter().map(|point| origin + *point).collect();
-        add_poly(list, &pts, Rgb(255, 255, 255), true);
+    add_shaped(list, origin, &shaped, overlay_ink(paper));
+}
+
+/// Shell UI face for cursor tips / UCS labels (same family as WinUI `FontFamilyUi`).
+fn tip_font() -> aad_fonts::TextFont {
+    for name in ["Segoe UI", "Segoe UI Variable", "Arial"] {
+        if let aad_fonts::TextFont::Outline(face) = aad_fonts::TextFont::resolve(name) {
+            return aad_fonts::TextFont::Outline(face);
+        }
+    }
+    aad_fonts::TextFont::Stroke
+}
+
+fn add_ui_text(list: &mut DisplayList, at: Vec2, height: f64, text: &str, color: Rgb) {
+    let shaped = aad_fonts::shape_line(&tip_font(), text, height, 1.0, 0.0);
+    add_shaped(list, at, &shaped, color);
+}
+
+fn add_shaped(list: &mut DisplayList, at: Vec2, shaped: &aad_fonts::Shaped, color: Rgb) {
+    for stroke in shaped.outlines() {
+        let pts: Vec<Vec2> = stroke.iter().map(|point| at + *point).collect();
+        add_poly(list, &pts, color, true);
     }
 }
 

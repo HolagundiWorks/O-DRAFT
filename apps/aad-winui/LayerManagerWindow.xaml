@@ -10,8 +10,8 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Padding="{StaticResource PaddingMd}" Background="{ThemeResource SurfaceSecondaryBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" VerticalAlignment="Center">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Padding="{StaticResource PaddingPanel}" Background="{ThemeResource SurfaceSecondaryBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" VerticalAlignment="Center" MinHeight="{StaticResource PanelHeaderHeight}">
                 <Button x:Name="MergeButton" Click="OnMergeRequested" Style="{StaticResource IconButtonStyle}" AutomationProperties.Name="Merge into the side panel" ToolTipService.ToolTip="Merge into the side panel">
                     <local:DrawnIcon x:Name="MergeIcon" Kind="dock" />
                 </Button>
@@ -48,7 +48,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <StackPanel Margin="{StaticResource PaddingPanelTight}" Spacing="{StaticResource SpaceSm}">
-                <TextBlock x:Name="FiltersHeading" Text="Filters" Style="{StaticResource MutedCaptionStyle}" />
+                <TextBlock x:Name="FiltersHeading" Text="Filters" Style="{StaticResource SectionHeadingStyle}" />
                 <ListView x:Name="Filters" SelectionMode="Single" SelectionChanged="OnFilterChanged" AutomationProperties.Name="Layer filters">
                     <ListViewItem Content="All" />
                     <ListViewItem>
@@ -72,7 +72,7 @@
                 Visibility="Collapsed"
                 IsHitTestVisible="False" />
         </Grid>
-        <Grid Grid.Row="2" Padding="10,6" ColumnSpacing="{StaticResource SpaceLg}" Background="{ThemeResource SurfaceSecondaryBrush}">
+        <Grid Grid.Row="2" Padding="{StaticResource PaddingDialog}" ColumnSpacing="{StaticResource SpaceLg}" MinHeight="{StaticResource StatusBarHeight}" Background="{ThemeResource SurfaceSecondaryBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Aad.WinUi;
 
-/// <summary>Architecture &gt; Room Label Settings â€” <c>room.settings</c>.</summary>
+/// <summary>Architecture &gt; Room Label Settings — <c>room.settings</c>.</summary>
 internal static class RoomSettingsWindow
 {
     private static readonly (string Value, string Label)[] Units =
@@ -223,9 +223,8 @@ internal static class RoomSettingsWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 }

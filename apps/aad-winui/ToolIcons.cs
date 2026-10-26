@@ -8,11 +8,14 @@ using Windows.UI;
 namespace Aad.WinUi;
 
 /// <summary>
-/// The tool-strip marks, the same 24×24 line drawings as the other window: gray for geometry
-/// already there, blue for what the command adds, orange for a picked point.
+/// The tool-strip marks, 24×24 line drawings scaled to 20 px: gray for geometry
+/// already there, blue for what the command adds, orange for a picked point. Stroke 1.5.
 /// </summary>
 internal static partial class ToolIcons
 {
+    public const double DisplaySize = 16;
+    public const double Stroke = 1.5;
+
     public static UIElement For(string id, bool dark, bool onFill = false)
     {
         var canvas = new Canvas { Width = 24, Height = 24 };
@@ -106,11 +109,18 @@ internal static partial class ToolIcons
                     pen.Accent(Math.Min(3 + o, 21), 21, 21, Math.Max(21 - (18 - o), 3));
                 }
                 break;
+            case "agent":
+            case "ai":
+                // OSAS AI agent: three concentric circles (suite mark, 1.5 stroke).
+                pen.Circle(12, 12, 3.25, pen.BaseBrush);
+                pen.Circle(12, 12, 6.5, pen.BaseBrush);
+                pen.Circle(12, 12, 9.75, pen.BaseBrush);
+                break;
             default:
                 Mark(pen, id);
                 break;
         }
-        return new Viewbox { Width = 16, Height = 16, Child = canvas, Stretch = Stretch.Uniform };
+        return new Viewbox { Width = DisplaySize, Height = DisplaySize, Child = canvas, Stretch = Stretch.Uniform };
     }
 
     private static void Mark(Pen pen, string id)
@@ -280,6 +290,14 @@ internal static partial class ToolIcons
                 pen.Arc(11, 12, 7, 70, 290, pen.BaseBrush);
                 pen.Arc(14, 12, 5.5, 100, 260, pen.BaseBrush);
                 break;
+            case "shilpi":
+            case "db":
+                // Cylinder — ShilpiDB (distinct from the concentric AI agent mark).
+                pen.Box(5, 7, 14, 10, pen.BaseBrush);
+                pen.Circle(12, 7, 7, pen.BaseBrush);
+                pen.Circle(12, 17, 7, pen.BaseBrush);
+                pen.Accent(8, 12, 16, 12);
+                break;
             case "pdf":
                 pen.Box(4, 3, 12, 16, pen.BaseBrush);
                 pen.Stroke(false, pen.BaseBrush, (12, 3), (16, 7), (12, 7));
@@ -382,7 +400,7 @@ internal static partial class ToolIcons
                 Width = radius * 2,
                 Height = radius * 2,
                 Stroke = brush,
-                StrokeThickness = 1.5,
+                StrokeThickness = ToolIcons.Stroke,
             };
             Canvas.SetLeft(mark, x - radius);
             Canvas.SetTop(mark, y - radius);
@@ -406,7 +424,7 @@ internal static partial class ToolIcons
             {
                 Data = geometry,
                 Stroke = brush,
-                StrokeThickness = 1.5,
+                StrokeThickness = ToolIcons.Stroke,
                 StrokeLineJoin = PenLineJoin.Round,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round,
@@ -452,7 +470,7 @@ internal static partial class ToolIcons
             _canvas.Children.Add(block);
         }
 
-        private void Segment(double x1, double y1, double x2, double y2, Brush brush) => Line(x1, y1, x2, y2, brush, 1.5);
+        private void Segment(double x1, double y1, double x2, double y2, Brush brush) => Line(x1, y1, x2, y2, brush, ToolIcons.Stroke);
     }
 }
 
@@ -467,8 +485,8 @@ public sealed class DrawnIcon : ContentControl
 
     public DrawnIcon()
     {
-        Width = 16;
-        Height = 16;
+        Width = ToolIcons.DisplaySize;
+        Height = ToolIcons.DisplaySize;
         IsTabStop = false;
         IsHitTestVisible = false;
         HorizontalContentAlignment = HorizontalAlignment.Center;

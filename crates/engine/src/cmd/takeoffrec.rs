@@ -51,6 +51,69 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
+/// Load the `takeoff_tables` snapshot from a ShilpiDB file or server (for `takeoff.restore`).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn load_tables(s: &Session, p: &Value) -> Result<Value> {
+    let file_path = match (str_param(p, "path"), p.get("file").and_then(Value::as_bool).unwrap_or(false)) {
+        (Some(t), _) => Some(std::path::PathBuf::from(t)),
+        (None, true) => match s.state()?.path.as_ref() {
+            Some(drawing) => Some(std::path::Path::new(drawing).with_extension("takeoff.vdb")),
+            None => return Err(bad("takeoff.restore", "save the drawing first, or give `path` or `server`")),
+        },
+        (None, false) => None,
+    };
+    let mut sink: Box<dyn Sink> = match (&file_path, str_param(p, "server")) {
+        (Some(path), _) => Box::new(FileSink::open(path)?),
+        (None, server) => {
+            let addr = server.unwrap_or(SHARED_ADDR).to_string();
+            if server.is_none() {
+                ensure_shared_server()?;
+            }
+            let client = aad_vdb::VdbClient::connect_with_timeout(addr.as_str(), Some(std::time::Duration::from_secs(10)))
+                .map_err(|e| bad("takeoff.restore", format!("{addr}: {e}")))?;
+            Box::new(ServerSink { addr, client })
+        }
+    };
+    let kept = {
+        let v = project::get(s.doc()?, SLOT_KEY);
+        v.get("slot").and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+    };
+    let slot = if let Some(slot) = kept {
+        slot
+    } else {
+        let ids = sink.ids()?;
+        let mut found = None;
+        for id in ids {
+            if kind_of(id) != KIND_HEADER {
+                continue;
+            }
+            let Some(p) = sink.payload(id)? else { continue };
+            let Ok(v) = serde_json::from_slice::<Value>(&p) else { continue };
+            if v.get("format").and_then(Value::as_str) == Some(FORMAT) && v.get("state").and_then(Value::as_str) == Some("complete") {
+                found = Some(slot_of(id));
+                break;
+            }
+        }
+        found.ok_or_else(|| bad("takeoff.restore", "no complete take-off header found in the database"))?
+    };
+    let payload = sink.payload(header_id(slot))?.ok_or_else(|| bad("takeoff.restore", "header record is missing"))?;
+    let header: Value = serde_json::from_slice(&payload).map_err(|e| bad("takeoff.restore", e.to_string()))?;
+    if header.get("state").and_then(Value::as_str) != Some("complete") {
+        return Err(bad("takeoff.restore", "the drawing is still recording; wait for a complete takeoff.record"));
+    }
+    header.get("takeoff_tables").cloned().filter(|t| t.as_object().is_some_and(|o| !o.is_empty())).ok_or_else(|| {
+        bad(
+            "takeoff.restore",
+            "the ShilpiDB header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored",
+        )
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn load_tables(_s: &Session, _p: &Value) -> Result<Value> {
+    Err(bad("takeoff.restore", "ShilpiDB files cannot be read on the web"))
+}
+
 // ---------------- ids ----------------
 
 pub(crate) fn fnv32(bytes: &[u8]) -> u32 {
@@ -140,7 +203,8 @@ pub(crate) fn chunk_pdf(bytes: &[u8], slot: u32, pages: u32, generated: &str) ->
 }
 
 /// The header payload: the bridge file's `source`, `project`, `levels`, `beam_depths_mm` and `opening_schedule`, the
-/// state, the AORMS project the drawing belongs to and, once stored, the annotated PDF.
+/// state, the AORMS project the drawing belongs to, optional `takeoff_tables` (MEASURE table snapshots for
+/// `takeoff.restore`), and once stored, the annotated PDF.
 pub(crate) fn header(root: &Map<String, Value>, project_office_id: Option<&str>, complete: bool, pdf: Option<&Value>) -> Value {
     let mut source = Map::new();
     source.insert("app".into(), json!("O-Draft"));
@@ -163,7 +227,7 @@ pub(crate) fn header(root: &Map<String, Value>, project_office_id: Option<&str>,
     h.insert("units".into(), json!("mm"));
     h.insert("state".into(), json!(if complete { "complete" } else { "recording" }));
     h.insert("source".into(), Value::Object(source));
-    for key in ["project", "levels", "beam_depths_mm", "opening_schedule"] {
+    for key in ["project", "levels", "beam_depths_mm", "opening_schedule", "takeoff_tables"] {
         if let Some(v) = root.get(key) {
             h.insert(key.into(), v.clone());
         }
@@ -550,7 +614,14 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let c = bridge::collect(s, p)?;
+        let mut c = bridge::collect(s, p)?;
+        // Stash MEASURE table snapshots so takeoff.restore can redraw them from ShilpiDB.
+        let tables = super::takeoff::snapshot_tables(s.doc()?);
+        if let Some(obj) = tables.as_object()
+            && !obj.is_empty()
+        {
+            c.root.insert("takeoff_tables".into(), tables);
+        }
         let mut warnings = c.warnings.clone();
         let kept = {
             let v = project::get(s.doc()?, SLOT_KEY);

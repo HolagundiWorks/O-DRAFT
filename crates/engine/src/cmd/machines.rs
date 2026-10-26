@@ -230,30 +230,37 @@ mod tests {
         assert!(s.doc().unwrap().layer("0").is_some_and(|l| l.on));
     }
 
-    /// The cursor shows the pick box exactly where a click picks objects (#34): "Select objects",
-    /// single-object prompts, and the idle crosshair when PICKFIRST is on.
+    /// Hit-test pickbox vs drawn cursor shape (#34 / AutoCAD cursors).
     #[test]
     fn pick_box_at_object_selection_prompts() {
+        use crate::CursorShape;
         let mut s = Session::new();
         s.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
         assert!(s.picking_objects(), "idle with PICKFIRST on");
+        assert_eq!(s.cursor_shape(), CursorShape::CrosshairsAndPickbox, "idle always draws combo");
         s.settings.pickfirst = false;
         assert!(!s.picking_objects(), "idle with PICKFIRST off");
+        assert_eq!(s.cursor_shape(), CursorShape::CrosshairsAndPickbox, "idle still draws pickbox");
         s.settings.pickfirst = true;
         for (cmd, picks) in [("erase", true), ("fillet", true), ("offset", false), ("line", false), ("hatch", false)] {
             s.cmdline(cmd).unwrap();
             assert_eq!(s.picking_objects(), picks, "{cmd}: {}", s.prompt_text());
+            let shape = if picks { CursorShape::Pickbox } else { CursorShape::Crosshairs };
+            assert_eq!(s.cursor_shape(), shape, "{cmd}: {}", s.prompt_text());
             s.cancel();
         }
         // OFFSET's object pick, FILLET's radius, HATCH's select mode.
         s.cmdline("offset 2").unwrap();
         assert!(s.picking_objects(), "{}", s.prompt_text());
+        assert_eq!(s.cursor_shape(), CursorShape::Pickbox, "{}", s.prompt_text());
         s.cancel();
         s.cmdline("fillet r").unwrap();
         assert!(!s.picking_objects(), "{}", s.prompt_text());
+        assert_eq!(s.cursor_shape(), CursorShape::Crosshairs, "{}", s.prompt_text());
         s.cancel();
         s.cmdline("hatch s").unwrap();
         assert!(s.picking_objects(), "{}", s.prompt_text());
+        assert_eq!(s.cursor_shape(), CursorShape::Pickbox, "{}", s.prompt_text());
         s.cancel();
     }
 

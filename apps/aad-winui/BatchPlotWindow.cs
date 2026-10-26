@@ -9,7 +9,7 @@ using WinRT.Interop;
 
 namespace Aad.WinUi;
 
-/// <summary>File &gt; Batch Plot — sheets of the current drawing via <c>plot.batch</c>.</summary>
+/// <summary>File &gt; Batch Plot ? sheets of the current drawing via <c>plot.batch</c>.</summary>
 internal static class BatchPlotWindow
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -29,7 +29,7 @@ internal static class BatchPlotWindow
         Density.Name(list, "Sheets");
         var folder = new TextBox { MinHeight = Density.ControlHeight, PlaceholderText = "Exports beside the drawing (or temp)" };
         Density.Name(folder, "Output folder");
-        var browse = ActionButton("Browse…");
+        var browse = ActionButton("Browse?");
         var includeHidden = new CheckBox
         {
             Content = "Also plot hidden, frozen and unmarked project items that are ticked",
@@ -184,12 +184,7 @@ internal static class BatchPlotWindow
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static FrameworkElement Labeled(string label, FrameworkElement field)
     {
@@ -203,9 +198,8 @@ internal static class BatchPlotWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 }

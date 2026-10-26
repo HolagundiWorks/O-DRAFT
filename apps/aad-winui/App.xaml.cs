@@ -10,6 +10,9 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        RequestedTheme = SuiteAppearancePrefs.Load() == ElementTheme.Dark
+            ? ApplicationTheme.Dark
+            : ApplicationTheme.Light;
         UnhandledException += (_, e) =>
         {
             try
@@ -38,7 +41,8 @@ public partial class App : Application
         // is not torn down by a competing Activate/Close during startup.
         _window = new MainWindow(Program.Launch);
         ShellWindows.SetMain(_window);
-        ShellIcon.Apply(_window);
+        // Match suite appearance immediately — omitting the theme forces Dark via ShellChrome.Resolve.
+        ShellIcon.Apply(_window, SuiteAppearancePrefs.Load());
         _window.Closed += (_, _) =>
         {
             // Secondary windows otherwise keep the unpackaged process alive.

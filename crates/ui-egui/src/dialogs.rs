@@ -24,6 +24,7 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
         "stylesmanager" => crate::plotstyles::dialog(app, ctx, &mut open),
         "plotbatch" => crate::plotwindow::dialog(app, ctx, &mut open),
         "customizetop" => crate::topbar::dialog(app, ctx, &mut open),
+        "parameters" => parameters(app, ctx, &mut open),
         other => crate::managers::dialog(app, ctx, other, &mut open),
     }
     if !open {
@@ -246,6 +247,67 @@ fn about(ctx: &egui::Context, open: &mut bool) {
                 }
             }
         });
+}
+
+fn parameters(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {
+    let mut action: Option<(&str, serde_json::Value)> = None;
+    egui::Window::new(crate::tl!("Parameters Manager"))
+        .id(egui::Id::new("Parameters Manager"))
+        .open(open)
+        .default_size(vec2(420.0, 480.0))
+        .show(ctx, |ui| {
+            let Ok(status) = app.session.execute("param.status", &json!({})) else {
+                ui.label(crate::tl!("Open a drawing first."));
+                return;
+            };
+            let rev = status.get("revision").and_then(|v| v.as_u64()).unwrap_or(0);
+            ui.label(format!("Graph revision: {rev}"));
+            ui.horizontal(|ui| {
+                if ui.button(crate::tl!("Refresh")).clicked() {
+                    // Re-open redraws from a fresh execute above next frame.
+                }
+                if ui.button(crate::tl!("Preview")).clicked() {
+                    action = Some(("param.evaluate", json!({})));
+                }
+                if ui.button(crate::tl!("Commit")).clicked() {
+                    action = Some(("param.commit", json!({})));
+                }
+            });
+            ui.separator();
+            ui.heading(crate::tl!("Walls in this drawing"));
+            let walls = status.get("walls").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            if walls.is_empty() {
+                ui.label(crate::tl!("No parametric walls yet — Architecture > Parametric > New Wall."));
+            } else {
+                egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+                    for w in &walls {
+                        let id = w.get("instanceId").and_then(|v| v.as_str()).unwrap_or("?");
+                        let state = w.get("state").and_then(|v| v.as_str()).unwrap_or("");
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{id} — {state}"));
+                            if ui.small_button(crate::tl!("Detach")).clicked() {
+                                action = Some(("param.detach", json!({ "instance": id })));
+                            }
+                        });
+                    }
+                });
+            }
+            ui.separator();
+            ui.heading(crate::tl!("Library node types"));
+            if let Ok(lib) = app.session.execute("param.library", &json!({})) {
+                let nodes = lib.get("nodes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+                    for n in nodes.iter().take(80) {
+                        let label = n.get("label").and_then(|v| v.as_str()).unwrap_or("?");
+                        let cat = n.get("category").and_then(|v| v.as_str()).unwrap_or("");
+                        ui.label(if cat.is_empty() { label.to_string() } else { format!("{cat} · {label}") });
+                    }
+                });
+            }
+        });
+    if let Some((cmd, p)) = action {
+        let _ = app.run(cmd, p);
+    }
 }
 
 fn commands(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) {

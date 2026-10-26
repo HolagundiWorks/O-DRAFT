@@ -12,7 +12,7 @@ and [UI_BASELINE.md](UI_BASELINE.md); workspace details in [workspaces.md](works
 | Toolbars | Classic only: Draw and Modify (with Dimension and Leader) as two vertical bars on the left, and the customisable top tool bar under the menu (right-click it or View > Customize Top Bar) |
 | Context bar | Both workspaces: current layer (searchable), floor, drawing space, panel pin/auto-hide ([ACTIVE_DRAWING_SPACE.md](ACTIVE_DRAWING_SPACE.md)) |
 | File tabs and layout tabs | Drawings along the top; Model and layout tabs along the bottom, with New layout and a layout list |
-| Canvas | GPU-drawn; thin AutoCAD-style crosshair (`CURSORSIZE` / pick-box gap while selecting; OS cursor hidden on the WinUI drawing HWND), cyan rubber-band preview, dashed blue selection / solid hover highlight, mode-specific snap markers with tips, polar/OTRACK paths, grips (warm under pointer), selection window fill + dashed crossing |
+| Canvas | GPU-drawn AutoCAD cursor (`CURSORSIZE` / `PICKBOX`): idle = crosshairs+pickbox; point prompt = crosshairs only; select-objects prompt = pickbox only; OS cursor hidden on the WinUI drawing HWND. Cyan rubber-band preview, dashed blue selection / solid hover highlight, mode-specific snap markers with tips, polar/OTRACK paths, grips (warm under pointer), selection window fill + dashed crossing |
 | Panels | Layers, Properties and Blocks (one tabbed stack on the right), Plot window; docked, floatable, closable, pin and auto-collapse |
 | Command line and history | Typed commands with prompts; F2 opens the history |
 | Status bar | Toggles (snap, ortho, polar, tracking, dynamic input), coordinates, units popup, messages |

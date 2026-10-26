@@ -29,6 +29,7 @@ use aad_geom::{Bounds2, Mat3, Polyline, Vec2};
 
 pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, dimension_geometry, dimension_geometry_with, format_linear_value};
 pub use fill::{triangulate_evenodd, triangulate_outline};
+pub use hatch::pattern_lines;
 pub use paper::{PAPER_SIZES, PaperSize, Sheet, paper_size, sheet};
 
 /// Handle carried by model-space geometry drawn inside a paper-space viewport (it belongs to no

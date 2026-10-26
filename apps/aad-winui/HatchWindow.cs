@@ -1,16 +1,20 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 
 namespace Aad.WinUi;
 
-/// <summary>Format / Modify &gt; Hatch… — pattern library, scale and angle for selected hatches or defaults.</summary>
+/// <summary>Format / Modify &gt; Hatch Editor? ? pattern library with AutoCAD-style swatches.</summary>
 internal static class HatchWindow
 {
+    private const double SwatchDip = 72;
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -24,9 +28,14 @@ internal static class HatchWindow
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         Density.Name(status, "Hatch status");
 
-        var list = new ListBox { MinHeight = 220, MinWidth = 280 };
-        Density.Name(list, "Hatch patterns");
-        var selectionLabel = Density.Secondary("Selection: —", TextWrapping.Wrap);
+        var grid = new GridView
+        {
+            MinHeight = 280,
+            SelectionMode = ListViewSelectionMode.Single,
+            IsItemClickEnabled = true,
+        };
+        Density.Name(grid, "Hatch patterns");
+        var selectionLabel = Density.Secondary("Selection: ?", TextWrapping.Wrap);
         Density.Name(selectionLabel, "Hatch selection");
         var scale = new TextBox { MinHeight = Density.ControlHeight, Width = 100 };
         Density.Name(scale, "Hatch scale");
@@ -36,19 +45,19 @@ internal static class HatchWindow
         var setDefaults = ActionButton("Set as defaults");
 
         var scaleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm };
-        scaleRow.Children.Add(new TextBlock { Text = "Scale", VerticalAlignment = VerticalAlignment.Center });
+        scaleRow.Children.Add(new TextBlock { Text = "Scale", VerticalAlignment = VerticalAlignment.Center, FontSize = Density.FontBody });
         scaleRow.Children.Add(scale);
-        scaleRow.Children.Add(new TextBlock { Text = "Angle", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) });
+        scaleRow.Children.Add(new TextBlock { Text = "Angle", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), FontSize = Density.FontBody });
         scaleRow.Children.Add(angle);
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm };
         actions.Children.Add(apply);
         actions.Children.Add(setDefaults);
 
-        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, MaxWidth = 440 };
-        root.Children.Add(Heading("Hatch Manager"));
+        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, MaxWidth = 560 };
+        root.Children.Add(Heading("Hatch Editor"));
         root.Children.Add(selectionLabel);
-        root.Children.Add(list);
+        root.Children.Add(grid);
         root.Children.Add(scaleRow);
         root.Children.Add(actions);
         root.Children.Add(status);
@@ -57,53 +66,33 @@ internal static class HatchWindow
 
         void Fail(string message) => status.Text = message;
 
-        bool Run(string command, object body)
+        string? ExecuteJson(string command, object body)
         {
             if (Native.Execute(host, command, JsonSerializer.Serialize(body, JsonOpts)) != 0)
             {
                 Fail(Native.LastError(host));
-                return false;
+                return null;
             }
+            var json = Native.ReadResult(host);
             status.Text = "";
-            changed();
-            return true;
+            return json;
         }
 
-        string GetVar(string name)
+        bool Run(string command, object body)
         {
-            if (Native.Execute(host, "getvar", JsonSerializer.Serialize(new { name }, JsonOpts)) != 0)
+            if (ExecuteJson(command, body) is null)
             {
-                return "";
+                return false;
             }
-            try
-            {
-                using var doc = JsonDocument.Parse(Native.ReadResult(host));
-                if (!doc.RootElement.TryGetProperty("value", out var value))
-                {
-                    return "";
-                }
-                return value.ValueKind switch
-                {
-                    JsonValueKind.String => value.GetString() ?? "",
-                    JsonValueKind.Number => value.ToString(),
-                    _ => value.ToString(),
-                };
-            }
-            catch (JsonException)
-            {
-                return "";
-            }
+            changed();
+            return true;
         }
 
         bool SetVar(string name, object value) =>
             Run("setvar", new Dictionary<string, object> { ["name"] = name, ["value"] = value });
 
-        string SelectedPattern()
-        {
-            var item = list.SelectedItem as string ?? "";
-            var sep = item.IndexOf(" —", StringComparison.Ordinal);
-            return sep < 0 ? item : item[..sep];
-        }
+        string SelectedPattern() =>
+            (grid.SelectedItem as FrameworkElement)?.Tag as string ?? "";
 
         bool ParsePositive(TextBox box, out double value)
         {
@@ -132,13 +121,14 @@ internal static class HatchWindow
         void Reload()
         {
             handles.Clear();
-            if (!Run("hatch.patterns", new { }))
+            var patternsJson = ExecuteJson("hatch.patterns", new { });
+            if (patternsJson is null)
             {
                 return;
             }
             try
             {
-                using var doc = JsonDocument.Parse(Native.ReadResult(host));
+                using var doc = JsonDocument.Parse(patternsJson);
                 var pattern = "ANSI31";
                 var scaleValue = 1.0;
                 var angleValue = 0.0;
@@ -156,7 +146,8 @@ internal static class HatchWindow
                 }
                 scale.Text = scaleValue.ToString("0.####", CultureInfo.InvariantCulture);
                 angle.Text = angleValue.ToString("0.####", CultureInfo.InvariantCulture);
-                list.Items.Clear();
+                grid.Items.Clear();
+                FrameworkElement? selected = null;
                 if (doc.RootElement.TryGetProperty("patterns", out var rows) && rows.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var row in rows.EnumerateArray())
@@ -167,15 +158,23 @@ internal static class HatchWindow
                             continue;
                         }
                         var desc = row.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
-                        list.Items.Add(desc.Length == 0 ? name : name + " — " + desc);
+                        var preview = row.TryGetProperty("preview", out var prev) ? prev : default;
+                        var tile = BuildTile(name, desc, preview);
+                        grid.Items.Add(tile);
+                        if (name.Equals(pattern, StringComparison.OrdinalIgnoreCase))
+                        {
+                            selected = tile;
+                        }
                     }
                 }
-                var sel = list.Items.Cast<object>().Select(o => o as string ?? "").FirstOrDefault(item =>
-                    item.Equals(pattern, StringComparison.OrdinalIgnoreCase)
-                    || item.StartsWith(pattern + " —", StringComparison.OrdinalIgnoreCase));
-                if (sel != null)
+                if (grid.Items.Count == 0)
                 {
-                    list.SelectedItem = sel;
+                    Fail("No hatch patterns were returned.");
+                    return;
+                }
+                if (selected != null)
+                {
+                    grid.SelectedItem = selected;
                 }
             }
             catch (JsonException)
@@ -184,12 +183,12 @@ internal static class HatchWindow
                 return;
             }
 
-            // Current selection: how many hatches can Apply change.
-            if (Native.Execute(host, "properties", "{}") == 0)
+            var propsJson = ExecuteJson("properties", new { });
+            if (propsJson is not null)
             {
                 try
                 {
-                    using var props = JsonDocument.Parse(Native.ReadResult(host));
+                    using var props = JsonDocument.Parse(propsJson);
                     if (props.RootElement.TryGetProperty("objects", out var objects) && objects.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var row in objects.EnumerateArray())
@@ -205,7 +204,6 @@ internal static class HatchWindow
                 }
                 catch (JsonException)
                 {
-                    // Keep defaults-only mode.
                 }
             }
             selectionLabel.Text = handles.Count == 0
@@ -213,7 +211,7 @@ internal static class HatchWindow
                 : handles.Count == 1
                     ? "Selection: 1 hatch"
                     : "Selection: " + handles.Count + " hatches";
-            _ = GetVar("HPNAME");
+            changed();
         }
 
         apply.Click += (_, _) =>
@@ -264,7 +262,6 @@ internal static class HatchWindow
                 Fail("Angle must be a number (degrees).");
                 return;
             }
-            // Store radians in HPANG (engine header), degrees in the UI.
             if (SetVar("HPNAME", name)
                 && SetVar("HPSCALE", scaleValue)
                 && SetVar("HPANG", angleValue * Math.PI / 180.0))
@@ -277,7 +274,7 @@ internal static class HatchWindow
         Density.Apply(root);
         var window = new Window
         {
-            Title = "Hatch Manager",
+            Title = "Hatch Editor",
             Content = new ScrollViewer
             {
                 Content = new Grid { RequestedTheme = theme, Children = { root } },
@@ -288,24 +285,163 @@ internal static class HatchWindow
             presenter.IsResizable = true;
         }
         ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 400, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 800, persistKey: "hatch");
+        ShellFit.UserResizable(window, minWidthDip: 480, minHeightDip: 420, maxWidthDip: 780, maxHeightDip: 900, persistKey: "hatch");
         Reload();
         ShellFit.Invalidate(window);
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
+    }
+
+    private static FrameworkElement BuildTile(string name, string description, JsonElement preview)
+    {
+        var ink = Density.ThemeBrush("TextPrimaryBrush")
+            ?? new SolidColorBrush(Colors.Black);
+        var surface = Density.ThemeBrush("CanvasBackgroundBrush")
+            ?? Density.ThemeBrush("SurfaceSecondaryBrush")
+            ?? new SolidColorBrush(Colors.White);
+        var borderBrush = Density.ThemeBrush("BorderSubtleBrush")
+            ?? new SolidColorBrush(Colors.Gray);
+
+        var canvas = new Canvas
+        {
+            Width = SwatchDip,
+            Height = SwatchDip,
+            Background = surface,
+            IsHitTestVisible = false,
+        };
+        DrawPreview(canvas, preview, ink);
+
+        var label = new TextBlock
+        {
+            Text = name,
+            FontSize = Density.FontCaption,
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = SwatchDip + 8,
+        };
+        var stack = new StackPanel
+        {
+            Spacing = 4,
+            Margin = new Thickness(4),
+            Width = SwatchDip + 12,
+            Tag = name,
+            Children =
+            {
+                new Border
+                {
+                    BorderBrush = borderBrush,
+                    BorderThickness = new Thickness(1),
+                    Child = canvas,
+                },
+                label,
+            },
+        };
+        var tip = description.Length == 0 ? name : name + " ? " + description;
+        AutomationProperties.SetName(stack, tip);
+        ToolTipService.SetToolTip(stack, tip);
+        return stack;
+    }
+
+    private static void DrawPreview(Canvas canvas, JsonElement preview, Brush ink)
+    {
+        var size = SwatchDip;
+        var pad = 2.0;
+        var draw = size - pad * 2;
+        var frame = new Rectangle
+        {
+            Width = draw,
+            Height = draw,
+            Stroke = ink,
+            StrokeThickness = 0.75,
+            Fill = new SolidColorBrush(Colors.Transparent),
+        };
+        Canvas.SetLeft(frame, pad);
+        Canvas.SetTop(frame, pad);
+        canvas.Children.Add(frame);
+
+        if (preview.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+        if (preview.TryGetProperty("solid", out var solid) && solid.ValueKind == JsonValueKind.True)
+        {
+            var fill = new Rectangle
+            {
+                Width = draw,
+                Height = draw,
+                Fill = ink,
+                Opacity = 0.85,
+            };
+            Canvas.SetLeft(fill, pad);
+            Canvas.SetTop(fill, pad);
+            canvas.Children.Add(fill);
+            return;
+        }
+        if (!preview.TryGetProperty("segments", out var segments) || segments.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+        foreach (var seg in segments.EnumerateArray())
+        {
+            if (seg.ValueKind != JsonValueKind.Array || seg.GetArrayLength() == 0)
+            {
+                continue;
+            }
+            if (seg.GetArrayLength() == 1)
+            {
+                var p = PointOf(seg[0], pad, draw);
+                var dot = new Ellipse { Width = 2.5, Height = 2.5, Fill = ink };
+                Canvas.SetLeft(dot, p.X - 1.25);
+                Canvas.SetTop(dot, p.Y - 1.25);
+                canvas.Children.Add(dot);
+                continue;
+            }
+            var geo = new PathGeometry();
+            var fig = new PathFigure { IsClosed = false, IsFilled = false };
+            var first = true;
+            foreach (var pt in seg.EnumerateArray())
+            {
+                var p = PointOf(pt, pad, draw);
+                if (first)
+                {
+                    fig.StartPoint = p;
+                    first = false;
+                }
+                else
+                {
+                    fig.Segments.Add(new LineSegment { Point = p });
+                }
+            }
+            geo.Figures.Add(fig);
+            canvas.Children.Add(new Microsoft.UI.Xaml.Shapes.Path
+            {
+                Data = geo,
+                Stroke = ink,
+                StrokeThickness = 1.0,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+            });
+        }
+    }
+
+    private static Windows.Foundation.Point PointOf(JsonElement pt, double pad, double draw)
+    {
+        // Engine preview is Y-up; WinUI Canvas is Y-down.
+        var x = 0.0;
+        var y = 0.0;
+        if (pt.ValueKind == JsonValueKind.Array && pt.GetArrayLength() >= 2)
+        {
+            x = pt[0].TryGetDouble(out var xv) ? xv : 0;
+            y = pt[1].TryGetDouble(out var yv) ? yv : 0;
+        }
+        return new Windows.Foundation.Point(pad + x * draw, pad + (1.0 - y) * draw);
     }
 }

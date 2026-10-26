@@ -31,7 +31,6 @@ public sealed partial class MainWindow : Window
     private DispatcherQueueTimer? _timer;
     private int _ticks;
     private string _panelKey = "";
-    private string _layoutKey = "";
     private string _docKey = "";
     private bool _buildingTabs;
     private bool _filling;
@@ -59,7 +58,6 @@ public sealed partial class MainWindow : Window
     private bool _leftCollapsed;
     private DateTime _leftIdleSince = DateTime.UtcNow;
     private double _leftWidth = Density.SidePanelWidth;
-    private bool _start;
     private bool _ucs = true;
     private Window? _calc;
     private Window? _pomodoro;
@@ -67,7 +65,8 @@ public sealed partial class MainWindow : Window
     private Window? _leftFloat;
     private bool _classic = true;
     private readonly Dictionary<string, ShellPrefs.ModeSlot> _modeSlots = new();
-    private bool _dark = true;
+    private bool _dark = SuiteAppearancePrefs.Load() == ElementTheme.Dark;
+    private bool _themeSwitchSync;
     private Window? _pdfWindow;
     private Window? _formWindow;
     private LayerManagerWindow? _layersWindow;
@@ -78,6 +77,7 @@ public sealed partial class MainWindow : Window
     private Window? _batchPlotWindow;
     private Window? _dimStyleWindow;
     private Window? _linetypeWindow;
+    private Window? _parametersWindow;
     private Window? _hatchWindow;
     private Window? _pointStyleWindow;
     private Window? _mleaderStyleWindow;
@@ -88,6 +88,7 @@ public sealed partial class MainWindow : Window
     private QuickWindow? _quickWindow;
     private QuickSelectWindow? _quickSelectWindow;
     private string? _quickJson;
+    private string? _hoverQuickJson;
     private string _command = "";
     private bool _qpmode;
     private bool _literalSpace;
@@ -103,9 +104,19 @@ public sealed partial class MainWindow : Window
     private int _recall = -1;
     private string _liveDraft = "";
     private string _historyShown = "\u0001";
+    private bool _placingBar;
+    private int _lastBarX = int.MinValue;
+    private int _lastBarY = int.MinValue;
+    private int _lastBarW;
+    private int _lastBarH;
+    private int _lastDynX = int.MinValue;
+    private int _lastDynY = int.MinValue;
+    private int _lastDynW;
+    private int _lastDynH;
+    private bool _lastDynOn;
     private double _barDx;
     private double _barDy;
-    /// <summary>Shortcut â†’ command id, built from the engine menu registry (same strings as the menu).</summary>
+    /// <summary>Shortcut ? command id, built from the engine menu registry (same strings as the menu).</summary>
     private readonly Dictionary<(bool Ctrl, bool Shift, Windows.System.VirtualKey Key), string> _menuKeys = new();
     private long _accelAt;
     private string _accelLast = "";
@@ -119,6 +130,11 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing += OnAppClosing;
         // Sample only when asked and no drawing path was given (paths replace the empty session).
         _host = Native.Create(sample: _launch.Sample && _launch.Files.Count == 0);
+        // Sync GPU paper with the suite preference before the child is embedded (default host is dark).
+        if (_host != IntPtr.Zero)
+        {
+            Native.Theme(_host, _dark);
+        }
         AppWindow.Changed += (_, args) =>
         {
             if (!_shellClosing && (args.DidPositionChange || args.DidSizeChange))
@@ -126,41 +142,7 @@ public sealed partial class MainWindow : Window
                 PlaceCommandBar();
             }
         };
-        Closed += (_, _) =>
-        {
-            _shellClosing = true;
-            _timer?.Stop();
-            _chrome?.Close();
-            _chrome = null;
-            // Close every tracked dialog/tool window (layers, hatch, rooms, About, â€¦).
-            ShellWindows.CloseAllOwned();
-            _layersWindow = null;
-            _calc = null;
-            _pomodoro = null;
-            _toolsWindow = null;
-            _leftFloat = null;
-            _pdfWindow = null;
-            _formWindow = null;
-            _unitsWindow = null;
-            _textStyleWindow = null;
-            _pageSetupWindow = null;
-            _plotStyleWindow = null;
-            _batchPlotWindow = null;
-            _dimStyleWindow = null;
-            _linetypeWindow = null;
-            _hatchWindow = null;
-            _pointStyleWindow = null;
-            _mleaderStyleWindow = null;
-            _roomSettingsWindow = null;
-            _draftingWindow = null;
-            _quickWindow = null;
-            _quickSelectWindow = null;
-            if (_host != IntPtr.Zero)
-            {
-                Native.Destroy(_host);
-                _host = IntPtr.Zero;
-            }
-        };
+        Closed += (_, _) => TearDownShell();
         Activated += (_, _) =>
         {
             PlaceChild();
@@ -179,8 +161,8 @@ public sealed partial class MainWindow : Window
         ApplyShellTheme();
         Listen();
         _ = OpenLaunchFiles();
-        StartLogo.Source = ShellIcon.Logo();
         ApplyAccess();
+        EnsureUnitsBox();
         PlaceCommandBar();
         EnsureTimer();
         UpdateDyn();
@@ -233,14 +215,11 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetLiveSetting(PromptLabel, AutomationLiveSetting.Assertive);
         AutomationProperties.SetLiveSetting(Status, AutomationLiveSetting.Polite);
         AutomationProperties.SetLandmarkType(Bar, AutomationLandmarkType.Navigation);
-        AutomationProperties.SetLandmarkType(FileTabs, AutomationLandmarkType.Navigation);
         AutomationProperties.SetLandmarkType(ToolStripHost, AutomationLandmarkType.Navigation);
         AutomationProperties.SetLandmarkType(LeftColumn, AutomationLandmarkType.Form);
         AutomationProperties.SetLocalizedLandmarkType(LeftColumn, "complementary");
         AutomationProperties.SetLandmarkType(CanvasHost, AutomationLandmarkType.Main);
-        AutomationProperties.SetLandmarkType(StartPage, AutomationLandmarkType.Main);
         AutomationProperties.SetLocalizedLandmarkType(StatusRow, "status");
-        AutomationProperties.SetHeadingLevel(StartHeading, AutomationHeadingLevel.Level1);
         AnnouncePrompt(PromptLabel.Text ?? "Command:", "");
         AutomationProperties.SetName(LeftSplitter, "Resize side panel, width " + (int)_leftWidth);
     }
@@ -415,6 +394,8 @@ public sealed partial class MainWindow : Window
         UpdateDyn();
     }
 
+    private void OnAskSend(object sender, RoutedEventArgs e) => SubmitAiAsk();
+
     private void SubmitAiAsk()
     {
         if (_host == IntPtr.Zero)
@@ -462,6 +443,29 @@ public sealed partial class MainWindow : Window
         BuildMenus();
         UpdateDyn();
         _chrome?.FocusCad();
+        // Escape / CAD focus must not leave the main shell with WS_VISIBLE cleared.
+        KeepShellShown();
+    }
+
+    /// <summary>
+    /// Activate a tool window and keep the CAD shell visible. On some builds, focusing a second
+    /// WinUI window (or the owned CAD chrome) clears WS_VISIBLE on the main shell.
+    /// </summary>
+    private void PresentToolWindow(Window tool)
+    {
+        tool.Activate();
+        Native.ShowWindow(WindowNative.GetWindowHandle(tool), Native.SwShowNa);
+        KeepShellShown();
+    }
+
+    private void KeepShellShown()
+    {
+        var hwnd = WindowNative.GetWindowHandle(this);
+        if (hwnd == IntPtr.Zero || Native.IsIconic(hwnd))
+        {
+            return;
+        }
+        Native.ShowWindow(hwnd, Native.SwShowNa);
     }
 
     /// <summary>
@@ -572,7 +576,7 @@ public sealed partial class MainWindow : Window
         }
         if (id is "ui.dialog.parameters")
         {
-            History.Text = "Parameters Manager is not available yet.";
+            OpenParameters();
             return;
         }
         if (id == "ui.workspace.classic")
@@ -918,7 +922,7 @@ public sealed partial class MainWindow : Window
         if (key == Windows.System.VirtualKey.Space)
         {
             var text = CommandInput.Text ?? "";
-            // Live buffer only â€” do not rely solely on cached `_literalSpace`.
+            // Live buffer only — do not rely solely on cached `_literalSpace`.
             if (text.TrimStart().StartsWith('/') || (_host != IntPtr.Zero && Native.SpaceLiteral(_host, text)))
             {
                 _armSpace = false;
@@ -999,7 +1003,7 @@ public sealed partial class MainWindow : Window
             {
                 continue;
             }
-            var label = string.IsNullOrEmpty(row.Label) ? row.Insert : $"{row.Insert}  â€”  {row.Label}";
+            var label = string.IsNullOrEmpty(row.Label) ? row.Insert : $"{row.Insert}  —  {row.Label}";
             SuggestList.Items.Add(new SuggestRow { Insert = row.Insert, Label = label, Reference = row.Reference });
         }
         SuggestList.Visibility = SuggestList.Items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -1499,32 +1503,37 @@ public sealed partial class MainWindow : Window
         RefreshChrome();
     }
 
-    private void OnNewLayout(object sender, RoutedEventArgs e)
+    private void OnNewDrawing(object sender, RoutedEventArgs e)
+    {
+        StartCommand("new");
+        EnsureModelSpace();
+        _docKey = "";
+        AfterCommand();
+    }
+
+    private void OnNameplateDesigner(object sender, RoutedEventArgs e)
     {
         if (_host == IntPtr.Zero)
         {
             return;
         }
-        if (Native.Execute(_host, "layout.new", "{}") != 0)
+        // Title-plate / nameplate sheet designer (paper space). Drafting stays in model space otherwise.
+        if (Native.Execute(_host, "sheet.designer", JsonSerializer.Serialize(new Dictionary<string, object> { ["open"] = true })) != 0)
         {
             History.Text = Native.LastError(_host);
             return;
         }
-        try
-        {
-            using var doc = JsonDocument.Parse(Native.ReadResult(_host));
-            var name = doc.RootElement.TryGetProperty("name", out var value) ? value.GetString() : null;
-            if (!string.IsNullOrEmpty(name))
-            {
-                Native.Execute(_host, "layout.set", JsonSerializer.Serialize(new Dictionary<string, object> { ["name"] = name }));
-            }
-        }
-        catch (JsonException)
-        {
-            History.Text = "The new layout could not be read.";
-        }
-        _layoutKey = "";
+        _docKey = "";
         AfterCommand();
+    }
+
+    private void EnsureModelSpace()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        Native.Execute(_host, "layout.set", JsonSerializer.Serialize(new Dictionary<string, object> { ["name"] = "Model" }));
     }
 
     private async Task<bool> PickFile(string id)
@@ -1742,7 +1751,6 @@ public sealed partial class MainWindow : Window
                 Native.Execute(_host, "new", "{}");
             }
             _panelKey = "";
-            _layoutKey = "";
             AfterCommand();
         }
         finally
@@ -1787,6 +1795,10 @@ public sealed partial class MainWindow : Window
             }
             if (quit)
             {
+                // Close owned tool / chrome windows before the shell HWND disappears.
+                _chrome?.Close();
+                _chrome = null;
+                ShellWindows.CloseAllOwned();
                 _allowClose = true;
                 Close();
                 return;
@@ -1873,7 +1885,6 @@ public sealed partial class MainWindow : Window
         _showTabs = true;
         _showStatus = true;
         _showCommand = true;
-        _start = false;
         _modeSlots[WorkspaceKey()] = CaptureSlot();
         ApplyChrome();
         PlaceChild();
@@ -1908,7 +1919,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         var delta = e.GetCurrentPoint(Content).Position.X - _dragX;
-        // The panel is on the right, so dragging the grip left makes it wider.
+        // Panel sits right of the grip ? drag left to widen.
         SetSideWidth(_dragWidth - delta);
         PlaceChild();
         e.Handled = true;
@@ -1944,6 +1955,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         var step = KeyDown(Windows.System.VirtualKey.Shift) ? 40 : 16;
+        // Left arrow widens the right-docked panel.
         if (e.Key == Windows.System.VirtualKey.Right)
         {
             step = -step;
@@ -1978,9 +1990,7 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetName(PromptLabel, text);
         AutomationProperties.SetName(
             CanvasHost,
-            _start
-                ? "Start"
-                : "Drawing. Arrows move the cursor, Insert picks or places, Ctrl+arrows pan. " + text);
+            "Drawing. Arrows move the cursor, Insert picks or places, Ctrl+arrows pan. " + text);
         AutomationProperties.SetFullDescription(
             CanvasHost,
             "Keyboard drafting: type coordinates on the command line, Tab cycles snaps, Enter or Space cycles a hot grip.");
@@ -2044,19 +2054,14 @@ public sealed partial class MainWindow : Window
         return true;
     }
 
-    private void OnTheme(object sender, RoutedEventArgs e)
+    private void OnThemeButton(object sender, RoutedEventArgs e)
     {
-        if (_host == IntPtr.Zero)
-        {
+        if (_themeSwitchSync)
             return;
-        }
         _dark = !_dark;
-        Native.Theme(_host, _dark);
-        if (ThemeButton.Content is DrawnIcon theme)
-        {
-            theme.Kind = _dark ? "moon" : "sun";
-        }
-        ToolTipService.SetToolTip(ThemeButton, _dark ? "Dark" : "Light");
+        SuiteAppearancePrefs.Save(_dark ? ElementTheme.Dark : ElementTheme.Light);
+        if (_host != IntPtr.Zero)
+            Native.Theme(_host, _dark);
         ApplyShellTheme();
     }
 
@@ -2066,12 +2071,76 @@ public sealed partial class MainWindow : Window
         Density.Theme = theme;
         ShellChrome.Apply(this, theme);
         _chrome?.ApplyTheme(theme);
+        SyncAskPills();
         CanvasHost.Background = Density.CanvasBackground();
+        // Drawing child clear colour is independent of WinUI ThemeResources — keep it in sync.
+        if (_host != IntPtr.Zero)
+        {
+            Native.Theme(_host, _dark);
+        }
         ApplyThemeToToolWindows(theme);
         // Panel text takes its colours from the theme at build time, so build it again.
         _panelKey = "";
         RefreshPanels();
         BuildTools();
+        SyncThemeSwitch();
+    }
+
+    private void SyncThemeSwitch()
+    {
+        _themeSwitchSync = true;
+        try
+        {
+            // Show the icon for the active theme (sun = light, moon = dark).
+            ThemeIcon.Kind = _dark ? "moon" : "sun";
+            var tip = _dark ? "Dark theme — click for light" : "Light theme — click for dark";
+            ToolTipService.SetToolTip(ThemeButton, tip);
+            AutomationProperties.SetName(ThemeButton, tip);
+        }
+        finally
+        {
+            _themeSwitchSync = false;
+        }
+    }
+
+    private void TearDownShell()
+    {
+        if (_shellClosing)
+        {
+            return;
+        }
+        _shellClosing = true;
+        _timer?.Stop();
+        _chrome?.Close();
+        _chrome = null;
+        ShellWindows.CloseAllOwned();
+        _layersWindow = null;
+        _calc = null;
+        _pomodoro = null;
+        _toolsWindow = null;
+        _leftFloat = null;
+        _pdfWindow = null;
+        _formWindow = null;
+        _unitsWindow = null;
+        _textStyleWindow = null;
+        _pageSetupWindow = null;
+        _plotStyleWindow = null;
+        _batchPlotWindow = null;
+        _dimStyleWindow = null;
+        _linetypeWindow = null;
+        _parametersWindow = null;
+        _hatchWindow = null;
+        _pointStyleWindow = null;
+        _mleaderStyleWindow = null;
+        _roomSettingsWindow = null;
+        _draftingWindow = null;
+        _quickWindow = null;
+        _quickSelectWindow = null;
+        if (_host != IntPtr.Zero)
+        {
+            Native.Destroy(_host);
+            _host = IntPtr.Zero;
+        }
     }
 
     private void ApplyThemeToToolWindows(ElementTheme theme)
@@ -2081,7 +2150,7 @@ public sealed partial class MainWindow : Window
         {
             _calc, _pomodoro, _toolsWindow, _leftFloat, _pdfWindow, _formWindow,
             _unitsWindow, _textStyleWindow, _pageSetupWindow, _plotStyleWindow, _batchPlotWindow,
-            _dimStyleWindow, _linetypeWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
+            _dimStyleWindow, _linetypeWindow, _parametersWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
             _roomSettingsWindow, _draftingWindow, _quickWindow, _quickSelectWindow,
         })
         {
@@ -2140,7 +2209,7 @@ public sealed partial class MainWindow : Window
         }
         var image = new Image { Stretch = Stretch.Uniform, MaxWidth = 860 };
         var caption = new TextBlock();
-        var open = new Button { Content = "Open PDFâ€¦", HorizontalAlignment = HorizontalAlignment.Left, MinHeight = Density.ControlHeight };
+        var open = new Button { Content = "Open PDF…", HorizontalAlignment = HorizontalAlignment.Left, MinHeight = Density.ControlHeight };
         Density.Name(open, "Open PDF");
         Density.Name(caption, "PDF page");
         Density.Name(image, "PDF page preview");
@@ -2215,8 +2284,7 @@ public sealed partial class MainWindow : Window
         _pdfWindow.Content = root;
         ShellIcon.Apply(_pdfWindow, ShellChrome.ThemeOf(this));
         ShellFit.UserResizable(_pdfWindow, minWidthDip: 640, minHeightDip: 480, maxWidthDip: 1200, maxHeightDip: 900, persistKey: "pdf");
-        _pdfWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_pdfWindow), 8);
+        PresentToolWindow(_pdfWindow);
     }
 
     private void AfterCommand()
@@ -2230,15 +2298,15 @@ public sealed partial class MainWindow : Window
 
     private void RefreshShilpiChip()
     {
-        if (_host == IntPtr.Zero || ShilpiChip == null)
+        if (_host == IntPtr.Zero || ShilpiChip == null || ShilpiChipHost == null)
         {
             return;
         }
+        ShilpiChipHost.Visibility = Visibility.Visible;
         if (Native.Execute(_host, "vdb.status", "{}") != 0)
         {
-            ShilpiChip.Content = "ShilpiDB";
-            ToolTipService.SetToolTip(ShilpiChip, "Connect to a local shilpid server");
-            ShilpiChip.Visibility = Visibility.Visible;
+            SetStatusGlow(ShilpiChipHost, active: false, accent: false);
+            ToolTipService.SetToolTip(ShilpiChip, "ShilpiDB — click to connect (127.0.0.1:7420)");
             return;
         }
         try
@@ -2248,22 +2316,80 @@ public sealed partial class MainWindow : Window
             var connected = root.TryGetProperty("connected", out var c) && c.GetBoolean();
             var addr = root.TryGetProperty("addr", out var a) ? a.GetString() ?? "" : "";
             var sidecar = root.TryGetProperty("sidecar", out var sc) && sc.GetBoolean();
+            SetStatusGlow(ShilpiChipHost, active: connected, accent: false);
             if (connected)
             {
-                ShilpiChip.Content = string.IsNullOrEmpty(addr) ? "ShilpiDB" : "ShilpiDB " + addr;
-                ToolTipService.SetToolTip(ShilpiChip, "Connected" + (sidecar ? "; sidecar on save" : "") + ". Click for Push / Pull / Disconnect.");
+                var tip = string.IsNullOrEmpty(addr) ? "ShilpiDB connected" : addr;
+                if (sidecar)
+                {
+                    tip += " · sidecar on save";
+                }
+                ToolTipService.SetToolTip(ShilpiChip, tip + " — click for Push / Pull / Disconnect");
             }
             else
             {
-                ShilpiChip.Content = sidecar ? "ShilpiDB (sidecar)" : "ShilpiDB";
-                ToolTipService.SetToolTip(ShilpiChip, "Click to connect to shilpid (127.0.0.1:7420)");
+                ToolTipService.SetToolTip(ShilpiChip, sidecar
+                    ? "ShilpiDB (sidecar) — hover shows address after connect; click to connect 127.0.0.1:7420"
+                    : "ShilpiDB — click to connect (127.0.0.1:7420)");
             }
-            ShilpiChip.Visibility = Visibility.Visible;
         }
         catch (JsonException)
         {
-            ShilpiChip.Content = "ShilpiDB";
-            ShilpiChip.Visibility = Visibility.Visible;
+            SetStatusGlow(ShilpiChipHost, active: false, accent: false);
+            ToolTipService.SetToolTip(ShilpiChip, "ShilpiDB — click to connect (127.0.0.1:7420)");
+        }
+    }
+
+    private void RefreshAiChip(ChromeState state)
+    {
+        if (AiChip == null || AiChipHost == null)
+        {
+            return;
+        }
+        var busy = state.Assistant is "thinking" or "loading" or "confirm";
+        var linked = state.ControlPort > 0;
+        // Glow only while the assistant is actively working; address stays on hover.
+        SetStatusGlow(AiChipHost, active: busy, accent: true);
+        var tip = linked
+            ? "127.0.0.1:" + state.ControlPort + (string.IsNullOrEmpty(state.AssistantModel) ? "" : " · " + state.AssistantModel)
+            : "AI assistant";
+        if (busy)
+        {
+            tip += " · " + state.Assistant;
+        }
+        ToolTipService.SetToolTip(AiChip, tip);
+        AutomationProperties.SetName(AiChip, tip);
+    }
+
+    private void OnAiChip(object sender, RoutedEventArgs e)
+    {
+        _showCommand = true;
+        PlaceCommandBar();
+        _chrome?.ShowBar(true);
+        AiInput.Focus(FocusState.Programmatic);
+    }
+
+    private static void SetStatusGlow(Border host, bool active, bool accent)
+    {
+        if (!active)
+        {
+            host.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            host.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            return;
+        }
+        var brush = accent
+            ? Density.ThemeBrush("CommandChromeAccentBrush") ?? Density.ThemeBrush("AccentBrush")
+            : Density.ThemeBrush("CadChannelBrush") ?? Density.ThemeBrush("AccentBrush");
+        if (brush is SolidColorBrush solid)
+        {
+            var c = solid.Color;
+            host.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(220, c.R, c.G, c.B));
+            host.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(48, c.R, c.G, c.B));
+        }
+        else
+        {
+            host.BorderBrush = brush;
+            host.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
     }
 
@@ -2364,7 +2490,7 @@ public sealed partial class MainWindow : Window
         }
         foreach (var menu in menus)
         {
-            var top = new MenuBarItem { Title = menu.Title };
+            var top = new MenuBarItem { Title = menu.Title, FontSize = Density.FontBody };
             foreach (var child in menu.Items)
             {
                 top.Items.Add(MakeItem(child, 0));
@@ -2391,15 +2517,15 @@ public sealed partial class MainWindow : Window
         }
         if (help == null)
         {
-            help = new MenuBarItem { Title = "Help" };
+            help = new MenuBarItem { Title = "Help", FontSize = Density.FontBody };
             Bar.Items.Add(help);
         }
         ClearShellItems(help);
-        var commands = new MenuFlyoutItem { Text = "Command list", Tag = "shell.commands" };
+        var commands = new MenuFlyoutItem { Text = "Command list", Tag = "shell.commands", FontSize = Density.FontBody };
         void ShowCommands() => CommandList.Show(this, Native.ReadText(_host, Native.TextMenu));
         commands.Click += (_, _) => ShowCommands();
         BindAccel(commands, "F1", ShowCommands, mapId: "");
-        var about = new MenuFlyoutItem { Text = "About O-Draft", Tag = "shell.about" };
+        var about = new MenuFlyoutItem { Text = "About O-Draft", Tag = "shell.about", FontSize = Density.FontBody };
         about.Click += (_, _) => AboutWindow.Show(this, VersionText());
         help.Items.Add(commands);
         help.Items.Add(about);
@@ -2426,7 +2552,7 @@ public sealed partial class MainWindow : Window
     {
         if (depth > 8 || string.IsNullOrEmpty(node.Id))
         {
-            var sub = new MenuFlyoutSubItem { Text = node.Title };
+            var sub = new MenuFlyoutSubItem { Text = node.Title, FontSize = Density.FontBody };
             if (depth <= 8)
             {
                 foreach (var child in node.Items)
@@ -2441,6 +2567,7 @@ public sealed partial class MainWindow : Window
             Text = node.Title,
             Tag = node.Id,
             IsEnabled = node.Enabled,
+            FontSize = Density.FontBody,
         };
         if (!string.IsNullOrEmpty(node.Shortcut) && node.Id != null)
         {
@@ -2580,7 +2707,7 @@ public sealed partial class MainWindow : Window
             var aiPrompt = "Ask:";
             if (state.Assistant is "thinking" or "loading")
             {
-                aiPrompt = string.IsNullOrEmpty(state.AssistantPartial) ? "Assistantâ€¦" : state.AssistantPartial;
+                aiPrompt = string.IsNullOrEmpty(state.AssistantPartial) ? "Assistant…" : state.AssistantPartial;
             }
             else if (state.Assistant == "confirm" && !string.IsNullOrEmpty(state.AssistantPrompt))
             {
@@ -2593,10 +2720,10 @@ public sealed partial class MainWindow : Window
             {
                 _space = state.Space;
             }
+            RefreshAiChip(state);
             if (state.ControlPort > 0)
             {
                 ControlPort.Text = "127.0.0.1:" + state.ControlPort;
-                ToolTipService.SetToolTip(ControlPort, state.AssistantModel);
             }
             if (state.Quit && !_allowClose)
             {
@@ -2617,12 +2744,8 @@ public sealed partial class MainWindow : Window
             _qpmode = state.Qpmode;
             _command = state.Command;
             _literalSpace = state.LiteralSpace;
-            if (!string.IsNullOrEmpty(state.Units))
-            {
-                UnitsButton.Content = state.Units;
-            }
-            ShowLayouts(state);
-            ShowDocuments(state);
+            SyncDraftingUnits(state.Units);
+            ShowDrawingTabs(state);
             _draftingWindow?.Reload(state.Polar, state.Osnap, state.Dynmode, state.Ortho, state.Osmode, state.Polarang, state.DynpiCartesian, state.DynpiAbsolute);
             UpdateQuick();
             PlaceCommandBar();
@@ -2643,6 +2766,9 @@ public sealed partial class MainWindow : Window
             var text = Native.ReadText(_host, Native.TextPanels);
             using var document = JsonDocument.Parse(text);
             _quickJson = document.RootElement.TryGetProperty("quick", out var quick) && quick.ValueKind == JsonValueKind.Object ? quick.GetRawText() : null;
+            _hoverQuickJson = document.RootElement.TryGetProperty("hoverQuick", out var hoverQuick) && hoverQuick.ValueKind == JsonValueKind.Object
+                ? hoverQuick.GetRawText()
+                : null;
             snapshot = JsonSerializer.Deserialize<PanelSnapshot>(text, JsonOpts);
         }
         catch (JsonException)
@@ -2653,7 +2779,8 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        var key = snapshot.Uid + ":" + snapshot.Revision + ":" + snapshot.Selection;
+        // Include hover so Properties / Layer / Blocks update on rollover, not only on pick.
+        var key = snapshot.Uid + ":" + snapshot.Revision + ":" + snapshot.Selection + ":" + (snapshot.Hover ?? "") + ":" + (snapshot.FocusLayer ?? "") + ":" + (snapshot.FocusBlock ?? "");
         if (key == _panelKey)
         {
             return;
@@ -2663,11 +2790,61 @@ public sealed partial class MainWindow : Window
         FillLayers(snapshot);
         FillBlocks(snapshot);
         FillContext(snapshot);
+        UpdateSideTabHeaders(snapshot);
         Density.Apply(PropertiesPanel);
         Density.Apply(LayersPanel);
         Density.Apply(BlocksPanel);
         _layersWindow?.OnDocumentRevision(snapshot.Uid, snapshot.Revision);
         UpdateQuick();
+    }
+
+    /// <summary>Tab titles show what is selected or under the cursor.</summary>
+    private void UpdateSideTabHeaders(PanelSnapshot snapshot)
+    {
+        var propTitle = "Properties";
+        if (snapshot.Selection > 0 && _quickJson != null)
+        {
+            propTitle = QuickTitle(_quickJson) ?? propTitle;
+        }
+        else if (_hoverQuickJson != null)
+        {
+            var hover = QuickTitle(_hoverQuickJson);
+            if (!string.IsNullOrEmpty(hover))
+            {
+                propTitle = "Hover · " + hover;
+            }
+        }
+        PropertiesTab.Header = propTitle;
+        AutomationProperties.SetName(PropertiesTab, propTitle);
+
+        var layerName = snapshot.FocusLayer;
+        if (string.IsNullOrEmpty(layerName))
+        {
+            layerName = snapshot.Layers.FirstOrDefault(l => l.Current)?.Name;
+        }
+        var layerTitle = string.IsNullOrEmpty(layerName) ? "Layer" : "Layer · " + layerName;
+        LayersTab.Header = layerTitle;
+        AutomationProperties.SetName(LayersTab, layerTitle);
+
+        var blockTitle = string.IsNullOrEmpty(snapshot.FocusBlock) ? "Blocks" : "Blocks · " + snapshot.FocusBlock;
+        BlocksTab.Header = blockTitle;
+        AutomationProperties.SetName(BlocksTab, blockTitle);
+    }
+
+    private static string? QuickTitle(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+            {
+                return title.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+        return null;
     }
 
     private void OpenQuickSelect()
@@ -2681,8 +2858,7 @@ public sealed partial class MainWindow : Window
             _quickSelectWindow = new QuickSelectWindow(Content as FrameworkElement, _host, AfterCommand);
             _quickSelectWindow.Closed += (_, _) => _quickSelectWindow = null;
         }
-        _quickSelectWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_quickSelectWindow), 8);
+        PresentToolWindow(_quickSelectWindow);
     }
 
     private void UpdateQuick()
@@ -2710,8 +2886,7 @@ public sealed partial class MainWindow : Window
             });
             _quickWindow.Closed += (_, _) => _quickWindow = null;
             _quickWindow.Place(this);
-            _quickWindow.Activate();
-            Native.ShowWindow(WindowNative.GetWindowHandle(_quickWindow), 8);
+            PresentToolWindow(_quickWindow);
         }
         if (_quickJson != null)
         {
@@ -2736,11 +2911,76 @@ public sealed partial class MainWindow : Window
             _draftingWindow.Closed += (_, _) => _draftingWindow = null;
             RefreshChrome();
         }
-        _draftingWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_draftingWindow), 8);
+        PresentToolWindow(_draftingWindow);
     }
 
-    private void OnUnits(object sender, RoutedEventArgs e) => OpenUnits();
+    private static readonly string[] DraftingUnitChoices = ["mm", "cm", "m", "in", "ft"];
+
+    private void EnsureUnitsBox()
+    {
+        if (UnitsBox.Items.Count > 0)
+        {
+            return;
+        }
+        foreach (var unit in DraftingUnitChoices)
+        {
+            UnitsBox.Items.Add(unit);
+        }
+    }
+
+    private void SyncDraftingUnits(string chromeLabel)
+    {
+        EnsureUnitsBox();
+        var unit = ParseDraftingUnit(chromeLabel);
+        _filling = true;
+        if (unit.Length > 0 && DraftingUnitChoices.Contains(unit, StringComparer.OrdinalIgnoreCase))
+        {
+            UnitsBox.SelectedItem = DraftingUnitChoices.First(u => u.Equals(unit, StringComparison.OrdinalIgnoreCase));
+            UnitsBox.PlaceholderText = null;
+        }
+        else
+        {
+            UnitsBox.SelectedItem = null;
+            UnitsBox.PlaceholderText = string.IsNullOrEmpty(chromeLabel) ? "units?" : chromeLabel;
+        }
+        _filling = false;
+    }
+
+    /// <summary>Accepts chrome labels like <c>mm</c> or legacy <c>in ? in  1:100</c>.</summary>
+    private static string ParseDraftingUnit(string label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return "";
+        }
+        var text = label.Trim();
+        var cut = text.IndexOfAny(['?', '-', ' ', '\t']);
+        if (cut > 0)
+        {
+            text = text[..cut].Trim();
+        }
+        return text.Equals("units?", StringComparison.OrdinalIgnoreCase) ? "" : text;
+    }
+
+    private void OnUnitsPicked(object sender, SelectionChangedEventArgs e)
+    {
+        if (_filling || _host == IntPtr.Zero || UnitsBox.SelectedItem is not string unit || unit.Length == 0)
+        {
+            return;
+        }
+        // Metadata only: drafting stays in the chosen unit; geometry is not rescaled. Scale at plot.
+        if (Native.Execute(_host, "drawing.units", JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["units"] = unit,
+                ["mode"] = "metadata",
+            })) != 0)
+        {
+            Status.Text = Native.LastError(_host);
+            AfterCommand();
+            return;
+        }
+        AfterCommand();
+    }
 
     private void OpenUnits()
     {
@@ -2753,8 +2993,7 @@ public sealed partial class MainWindow : Window
             _unitsWindow = UnitsWindow.Open(this, _host, AfterCommand);
             _unitsWindow.Closed += (_, _) => _unitsWindow = null;
         }
-        _unitsWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_unitsWindow), 8);
+        PresentToolWindow(_unitsWindow);
     }
 
     private void OpenTextStyle()
@@ -2768,8 +3007,7 @@ public sealed partial class MainWindow : Window
             _textStyleWindow = TextStyleWindow.Open(this, _host, AfterCommand);
             _textStyleWindow.Closed += (_, _) => _textStyleWindow = null;
         }
-        _textStyleWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_textStyleWindow), 8);
+        PresentToolWindow(_textStyleWindow);
     }
 
     private void OpenPageSetup()
@@ -2783,8 +3021,7 @@ public sealed partial class MainWindow : Window
             _pageSetupWindow = PageSetupWindow.Open(this, _host, AfterCommand);
             _pageSetupWindow.Closed += (_, _) => _pageSetupWindow = null;
         }
-        _pageSetupWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_pageSetupWindow), 8);
+        PresentToolWindow(_pageSetupWindow);
     }
 
     private void OpenPlotStyles()
@@ -2798,8 +3035,7 @@ public sealed partial class MainWindow : Window
             _plotStyleWindow = PlotStyleWindow.Open(this, _host, _space, AfterCommand);
             _plotStyleWindow.Closed += (_, _) => _plotStyleWindow = null;
         }
-        _plotStyleWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_plotStyleWindow), 8);
+        PresentToolWindow(_plotStyleWindow);
     }
 
     private void OpenBatchPlot()
@@ -2813,8 +3049,7 @@ public sealed partial class MainWindow : Window
             _batchPlotWindow = BatchPlotWindow.Open(this, _host, AfterCommand);
             _batchPlotWindow.Closed += (_, _) => _batchPlotWindow = null;
         }
-        _batchPlotWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_batchPlotWindow), 8);
+        PresentToolWindow(_batchPlotWindow);
     }
 
     private void OpenDimStyle()
@@ -2828,8 +3063,7 @@ public sealed partial class MainWindow : Window
             _dimStyleWindow = DimStyleWindow.Open(this, _host, AfterCommand);
             _dimStyleWindow.Closed += (_, _) => _dimStyleWindow = null;
         }
-        _dimStyleWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_dimStyleWindow), 8);
+        PresentToolWindow(_dimStyleWindow);
     }
 
     private void OpenLinetype()
@@ -2843,8 +3077,21 @@ public sealed partial class MainWindow : Window
             _linetypeWindow = LinetypeWindow.Open(this, _host, AfterCommand);
             _linetypeWindow.Closed += (_, _) => _linetypeWindow = null;
         }
-        _linetypeWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_linetypeWindow), 8);
+        PresentToolWindow(_linetypeWindow);
+    }
+
+    private void OpenParameters()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        if (_parametersWindow == null)
+        {
+            _parametersWindow = ParametersWindow.Open(this, _host, AfterCommand);
+            _parametersWindow.Closed += (_, _) => _parametersWindow = null;
+        }
+        PresentToolWindow(_parametersWindow);
     }
 
     private void OpenHatch()
@@ -2856,10 +3103,13 @@ public sealed partial class MainWindow : Window
         if (_hatchWindow == null)
         {
             _hatchWindow = HatchWindow.Open(this, _host, AfterCommand);
-            _hatchWindow.Closed += (_, _) => _hatchWindow = null;
+            _hatchWindow.Closed += (_, _) =>
+            {
+                _hatchWindow = null;
+                KeepShellShown();
+            };
         }
-        _hatchWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_hatchWindow), 8);
+        PresentToolWindow(_hatchWindow);
     }
 
     private void OpenPointStyle()
@@ -2873,8 +3123,7 @@ public sealed partial class MainWindow : Window
             _pointStyleWindow = PointStyleWindow.Open(this, _host, AfterCommand);
             _pointStyleWindow.Closed += (_, _) => _pointStyleWindow = null;
         }
-        _pointStyleWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_pointStyleWindow), 8);
+        PresentToolWindow(_pointStyleWindow);
     }
 
     private void OpenMLeaderStyle()
@@ -2888,8 +3137,7 @@ public sealed partial class MainWindow : Window
             _mleaderStyleWindow = MLeaderStyleWindow.Open(this, _host, AfterCommand);
             _mleaderStyleWindow.Closed += (_, _) => _mleaderStyleWindow = null;
         }
-        _mleaderStyleWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_mleaderStyleWindow), 8);
+        PresentToolWindow(_mleaderStyleWindow);
     }
 
     private void OpenRoomSettings()
@@ -2903,8 +3151,7 @@ public sealed partial class MainWindow : Window
             _roomSettingsWindow = RoomSettingsWindow.Open(this, _host, AfterCommand);
             _roomSettingsWindow.Closed += (_, _) => _roomSettingsWindow = null;
         }
-        _roomSettingsWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_roomSettingsWindow), 8);
+        PresentToolWindow(_roomSettingsWindow);
     }
 
     private void OpenLayers()
@@ -2923,8 +3170,7 @@ public sealed partial class MainWindow : Window
         }
         _layersWindow.AttachBody();
         _layersWindow.Reload("");
-        _layersWindow.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(_layersWindow), 8);
+        PresentToolWindow(_layersWindow);
     }
 
     private void OnMergeLayers(object sender, RoutedEventArgs e) => SetLayerMerge(!_mergeLayers, showWindow: _mergeLayers);
@@ -2991,8 +3237,7 @@ public sealed partial class MainWindow : Window
             if (showWindow)
             {
                 _layersWindow.Reload("");
-                _layersWindow.Activate();
-                Native.ShowWindow(WindowNative.GetWindowHandle(_layersWindow), 8);
+                PresentToolWindow(_layersWindow);
             }
         }
         ApplyColumns();
@@ -3005,12 +3250,17 @@ public sealed partial class MainWindow : Window
         {
             if (_quickJson != null)
             {
-                FillSelectionProperties(_quickJson);
+                FillSelectionProperties(_quickJson, readOnly: false);
             }
             return;
         }
+        if (_hoverQuickJson != null)
+        {
+            FillSelectionProperties(_hoverQuickJson, readOnly: true);
+            return;
+        }
         PropertiesPanel.Children.Add(Heading("Properties"));
-        PropertiesPanel.Children.Add(FieldLabel("No selection"));
+        PropertiesPanel.Children.Add(FieldLabel("No selection ? hover an object to inspect it"));
         var layers = new List<string>();
         var currentLayer = "0";
         foreach (var layer in snapshot.Layers)
@@ -3085,7 +3335,7 @@ public sealed partial class MainWindow : Window
             : null;
     }
 
-    private void FillSelectionProperties(string json)
+    private void FillSelectionProperties(string json, bool readOnly)
     {
         JsonDocument doc;
         try
@@ -3111,7 +3361,34 @@ public sealed partial class MainWindow : Window
                 }
             }
             var title = root.TryGetProperty("title", out var heading) && heading.ValueKind == JsonValueKind.String ? heading.GetString() ?? "Properties" : "Properties";
+            if (readOnly)
+            {
+                title = "Hover · " + title;
+            }
             PropertiesPanel.Children.Add(Heading(title));
+            if (readOnly)
+            {
+                PropertiesPanel.Children.Add(FieldLabel("Rollover ? click to select"));
+                AddReadOnly("Layer", Text(root, "layer"));
+                AddReadOnly("Color", Text(root, "color"));
+                AddReadOnly("Linetype", Text(root, "linetype"));
+                AddReadOnly("Lineweight", Text(root, "lineweight"));
+                AddReadOnly("Transparency", Text(root, "transparency"));
+                AddReadOnly("Linetype scale", Text(root, "ltscale"));
+                if (root.TryGetProperty("fields", out var hoverRows) && hoverRows.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var row in hoverRows.EnumerateArray())
+                    {
+                        var label = row.TryGetProperty("label", out var labelValue) && labelValue.ValueKind == JsonValueKind.String ? labelValue.GetString() ?? "" : "";
+                        var value = row.TryGetProperty("value", out var fieldValue) && fieldValue.ValueKind == JsonValueKind.String ? fieldValue.GetString() ?? "" : "";
+                        if (label.Length > 0)
+                        {
+                            AddReadOnly(label, value);
+                        }
+                    }
+                }
+                return;
+            }
             var layers = Names(root, "layers");
             var linetypes = Names(root, "linetypes");
             AddChoice("Layer", layers, Text(root, "layer"), value => CommitChoice(handles, "layer", value));
@@ -3170,6 +3447,18 @@ public sealed partial class MainWindow : Window
                 }
             }
         }
+    }
+
+    private void AddReadOnly(string label, string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return;
+        }
+        PropertiesPanel.Children.Add(FieldLabel(label));
+        var read = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap };
+        AutomationProperties.SetName(read, label + " " + value);
+        PropertiesPanel.Children.Add(read);
     }
 
     private static List<string> Names(JsonElement root, string name)
@@ -3316,11 +3605,27 @@ public sealed partial class MainWindow : Window
     private void FillLayers(PanelSnapshot snapshot)
     {
         LayersPanel.Children.Clear();
-        LayersPanel.Children.Add(Heading("Layers"));
-        LayersPanel.Children.Add(LayerHeader());
-        for (var i = 0; i < snapshot.Layers.Count; i++)
+        var focus = snapshot.FocusLayer;
+        if (!string.IsNullOrEmpty(focus))
         {
-            LayersPanel.Children.Add(LayerLine(snapshot.Layers[i], i));
+            var why = snapshot.Selection > 0 ? "Selected object" : "Under cursor";
+            LayersPanel.Children.Add(Heading("Layer · " + focus));
+            LayersPanel.Children.Add(FieldLabel(why));
+        }
+        else
+        {
+            LayersPanel.Children.Add(Heading("Layer"));
+        }
+        LayersPanel.Children.Add(LayerHeader());
+        // Put the focused layer first so selection/hover is visible without scrolling.
+        var ordered = snapshot.Layers
+            .Select((layer, index) => (layer, index))
+            .OrderByDescending(pair => pair.layer.Focus || pair.layer.Selected || pair.layer.Hovered)
+            .ThenBy(pair => pair.index)
+            .ToList();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            LayersPanel.Children.Add(LayerLine(ordered[i].layer, i));
         }
         if (snapshot.LayersTruncated)
         {
@@ -3342,24 +3647,28 @@ public sealed partial class MainWindow : Window
     {
         var name = layer.Name;
         var grid = LayerGrid();
-        grid.Background = layer.Current
-            ? Density.SelectionFill()
-            : index % 2 == 1
-                ? Density.ZebraFill()
-                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        var focus = layer.Focus || layer.Selected || layer.Hovered;
+        grid.Background = focus
+            ? Density.SelectionFill(layer.Hovered && !layer.Selected ? (byte)40 : (byte)64)
+            : layer.Current
+                ? Density.SelectionFill(32)
+                : index % 2 == 1
+                    ? Density.ZebraFill()
+                    : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         var status = layer.Current ? "check" : "layers";
         var statusTip = layer.Current ? "Current layer " + name : "Make " + name + " the current layer";
         Put(grid, 0, LayerIcon(status, statusTip, () => RunLayer("layer.current", new Dictionary<string, object> { ["name"] = name })));
         var label = new Button
         {
-            Content = new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center },
+            Content = new TextBlock { Text = name, FontSize = Density.FontBody, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center },
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             MinHeight = Density.ControlHeight,
             Padding = new Thickness(4, 0, 4, 0),
-            FontWeight = layer.Current ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+            FontSize = Density.FontBody,
+            FontWeight = focus || layer.Current ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
         };
         AutomationProperties.SetName(label, "Layer " + name);
         label.Click += (_, _) => RunLayer("layer.current", new Dictionary<string, object> { ["name"] = name });
@@ -3389,6 +3698,7 @@ public sealed partial class MainWindow : Window
         var text = new TextBlock
         {
             Text = title,
+            FontSize = Density.FontBody,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(4, 0, 0, 0),
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
@@ -3424,19 +3734,36 @@ public sealed partial class MainWindow : Window
     private void FillBlocks(PanelSnapshot snapshot)
     {
         BlocksPanel.Children.Clear();
-        BlocksPanel.Children.Add(Heading("Blocks"));
-        if (snapshot.Blocks.Count == 0)
+        // Canvas selection/hover wins over the last clicked list row.
+        if (!string.IsNullOrEmpty(snapshot.FocusBlock))
         {
-            BlocksPanel.Children.Add(FieldLabel("This drawing defines no blocks."));
+            _selectedBlock = snapshot.FocusBlock;
         }
         if (!string.IsNullOrEmpty(_selectedBlock) && snapshot.Blocks.All(b => !string.Equals(b.Name, _selectedBlock, StringComparison.OrdinalIgnoreCase)))
         {
             _selectedBlock = null;
         }
-        foreach (var block in snapshot.Blocks)
+        if (!string.IsNullOrEmpty(snapshot.FocusBlock))
+        {
+            var why = snapshot.Selection > 0 ? "Selected insert" : "Under cursor";
+            BlocksPanel.Children.Add(Heading("Blocks · " + snapshot.FocusBlock));
+            BlocksPanel.Children.Add(FieldLabel(why));
+        }
+        else
+        {
+            BlocksPanel.Children.Add(Heading("Blocks"));
+        }
+        if (snapshot.Blocks.Count == 0)
+        {
+            BlocksPanel.Children.Add(FieldLabel("This drawing defines no blocks."));
+        }
+        var ordered = snapshot.Blocks
+            .OrderByDescending(b => b.Focus || b.Selected || b.Hovered || string.Equals(b.Name, _selectedBlock, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        foreach (var block in ordered)
         {
             var name = block.Name;
-            var selected = string.Equals(_selectedBlock, name, StringComparison.OrdinalIgnoreCase);
+            var selected = string.Equals(_selectedBlock, name, StringComparison.OrdinalIgnoreCase) || block.Focus || block.Selected || block.Hovered;
             var line = new Border
             {
                 Padding = new Thickness(4, 4, 4, 4),
@@ -3445,7 +3772,11 @@ public sealed partial class MainWindow : Window
             };
             var stack = new StackPanel { Spacing = Density.SpaceXs };
             stack.Children.Add(new TextBlock { Text = name, FontWeight = selected ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal });
-            stack.Children.Add(FieldLabel(block.Entities + " objects Â· " + block.References + " references"));
+            if (!string.IsNullOrEmpty(block.Description))
+            {
+                stack.Children.Add(FieldLabel(block.Description));
+            }
+            stack.Children.Add(FieldLabel(block.Entities + " objects · " + block.References + " references"));
             line.Child = stack;
             line.PointerPressed += (_, _) =>
             {
@@ -3459,6 +3790,11 @@ public sealed partial class MainWindow : Window
         if (focus != null)
         {
             BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+            if (!string.IsNullOrEmpty(focus.Description))
+            {
+                BlocksPanel.Children.Add(FieldLabel("Description"));
+                BlocksPanel.Children.Add(new TextBlock { Text = focus.Description, TextWrapping = TextWrapping.Wrap });
+            }
             var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceMd };
             var insert = new Button { Content = "Insert", MinHeight = Density.ControlHeight };
             Density.Name(insert, "Insert block " + focus.Name);
@@ -3548,9 +3884,8 @@ public sealed partial class MainWindow : Window
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        AutomationProperties.SetName(block, text);
         return block;
     }
 
@@ -3564,7 +3899,8 @@ public sealed partial class MainWindow : Window
         var block = new TextBlock
         {
             Text = text,
-            Margin = new Thickness(0, 8, 0, 0),
+            FontSize = Density.FontCaption,
+            Margin = new Thickness(0, Density.SpaceSm, 0, 0),
         };
         if (brush != null)
         {
@@ -3579,13 +3915,6 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        if (_start)
-        {
-            StartPage.Visibility = Visibility.Visible;
-            Native.SetCanvas(_host, false);
-            return;
-        }
-        StartPage.Visibility = Visibility.Collapsed;
         Native.SetCanvas(_host, true);
         var scale = CanvasHost.XamlRoot.RasterizationScale;
         if (scale <= 0 || CanvasHost.ActualWidth < 1 || CanvasHost.ActualHeight < 1)
@@ -3604,6 +3933,11 @@ public sealed partial class MainWindow : Window
         if (rc != 0)
         {
             History.Text = Native.LastError(_host);
+        }
+        else
+        {
+            // GPU surface exists only after Embed — re-sync paper colour with the shell theme.
+            Native.Theme(_host, _dark);
         }
         PlaceCommandBar();
     }
@@ -3800,7 +4134,8 @@ public sealed partial class MainWindow : Window
             {
                 RefreshChrome();
             }
-            if (_ticks % 8 == 0)
+            // Every ~4 ticks so hover rollover updates Properties / Layer / Blocks promptly.
+            if (_ticks % 4 == 0)
             {
                 RefreshPanels();
             }
@@ -3820,39 +4155,91 @@ public sealed partial class MainWindow : Window
     private void BuildTools()
     {
         ToolStrip.Children.Clear();
-        foreach (var (id, label) in ToolCatalog.Where(tool => _toolIds.Contains(tool.Id)))
+        // Draw · Modify · Annotate — thin dividers between sections (suite icon tile 36 / glyph 20).
+        string[][] groups =
+        [
+            ["line", "pline", "circle", "arc", "rectang"],
+            ["move", "copy", "rotate", "offset", "trim", "erase"],
+            ["dimlinear", "text", "hatch"],
+        ];
+        var first = true;
+        foreach (var group in groups)
         {
-            var command = id;
-            var button = new Button
+            var visible = group.Where(id => _toolIds.Contains(id)).ToList();
+            if (visible.Count == 0)
             {
-                Content = ToolIcons.For(id, _dark),
-                Width = 32,
-                Height = 32,
-                Padding = new Thickness(0),
-            };
-            AutomationProperties.SetName(button, label);
-            ToolTipService.SetToolTip(button, label);
-            button.Click += (_, _) => StartCommand(command);
-            ToolStrip.Children.Add(button);
+                continue;
+            }
+            if (!first)
+            {
+                ToolStrip.Children.Add(MakeToolDivider());
+            }
+            first = false;
+            foreach (var id in visible)
+            {
+                var label = ToolCatalog.First(t => t.Id == id).Label;
+                var command = id;
+                var button = MakeToolTile(ToolIcons.For(id, _dark), label);
+                button.Click += (_, _) => StartCommand(command);
+                ToolStrip.Children.Add(button);
+            }
         }
-        var gear = new Button
+        if (ToolStrip.Children.Count > 0)
         {
-            Content = ToolIcons.For("gear", _dark),
-            Width = 32,
-            Height = 32,
-            Padding = new Thickness(0),
-        };
-        AutomationProperties.SetName(gear, "Customize tool bar");
-        ToolTipService.SetToolTip(gear, "Customize tool bar");
+            ToolStrip.Children.Add(MakeToolDivider());
+        }
+        var gear = MakeToolTile(ToolIcons.For("gear", _dark), "Customize tool bar");
         gear.Click += (_, _) => OpenTools();
         ToolStrip.Children.Add(gear);
         RebuildArchitectureBar();
     }
 
-    /// <summary>The drawing tools from the Architecture menu. Reports and settings stay in the menu.</summary>
+    private static Button MakeToolTile(UIElement icon, string name)
+    {
+        var button = new Button
+        {
+            Content = icon,
+            Width = Density.IconButton,
+            Height = Density.IconButton,
+            MinWidth = Density.IconButton,
+            MinHeight = Density.IconButton,
+            Padding = new Thickness(0),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(Density.CornerControl),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        if (Application.Current.Resources.TryGetValue("IconButtonStyle", out var style) && style is Style s)
+        {
+            button.Style = s;
+        }
+        AutomationProperties.SetName(button, name);
+        ToolTipService.SetToolTip(button, name);
+        return button;
+    }
+
+    private static Border MakeToolDivider(bool horizontalBar = false)
+    {
+        var key = horizontalBar ? "ArchBarDividerStyle" : "ToolStripDividerStyle";
+        if (Application.Current.Resources.TryGetValue(key, out var style) && style is Style s)
+        {
+            return new Border { Style = s };
+        }
+        return new Border
+        {
+            Width = 1,
+            Height = Density.IconSize,
+            Margin = new Thickness(horizontalBar ? 1 : 4, 0, horizontalBar ? 1 : 4, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = Density.ThemeBrush("BorderSubtleBrush") ?? new SolidColorBrush(Windows.UI.Color.FromArgb(120, 128, 128, 128)),
+            Opacity = 0.85,
+        };
+    }
+
+    /// <summary>Drawing tools on the Architecture bar. Layer set lives under Format (not here).</summary>
     private static readonly (string Id, string Label)[] ArchitectureTools =
     [
-        ("hcwlayers", "Layer set"),
         ("wall.draw", "Wall"),
         ("wall.door", "Door"),
         ("wall.window", "Window"),
@@ -3867,194 +4254,120 @@ public sealed partial class MainWindow : Window
     private void RebuildArchitectureBar()
     {
         ArchBar.Children.Clear();
-        foreach (var (id, label) in ArchitectureTools)
+        // Openings · rooms · structure ? thin dividers between sections.
+        string[][] groups =
+        [
+            ["wall.draw", "wall.door", "wall.window"],
+            ["room", "rarea", "north.arrow"],
+            ["grid.axis", "column.place", "stair.plan"],
+        ];
+        var first = true;
+        foreach (var group in groups)
         {
-            var command = id;
-            var button = new Button
+            if (!first)
             {
-                Content = ToolIcons.Architecture(command, _dark),
-                Width = Density.MinTarget,
-                Height = Density.MinTarget,
-                MinWidth = Density.MinTarget,
-                MinHeight = Density.MinTarget,
-                Padding = new Thickness(0),
-            };
-            AutomationProperties.SetName(button, label);
-            ToolTipService.SetToolTip(button, label);
-            button.Click += (_, _) => StartCommand(command);
-            ArchBar.Children.Add(button);
+                ArchBar.Children.Add(MakeToolDivider(horizontalBar: true));
+            }
+            first = false;
+            foreach (var id in group)
+            {
+                var label = ArchitectureTools.First(t => t.Id == id).Label;
+                var command = id;
+                var button = MakeToolTile(ToolIcons.Architecture(command, _dark), label);
+                button.Click += (_, _) => StartCommand(command);
+                ArchBar.Children.Add(button);
+            }
         }
     }
 
-    private int _titlePlateDoc = -1;
-
-    /// A new drawing's empty Layout1 and Layout2 become the one Title plate sheet.
-    private void EnsureTitlePlate(ChromeState state)
-    {
-        var doc = state.Documents.FirstOrDefault(item => item.Active);
-        if (doc == null || doc.Index == _titlePlateDoc)
-        {
-            return;
-        }
-        var papers = state.Layouts.Where(name => !name.Equals("Model", StringComparison.OrdinalIgnoreCase)).ToList();
-        if (papers.Count == 0)
-        {
-            return;
-        }
-        var stock = papers.All(name => name.Equals("Layout1", StringComparison.OrdinalIgnoreCase) || name.Equals("Layout2", StringComparison.OrdinalIgnoreCase));
-        _titlePlateDoc = doc.Index;
-        if (!stock)
-        {
-            return;
-        }
-        if (Native.Execute(_host, "sheet.designer", "{}") != 0)
-        {
-            History.Text = Native.LastError(_host);
-            return;
-        }
-        _layoutKey = "";
-    }
-
-    private void ShowLayouts(ChromeState state)
-    {
-        EnsureTitlePlate(state);
-        var key = state.Space + "\n" + string.Join("\n", state.Layouts);
-        if (key == _layoutKey)
-        {
-            return;
-        }
-        _layoutKey = key;
-        LayoutTabs.Children.Clear();
-        foreach (var name in state.Layouts)
-        {
-            var layout = name;
-            var current = layout.Equals(state.Space, StringComparison.OrdinalIgnoreCase);
-            var tab = new Button
-            {
-                Content = new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Spacing = Density.SpaceSm,
-                    Children =
-                    {
-                        new DrawnIcon { Kind = layout.Equals("Model", StringComparison.OrdinalIgnoreCase) ? "model" : "paper" },
-                        new TextBlock
-                        {
-                            Text = layout,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            FontWeight = current ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
-                        },
-                    },
-                },
-                MinHeight = Density.ControlHeight,
-                Padding = new Thickness(8, 4, 8, 4),
-            };
-            AutomationProperties.SetName(tab, current ? "Current layout " + layout : "Switch to " + layout);
-            tab.Click += (_, _) =>
-            {
-                var json = JsonSerializer.Serialize(new Dictionary<string, object> { ["name"] = layout });
-                if (Native.Execute(_host, "layout.set", json) != 0)
-                {
-                    History.Text = Native.LastError(_host);
-                }
-                _layoutKey = "";
-                AfterCommand();
-            };
-            LayoutTabs.Children.Add(tab);
-        }
-    }
-
-    private void ShowDocuments(ChromeState state)
+    /// <summary>Bottom status strip: open drawings (model space only) + Nameplate button.</summary>
+    private void ShowDrawingTabs(ChromeState state)
     {
         _documents.Clear();
         _documents.AddRange(state.Documents);
         var active = _documents.FirstOrDefault(doc => doc.Active);
-        Title = active == null || active.Title.Length == 0 ? "O-Draft" : "O-Draft â€” " + active.Title;
-        var key = (_start ? "start\n" : "draw\n") + string.Join("\n", _documents.Select(doc => doc.Index + ":" + doc.Title + ":" + doc.Dirty + ":" + doc.Active));
+        Title = active == null || active.Title.Length == 0 ? "O-Draft" : "O-Draft — " + active.Title;
+        var key = string.Join("\n", _documents.Select(doc => doc.Index + ":" + doc.Title + ":" + doc.Dirty + ":" + doc.Active));
         if (key == _docKey)
         {
             return;
         }
         _docKey = key;
         _buildingTabs = true;
-        FileTabs.TabItems.Clear();
-        var start = new TabViewItem
-        {
-            Header = TabLabel("Start"),
-            IsClosable = false,
-            MinWidth = 88,
-        };
-        AutomationProperties.SetName(start, "Start page");
-        FileTabs.TabItems.Add(start);
-        var selected = 0;
+        DrawingTabs.Children.Clear();
         foreach (var doc in _documents.ToList())
         {
-            var title = doc.Dirty ? doc.Title + " *" : doc.Title;
-            var tab = new TabViewItem
+            var drawing = doc;
+            var title = drawing.Dirty ? drawing.Title + " *" : drawing.Title;
+            var current = drawing.Active;
+            var tab = new Button
             {
-                Header = TabLabel(title),
-                IsClosable = true,
-                MinWidth = 120,
-                Tag = doc.Index,
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = Density.SpaceXs,
+                    Children =
+                    {
+                        new DrawnIcon { Kind = "model" },
+                        new TextBlock
+                        {
+                            Text = title,
+                            MaxWidth = 140,
+                            FontSize = Density.FontCaption,
+                            TextTrimming = TextTrimming.CharacterEllipsis,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            FontWeight = current ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+                        },
+                    },
+                },
+                MinHeight = Density.ControlHeight,
+                Padding = new Thickness(6, 2, 6, 2),
             };
-            AutomationProperties.SetName(tab, doc.Active ? "Current drawing " + doc.Title : "Switch to " + doc.Title);
-            FileTabs.TabItems.Add(tab);
-            if (!_start && doc.Active)
+            AutomationProperties.SetName(tab, current ? "Current drawing " + drawing.Title : "Switch to " + drawing.Title);
+            tab.Click += (_, _) => SwitchDrawing(drawing.Index);
+            var close = new Button
             {
-                selected = FileTabs.TabItems.Count - 1;
-            }
+                Content = "×",
+                Width = 22,
+                Height = Density.ControlHeight,
+                MinWidth = 22,
+                MinHeight = Density.ControlHeight,
+                Padding = new Thickness(0),
+                FontSize = Density.FontBody,
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                Visibility = current ? Visibility.Visible : Visibility.Collapsed,
+            };
+            AutomationProperties.SetName(close, "Close " + drawing.Title);
+            ToolTipService.SetToolTip(close, "Close " + drawing.Title);
+            close.Click += (_, _) => _ = CloseDocument(drawing.Index);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, Children = { tab, close } };
+            DrawingTabs.Children.Add(row);
         }
-        FileTabs.SelectedIndex = selected;
         _buildingTabs = false;
     }
 
-    private static TextBlock TabLabel(string text) => new()
+    private void SwitchDrawing(int index)
     {
-        Text = text,
-        MaxWidth = 180,
-        TextTrimming = TextTrimming.CharacterEllipsis,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
-
-    private void OnNewDrawingTab(TabView sender, object args)
-    {
-        ShowStart(false);
-        StartCommand("new");
-    }
-
-    private void OnDrawingTabSelected(object sender, SelectionChangedEventArgs e)
-    {
-        if (_buildingTabs || _host == IntPtr.Zero || FileTabs.SelectedItem is not TabViewItem tab)
+        if (_buildingTabs || _host == IntPtr.Zero)
         {
-            return;
-        }
-        if (tab.Tag is not int index)
-        {
-            ShowStart(true);
             return;
         }
         var doc = _documents.FirstOrDefault(item => item.Index == index);
-        if (!_start && doc is { Active: true })
+        if (doc is { Active: true })
         {
+            EnsureModelSpace();
+            AfterCommand();
             return;
         }
-        ShowStart(false);
-        if (doc is not { Active: true } && Native.Execute(_host, "document.switch", JsonSerializer.Serialize(new Dictionary<string, object> { ["index"] = index })) != 0)
+        if (Native.Execute(_host, "document.switch", JsonSerializer.Serialize(new Dictionary<string, object> { ["index"] = index })) != 0)
         {
             History.Text = Native.LastError(_host);
         }
+        EnsureModelSpace();
         _docKey = "";
-        _layoutKey = "";
         _panelKey = "";
         AfterCommand();
-    }
-
-    private void OnDrawingTabClose(TabView sender, TabViewTabCloseRequestedEventArgs args)
-    {
-        if (args.Item is TabViewItem tab && tab.Tag is int index)
-        {
-            _ = CloseDocument(index);
-        }
     }
 
     private async Task CloseDocument(int index)
@@ -4095,7 +4408,6 @@ public sealed partial class MainWindow : Window
                 Native.Execute(_host, "new", "{}");
             }
             _panelKey = "";
-            _layoutKey = "";
             AfterCommand();
         }
         finally
@@ -4194,11 +4506,67 @@ public sealed partial class MainWindow : Window
     private void ApplyChrome()
     {
         Bar.Visibility = _showMenu ? Visibility.Visible : Visibility.Collapsed;
-        FileTabs.Visibility = _showTabs ? Visibility.Visible : Visibility.Collapsed;
-        PlaceCommandBar();
         StatusRow.Visibility = _showStatus ? Visibility.Visible : Visibility.Collapsed;
-        StartPage.Visibility = _start ? Visibility.Visible : Visibility.Collapsed;
+        PlaceCommandBar();
         ApplyColumns();
+    }
+
+    private string SelectedSideTabLabel() =>
+        SideTabs.SelectedItem switch
+        {
+            var t when ReferenceEquals(t, LayersTab) => "Layer",
+            var t when ReferenceEquals(t, BlocksTab) => "Blocks",
+            _ => "Properties",
+        };
+
+    /// <summary>Collapsed rail: rotated label of the selected panel only.</summary>
+    private void ApplySideRailLabel()
+    {
+        const double railW = 28;
+        var label = SelectedSideTabLabel();
+        SideRailLabel.Text = label;
+        SideRailLabel.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        var textW = Math.Max(1, SideRailLabel.DesiredSize.Width);
+        var textH = Math.Max(1, SideRailLabel.DesiredSize.Height);
+        SideRailLabel.RenderTransformOrigin = new Windows.Foundation.Point(0, 0);
+        SideRailLabel.RenderTransform = new TransformGroup
+        {
+            Children =
+            {
+                new RotateTransform { Angle = 90 },
+                new TranslateTransform { X = (railW + textH) / 2, Y = 8 },
+            },
+        };
+        Canvas.SetLeft(SideRailLabel, 0);
+        Canvas.SetTop(SideRailLabel, 0);
+        SideRailCanvas.Height = textW + 24;
+        ToolTipService.SetToolTip(SideRail, label + ". Move the pointer here to open the side panel.");
+        AutomationProperties.SetName(SideRail, label + ". Move the pointer here to open the side panel.");
+    }
+
+    /// <summary>When the panel is open, only the selected tab is visible (no other tab headers).</summary>
+    private void ApplySelectedSideTabOnly()
+    {
+        var current = SideTabs.SelectedItem as TabViewItem ?? PropertiesTab;
+        if (!ReferenceEquals(SideTabs.SelectedItem, current))
+        {
+            SideTabs.SelectedItem = current;
+        }
+        PropertiesTab.Visibility = ReferenceEquals(current, PropertiesTab) ? Visibility.Visible : Visibility.Collapsed;
+        LayersTab.Visibility = ReferenceEquals(current, LayersTab) ? Visibility.Visible : Visibility.Collapsed;
+        BlocksTab.Visibility = ReferenceEquals(current, BlocksTab) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnSideRailTapped(object sender, TappedRoutedEventArgs e)
+    {
+        var tab = SideTabs.SelectedItem switch
+        {
+            var t when ReferenceEquals(t, LayersTab) => SideTab.Layers,
+            var t when ReferenceEquals(t, BlocksTab) => SideTab.Blocks,
+            _ => SideTab.Properties,
+        };
+        ShowSidePanel(tab);
+        e.Handled = true;
     }
 
     private void ApplyColumns()
@@ -4211,24 +4579,27 @@ public sealed partial class MainWindow : Window
         {
             RebuildArchitectureBar();
         }
-        ArchColumn.Width = tools ? GridLength.Auto : new GridLength(0);
-        ArchBarHost.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
+        // Layer / Floor always sit on the strip under the menu; tool icons only in Classic.
+        ArchBarHost.Visibility = Visibility.Visible;
+        if (ArchToolsDivider != null)
+        {
+            ArchToolsDivider.Visibility = tools && ArchBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        ArchBar.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
         var leftOpen = _leftFloat != null || _pinLeft || _hoverLeft || !_leftCollapsed;
         // Floated panels leave only the context/pin strip in the dock.
-        // Unpinned panels collapse to a rail pinned on the right edge.
+        // Unpinned panels collapse to a narrow rail labelled with the selected panel.
         var dockWidth = _leftFloat != null ? Math.Min(_leftWidth, 200) : _leftWidth;
-        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth : 36);
+        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth : 28);
         SideRail.Visibility = leftOpen ? Visibility.Collapsed : Visibility.Visible;
         LeftColumn.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
         if (!leftOpen)
         {
-            var header = (SideTabs.SelectedItem as TabViewItem)?.Header?.ToString();
-            if (string.IsNullOrEmpty(header))
-            {
-                header = "Properties";
-            }
-            SideRailLabel.Text = string.Join('\n', header);
-            AutomationProperties.SetName(SideRail, header + ". Move the pointer here to open the side panel.");
+            ApplySideRailLabel();
+        }
+        else
+        {
+            ApplySelectedSideTabOnly();
         }
         LeftSplitterColumn.Width = leftOpen && _leftFloat == null ? new GridLength(8) : new GridLength(0);
         LeftSplitter.Visibility = leftOpen && _leftFloat == null ? Visibility.Visible : Visibility.Collapsed;
@@ -4315,7 +4686,6 @@ public sealed partial class MainWindow : Window
         ClearShellItems(window);
         CheckItem(window, "Menu bar", () => _showMenu, value => _showMenu = value);
         CheckItem(window, "Tool bar", () => _showTools, value => _showTools = value);
-        CheckItem(window, "File tabs", () => _showTabs, value => _showTabs = value);
         CheckItem(window, "Status bar", () => _showStatus, value => _showStatus = value);
         CheckItem(window, "Command line", () => _showCommand, value => _showCommand = value);
         CheckItem(window, "Pin side panels", () => _pinLeft, value =>
@@ -4328,13 +4698,14 @@ public sealed partial class MainWindow : Window
         CommandItem(window, "Properties", () => ShowSidePanel(SideTab.Properties));
         CommandItem(window, "Layers palette", () => ShowSidePanel(SideTab.Layers));
         CommandItem(window, "Blocks", () => ShowSidePanel(SideTab.Blocks));
+        CommandItem(window, "Parameters Manager", OpenParameters);
         CommandItem(window, "Classic workspace", () => SwitchWorkspace(classic: true));
         CommandItem(window, "Pro workspace", () => SwitchWorkspace(classic: false));
         CommandItem(window, "Reset this workspace", ResetCurrentWorkspace);
         CommandItem(window, "Calculator", OpenCalculator);
         CommandItem(window, "Pomodoro", OpenPomodoro);
         CommandItem(window, "Customize tool bar", OpenTools);
-        CommandItem(window, "Start page", () => ShowStart(true));
+        CommandItem(window, "Nameplate designer", () => OnNameplateDesigner(this, new RoutedEventArgs()));
         CommandItem(window, "UCS icon", () =>
         {
             _ucs = !_ucs;
@@ -4370,20 +4741,25 @@ public sealed partial class MainWindow : Window
             SideTab.Blocks => BlocksTab,
             _ => PropertiesTab,
         };
+        // Make the chosen tab visible before selecting it (others stay collapsed).
+        PropertiesTab.Visibility = ReferenceEquals(item, PropertiesTab) ? Visibility.Visible : Visibility.Collapsed;
+        LayersTab.Visibility = ReferenceEquals(item, LayersTab) ? Visibility.Visible : Visibility.Collapsed;
+        BlocksTab.Visibility = ReferenceEquals(item, BlocksTab) ? Visibility.Visible : Visibility.Collapsed;
         SideTabs.SelectedItem = item;
+        ApplySelectedSideTabOnly();
     }
 
     private void CheckItem(MenuBarItem menu, string label, Func<bool> read, Action<bool> write)
     {
         var item = new MenuFlyoutItem
         {
-            Text = (read() ? "âœ“ " : "") + label,
+            Text = (read() ? "? " : "") + label,
             Tag = "shell.toggle." + label,
         };
         item.Click += (_, _) =>
         {
             write(!read());
-            item.Text = (read() ? "âœ“ " : "") + label;
+            item.Text = (read() ? "? " : "") + label;
             ApplyChrome();
             SaveShell();
         };
@@ -4472,8 +4848,7 @@ public sealed partial class MainWindow : Window
         Density.Apply(host);
         ApplyColumns();
         PlaceChild();
-        window.Activate();
-        Native.ShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(window), 8);
+        PresentToolWindow(window);
     }
 
     private void OnColumnEntered(object sender, PointerRoutedEventArgs e)
@@ -4502,27 +4877,6 @@ public sealed partial class MainWindow : Window
         _hoverLeft = false;
         _leftIdleSince = DateTime.UtcNow;
     }
-
-    private void ShowStart(bool show)
-    {
-        _start = show;
-        ApplyChrome();
-        PlaceChild();
-    }
-
-    private void OnStartNew(object sender, RoutedEventArgs e)
-    {
-        ShowStart(false);
-        StartCommand("new");
-    }
-
-    private void OnStartOpen(object sender, RoutedEventArgs e)
-    {
-        ShowStart(false);
-        StartCommand("open");
-    }
-
-    private void OnStartClose(object sender, RoutedEventArgs e) => ShowStart(false);
 
     private void OnAssistantAllow(object sender, RoutedEventArgs e)
     {
@@ -4596,6 +4950,11 @@ public sealed partial class MainWindow : Window
         _chrome.Attach(CommandBar, WindowNative.GetWindowHandle(this));
         _chrome.WireCad(OnCadKey, OnDraft, OnCadCharacter, OnSuggestPick);
         CommandBar.SizeChanged += (_, _) => PlaceCommandBar();
+        StatusRow.SizeChanged += (_, _) => PlaceCommandBar();
+        if (StatusRow.Parent is FrameworkElement statusBand)
+        {
+            statusBand.SizeChanged += (_, _) => PlaceCommandBar();
+        }
     }
 
     private void SetHistoryOpen(bool open)
@@ -4604,6 +4963,11 @@ public sealed partial class MainWindow : Window
         HistoryList.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         HistoryGlyph.Glyph = open ? "\uE70E" : "\uE70D";
         PlaceCommandBar();
+    }
+
+    private void SyncAskPills()
+    {
+        // Queued / Ask tags removed ? pill input only.
     }
 
     private void OnHistoryToggle(object sender, RoutedEventArgs e) => SetHistoryOpen(!_historyOpen);
@@ -4615,9 +4979,10 @@ public sealed partial class MainWindow : Window
             return;
         }
         _armSpace = false;
-        CommandInput.Text = line;
-        CommandInput.SelectionStart = line.Length;
-        CommandInput.Focus(FocusState.Programmatic);
+        SetHistoryOpen(false);
+        AiInput.Text = line;
+        AiInput.SelectionStart = line.Length;
+        AiInput.Focus(FocusState.Programmatic);
     }
 
     private void OnClearHistory(object sender, RoutedEventArgs e)
@@ -4626,15 +4991,15 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        var clear = new Button { Content = "Clear", MinWidth = 96, MinHeight = Density.ControlHeight };
-        var cancel = new Button { Content = "Cancel", MinWidth = 96, MinHeight = Density.ControlHeight };
+        var clear = Density.DialogAction("Clear", primary: true);
+        var cancel = Density.DialogAction("Cancel");
         Density.Name(clear, "Clear history");
-        Density.Name(cancel, "Cancel");
         var text = new TextBlock
         {
             Text = "Clear the command history? This cannot be undone. The drawing and the current command stay as they are.",
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 420,
+            FontSize = Density.FontBody,
         };
         Density.Name(text, text.Text);
         var buttons = new StackPanel
@@ -4644,7 +5009,7 @@ public sealed partial class MainWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             Children = { clear, cancel },
         };
-        var root = new StackPanel { Spacing = Density.SpaceLg, Margin = new Thickness(Density.SpaceXl), Children = { text, buttons } };
+        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, Children = { text, buttons } };
         var theme = ShellChrome.ThemeOf(this);
         root.RequestedTheme = theme;
         var window = new Window { Title = "Clear command history", Content = root };
@@ -4669,8 +5034,7 @@ public sealed partial class MainWindow : Window
             SyncHistory();
             RefreshChrome();
         };
-        window.Activate();
-        Native.ShowWindow(WindowNative.GetWindowHandle(window), 8);
+        PresentToolWindow(window);
     }
 
     private static bool IsCommandControl(DependencyObject source)
@@ -4697,10 +5061,6 @@ public sealed partial class MainWindow : Window
                 lines.Add(line);
             }
         }
-        Recent0.Text = lines.Count >= 2 ? lines[^2] : "";
-        Recent1.Text = lines.Count >= 1 ? lines[^1] : "";
-        // Empty TextBlocks still consume line height â€” hide the preview when there is nothing to show.
-        RecentHost.Visibility = lines.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (text == _historyShown)
         {
             return;
@@ -4715,13 +5075,14 @@ public sealed partial class MainWindow : Window
         {
             HistoryList.ScrollIntoView(HistoryList.Items[HistoryList.Items.Count - 1]);
         }
+        PlaceCommandBar();
     }
 
     private void UpdateDyn()
     {
-        if (_chrome == null || _host == IntPtr.Zero || _start || !_showCommand)
+        if (_chrome == null || _host == IntPtr.Zero || !_showCommand)
         {
-            _chrome?.ShowCad(false, 0, 0, 0, 0, "", false, "", "", "", "", 0);
+            HideDyn();
             return;
         }
         try
@@ -4735,7 +5096,7 @@ public sealed partial class MainWindow : Window
                     _dynAccess = "";
                     AnnouncePrompt("Command:", "");
                 }
-                _chrome.ShowCad(false, 0, 0, 0, 0, "", false, "", "", "", "", 0);
+                HideDyn();
                 return;
             }
             if (!TryCanvas(out var origin, out var canvasW, out var canvasH, out var scale))
@@ -4772,9 +5133,9 @@ public sealed partial class MainWindow : Window
             }
             _chrome.CadInput.PlaceholderText = "";
             var suggestH = SuggestList is { Visibility: Visibility.Visible, Items.Count: > 0 }
-                ? Math.Min(36.0, SuggestList.Items.Count * CommandChrome.DynHeightDip + 2.0)
+                ? Math.Min(54.0, SuggestList.Items.Count * CommandChrome.DynHeightDip + 2.0)
                 : 0.0;
-            // Half the previous 140Ã—36 DIP cursor field. Typed text only.
+            // Cursor field is typed text only (no chrome box); 1.5× prior half-size.
             var dipW = CommandChrome.DynWidthDip;
             var dipH = CommandChrome.DynHeightDip + suggestH;
             var left = origin.X + px / scale + 18;
@@ -4793,25 +5154,48 @@ public sealed partial class MainWindow : Window
             {
                 return;
             }
-            _chrome.ShowCad(true, sx, sy, (int)Math.Round(dipW * scale), (int)Math.Round(dipH * scale), prompt, false, "", "", "", "", 0);
+            var pixelW = Math.Max(1, (int)Math.Round(dipW * scale));
+            var pixelH = Math.Max(1, (int)Math.Round(dipH * scale));
+            if (_lastDynOn && _lastDynX == sx && _lastDynY == sy && _lastDynW == pixelW && _lastDynH == pixelH)
+            {
+                return;
+            }
+            _lastDynOn = true;
+            _lastDynX = sx;
+            _lastDynY = sy;
+            _lastDynW = pixelW;
+            _lastDynH = pixelH;
+            _chrome.ShowCad(true, sx, sy, pixelW, pixelH, prompt, false, "", "", "", "", 0);
         }
         catch (JsonException)
         {
-            _chrome.ShowCad(false, 0, 0, 0, 0, "", false, "", "", "", "", 0);
+            HideDyn();
         }
+    }
+
+    private void HideDyn()
+    {
+        if (!_lastDynOn)
+        {
+            return;
+        }
+        _lastDynOn = false;
+        _lastDynX = int.MinValue;
+        _chrome?.ShowCad(false, 0, 0, 0, 0, "", false, "", "", "", "", 0);
     }
 
     private void PlaceCommandBar()
     {
-        if (_chrome == null)
+        if (_chrome == null || _placingBar)
         {
             return;
         }
         var chrome = _chrome;
-        if (!_showCommand || _start || !TryCanvas(out var origin, out var canvasW, out var canvasH, out var scale))
+        if (!_showCommand || !TryCanvas(out var origin, out var canvasW, out var canvasH, out var scale))
         {
             chrome.ShowBar(false);
-            chrome.ShowCad(false, 0, 0, 0, 0, "", false, "", "", "", "", 0);
+            _lastBarX = int.MinValue;
+            HideDyn();
             return;
         }
         // Hide Ask while a CAD command runs so it does not cover the lower drawing (UX-007).
@@ -4819,30 +5203,72 @@ public sealed partial class MainWindow : Window
         if (!string.IsNullOrEmpty(_command) && AssistantButtons.Visibility != Visibility.Visible)
         {
             chrome.ShowBar(false);
+            _lastBarX = int.MinValue;
             return;
         }
-        var available = Math.Max(0, canvasW - 48);
-        var barW = Math.Min(600, available);
-        if (double.IsNaN(CommandBar.Width) || Math.Abs(CommandBar.Width - barW) > 0.5)
+        _placingBar = true;
+        try
         {
-            CommandBar.Width = barW;
-        }
-        var barH = _historyOpen ? 320.0 : RecentHost.Visibility == Visibility.Visible ? 100.0 : 72.0;
-        if (double.IsNaN(CommandBar.Height) || Math.Abs(CommandBar.Height - barH) > 0.5)
-        {
+            var available = Math.Max(0, canvasW - 48);
+            var barW = Math.Min(520, available);
+            if (double.IsNaN(CommandBar.Width) || Math.Abs(CommandBar.Width - barW) > 0.5)
+            {
+                CommandBar.Width = barW;
+            }
+            // Clear prior Height so Measure is content-sized (old tall Height locked an empty card below the pill).
+            CommandBar.ClearValue(FrameworkElement.HeightProperty);
+            CommandBar.ClearValue(FrameworkElement.MaxHeightProperty);
+            const double pillH = 40.0;
+            double barH;
+            if (_historyOpen && HistoryList.Visibility == Visibility.Visible)
+            {
+                CommandBar.Measure(new Windows.Foundation.Size(barW, double.PositiveInfinity));
+                barH = Math.Clamp(Math.Ceiling(CommandBar.DesiredSize.Height) + 2, pillH, 280.0);
+            }
+            else
+            {
+                AskInputPill.Measure(new Windows.Foundation.Size(barW, double.PositiveInfinity));
+                var h = AskInputPill.DesiredSize.Height;
+                barH = h > 1 ? Math.Ceiling(h) : pillH;
+            }
             CommandBar.Height = barH;
+            CommandBar.MaxHeight = barH;
+            // Pin bottom-centre of the canvas column, flush above the status strip (or canvas bottom if hidden).
+            var left = origin.X + Math.Max(0, (canvasW - barW) / 2);
+            left = Math.Clamp(left, origin.X + 8, Math.Max(origin.X + 8, origin.X + canvasW - barW - 8));
+            var top = origin.Y + Math.Max(8, canvasH - barH - 8);
+            if (Content is FrameworkElement root
+                && _showStatus
+                && StatusRow.Visibility == Visibility.Visible
+                && StatusRow.ActualHeight > 0)
+            {
+                var statusBand = StatusRow.Parent as FrameworkElement ?? StatusRow;
+                var statusTop = statusBand.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+                top = statusTop - barH - 8;
+            }
+            top = Math.Max(8, top);
+            if (!ClientToScreen(left, top, out var sx, out var sy))
+            {
+                return;
+            }
+            var pixelW = Math.Max(1, (int)Math.Round(barW * scale));
+            var pixelH = Math.Max(1, (int)Math.Round(barH * scale));
+            if (_lastBarX == sx && _lastBarY == sy && _lastBarW == pixelW && _lastBarH == pixelH)
+            {
+                chrome.ShowBar(true);
+                return;
+            }
+            _lastBarX = sx;
+            _lastBarY = sy;
+            _lastBarW = pixelW;
+            _lastBarH = pixelH;
+            chrome.ShowBar(true);
+            chrome.PlaceBar(sx, sy, pixelW, pixelH);
         }
-        // Fixed bottom-centre of the drawing canvas (not draggable); extra clearance above the status strip.
-        var left = origin.X + Math.Max(0, (canvasW - barW) / 2);
-        var top = origin.Y + Math.Max(8, canvasH - barH - 40);
-        left = Math.Clamp(left, origin.X + 8, Math.Max(origin.X + 8, origin.X + canvasW - barW - 8));
-        top = Math.Clamp(top, origin.Y + 8, Math.Max(origin.Y + 8, origin.Y + canvasH - barH - 8));
-        if (!ClientToScreen(left, top, out var sx, out var sy))
+        finally
         {
-            return;
+            _placingBar = false;
         }
-        chrome.ShowBar(true);
-        chrome.PlaceBar(sx, sy, Math.Max(1, (int)Math.Round(barW * scale)), Math.Max(1, (int)Math.Round(barH * scale)));
     }
 
     private bool TryCanvas(out Windows.Foundation.Point origin, out double canvasW, out double canvasH, out double scale)
@@ -4932,6 +5358,9 @@ public sealed partial class MainWindow : Window
         public ulong Uid { get; set; }
         public ulong Revision { get; set; }
         public int Selection { get; set; }
+        public string? Hover { get; set; }
+        public string FocusLayer { get; set; } = "";
+        public string FocusBlock { get; set; } = "";
         public List<PropertyRow> Properties { get; set; } = new();
         public List<LayerRow> Layers { get; set; } = new();
         public bool LayersTruncated { get; set; }
@@ -4953,15 +5382,22 @@ public sealed partial class MainWindow : Window
         public bool Locked { get; set; }
         public string Color { get; set; } = "";
         public bool Current { get; set; }
+        public bool Focus { get; set; }
+        public bool Selected { get; set; }
+        public bool Hovered { get; set; }
     }
 
     private sealed class BlockRow
     {
         public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
         public int Entities { get; set; }
         public int References { get; set; }
         public List<string> Handles { get; set; } = new();
         public List<string> Attributes { get; set; } = new();
+        public bool Focus { get; set; }
+        public bool Selected { get; set; }
+        public bool Hovered { get; set; }
     }
 }
 

@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Aad.WinUi;
 
-/// <summary>File &gt; Plot Styles… — tables and style rows via <c>stylesmanager</c> / <c>pagesetup</c>.</summary>
+/// <summary>File &gt; Plot Styles? ? tables and style rows via <c>stylesmanager</c> / <c>pagesetup</c>.</summary>
 internal static class PlotStyleWindow
 {
     private static readonly double[] LineweightsMm = [0.0, 0.09, 0.13, 0.18, 0.25, 0.3, 0.35, 0.5, 0.7, 1.0, 1.4, 2.11];
@@ -216,7 +216,7 @@ internal static class PlotStyleWindow
             desc.Text = detail?.Description ?? "";
             if (!state.InDrawing)
             {
-                desc.Text = (desc.Text.Length == 0 ? "" : desc.Text + " — ") + "Built-in table: editing keeps a copy in the drawing.";
+                desc.Text = (desc.Text.Length == 0 ? "" : desc.Text + " ? ") + "Built-in table: editing keeps a copy in the drawing.";
             }
             delete.IsEnabled = state.InDrawing;
             state.Styles = detail?.Styles ?? new List<StyleRow>();
@@ -302,12 +302,12 @@ internal static class PlotStyleWindow
             if (!byte.TryParse((screening.Text ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var screen)
                 && !byte.TryParse((screening.Text ?? "").Trim(), NumberStyles.Integer, CultureInfo.CurrentCulture, out screen))
             {
-                Fail("Screening must be 0–100.");
+                Fail("Screening must be 0?100.");
                 return;
             }
             if (screen > 100)
             {
-                Fail("Screening must be 0–100.");
+                Fail("Screening must be 0?100.");
                 return;
             }
             object? color = objectColor.IsChecked == true ? null : (object)(string.IsNullOrEmpty(style.Color) ? "#000000" : style.Color);
@@ -455,12 +455,7 @@ internal static class PlotStyleWindow
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static FrameworkElement Labeled(string label, FrameworkElement field)
     {
@@ -474,9 +469,8 @@ internal static class PlotStyleWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 

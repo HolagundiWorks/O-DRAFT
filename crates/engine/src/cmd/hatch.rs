@@ -14,13 +14,13 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("hatch", "Hatch...", run_hatch).menu(&["Draw", "Hatch..."]).alias(&["h", "bh", "-hatch"]).params("{points?: [[x,y]] (internal points) | handles?: [hex] (closed objects), pattern?: \"ANSI31\", scale?, angle? (degrees), associative?}").interactive(|s| Ok(Box::new(HatchM::new(s, false)))),
         CommandSpec::new("boundary", "Boundary...", run_boundary).menu(&["Draw", "Boundary..."]).alias(&["bo", "bpoly"]).params("{points: [[x,y]]}").interactive(|_| Ok(Box::new(BoundaryM { region: false }))),
         CommandSpec::new("region", "Region", run_region).menu(&["Draw", "Region"]).alias(&["reg"]).params("{handles?}"),
-        CommandSpec::new("hatchedit", "Hatch Edit", run_hatchedit)
-            .menu(&["Modify", "Object", "Hatch..."])
+        CommandSpec::new("hatchedit", "Hatch Editor", run_hatchedit)
+            .menu(&["Modify", "Object", "Hatch Editor..."])
             .alias(&["he"])
-            .params("{handles?, pattern?, scale?, angle?} (edit selected hatches; WinUI opens the Hatch Manager)"),
-        CommandSpec::new("hatch.patterns", "Hatch Patterns", run_hatch_patterns)
-            .menu(&["Format", "Hatch..."])
-            .params("{} → {patterns: [{name, description}], defaults: {pattern, scale, angle}} (library + current HPNAME/HPSCALE/HPANG)")
+            .params("{handles?, pattern?, scale?, angle?} (edit selected hatches; WinUI opens the Hatch Editor)"),
+        CommandSpec::new("hatch.patterns", "Hatch Editor", run_hatch_patterns)
+            .menu(&["Format", "Hatch Editor..."])
+            .params("{} → {patterns: [{name, description, preview:{solid,segments}}], defaults: {pattern, scale, angle}} (library + swatches + HPNAME/HPSCALE/HPANG)")
             .noundo(),
     ]
 }
@@ -299,8 +299,16 @@ fn run_hatchedit(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn run_hatch_patterns(s: &mut Session, _p: &Value) -> Result<Value> {
     let d = s.doc()?;
-    let patterns: Vec<Value> =
-        aad_doc::library::standard_patterns().into_iter().map(|pat| json!({ "name": pat.name, "description": pat.description })).collect();
+    let patterns: Vec<Value> = aad_doc::library::standard_patterns()
+        .into_iter()
+        .map(|pat| {
+            json!({
+                "name": pat.name,
+                "description": pat.description,
+                "preview": hatch_pattern_preview(pat.name),
+            })
+        })
+        .collect();
     Ok(json!({
         "patterns": patterns,
         "defaults": {
@@ -309,6 +317,47 @@ fn run_hatch_patterns(s: &mut Session, _p: &Value) -> Result<Value> {
             "angle": d.header.f64("HPANG", 0.0).to_degrees(),
         },
     }))
+}
+
+/// Swatch geometry for the Hatch Editor (unit square, AutoCAD-style sample tile).
+fn hatch_pattern_preview(name: &str) -> Value {
+    if name.eq_ignore_ascii_case("SOLID") {
+        return json!({ "solid": true, "segments": [] });
+    }
+    let square = [
+        aad_geom::Vec2::new(0.0, 0.0),
+        aad_geom::Vec2::new(1.0, 0.0),
+        aad_geom::Vec2::new(1.0, 1.0),
+        aad_geom::Vec2::new(0.0, 1.0),
+    ];
+    let loop_verts: Vec<_> = square.iter().copied().map(aad_geom::PolyVertex::new).collect();
+    let hatch = Hatch {
+        pattern: name.into(),
+        solid: false,
+        loops: vec![HatchLoop { vertices: loop_verts, outer: true }],
+        scale: 1.0,
+        angle: 0.0,
+        associative: false,
+        style: 0,
+        elevation: 0.0,
+        gradient: None,
+        origin: aad_geom::Vec2::ZERO,
+        background: None,
+        pattern_lines: Vec::new(),
+    };
+    let loops = vec![square.to_vec()];
+    let segments: Vec<Value> = aad_render::pattern_lines(&hatch, &loops)
+        .into_iter()
+        .take(500)
+        .map(|seg| {
+            json!(seg.iter().take(64).map(|p| [round6(p.x), round6(p.y)]).collect::<Vec<_>>())
+        })
+        .collect();
+    json!({ "solid": false, "segments": segments })
+}
+
+fn round6(v: f64) -> f64 {
+    (v * 1_000_000.0).round() / 1_000_000.0
 }
 
 /// What a HATCH sub-prompt asks for.

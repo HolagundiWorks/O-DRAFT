@@ -21,19 +21,19 @@ use crate::{Result, Session};
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("schedule", "Schedules", run_schedule)
-            .menu(&["Architecture", "Schedules", "Edit Schedules"])
+            .menu(&["Format", "Opening Schedule", "Edit…"])
             .alias(&["msched", "hcwsched"])
             .params("{openings?: [..], map?: {label: name}, rates?: {takeoff: {unit, rate}}} → {openings, map, rates, warnings} (set replaces the given parts)"),
         CommandSpec::new("openings.std", "Standard Openings", run_std)
-            .menu(&["Architecture", "Schedules", "Standard Openings"])
+            .menu(&["Format", "Opening Schedule", "Standard Openings"])
             .alias(&["hcwopenstd"])
             .params("{} → {added} (doors D1 800, D2 900, D3 1200; windows W1 600 to W5 2000; ventilator V1 600)"),
         CommandSpec::new("openings.sync", "Update Opening Schedule", run_sync)
-            .menu(&["Architecture", "Schedules", "Update Schedule"])
+            .menu(&["Format", "Opening Schedule", "Update Schedule"])
             .alias(&["hcwopensync"])
             .params("{} → {counts, mapped, ambiguous} (counts block references; maps measured openings to the entry of nearest length)"),
         CommandSpec::new("openings.table", "Opening Schedule Table", run_table)
-            .menu(&["Architecture", "Schedules", "Draw Opening Schedule"])
+            .menu(&["Format", "Opening Schedule", "Draw Opening Schedule"])
             .alias(&["hcwopensched", "mschedtable"])
             .params("{at?: [x,y]} (draws the floors, openings and column tables on MEASURE-TABLE)"),
         CommandSpec::new("takeoff.rates", "Take-off Rates", run_rates)

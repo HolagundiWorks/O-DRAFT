@@ -157,14 +157,9 @@ internal sealed class DraftingWindow : Window
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock
-        {
-            Text = text,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
+        var block = Density.SectionHeading(text);
+        block.Margin = new Thickness(0, 8, 0, 0);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 }

@@ -13,9 +13,9 @@ type Tool = (Icon, &'static str, &'static str);
 const BAR: f32 = 34.0;
 const BUTTON: f32 = 26.0;
 
-/// The Architecture toolbar: the built-in architectural tools (menu: Architecture).
+/// The Architecture toolbar: drawing tools (layer set is under Format, not here).
 pub const ARCHITECTURE: &[Tool] =
-    &[(Icon::Layers, "hcwlayers", "Architectural Layer Set"), (Icon::Boundary, "room", "Room Label"), (Icon::Area, "rarea", "Room Area")];
+    &[(Icon::Boundary, "room", "Room Label"), (Icon::Area, "rarea", "Room Area")];
 
 /// The tools of the named groups of [`DRAFTING`], large ones first.
 fn tools(groups: &[&str]) -> Vec<Tool> {

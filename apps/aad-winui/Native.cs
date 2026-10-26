@@ -686,6 +686,15 @@ internal static class Native
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    /// <summary>SW_SHOWNA — show without activating (keeps tool/dialog focus).</summary>
+    public const int SwShowNa = 8;
+
+    [DllImport("user32.dll")]
     public static extern bool GetCursorPos(out PointI point);
 
     [DllImport("user32.dll")]
@@ -721,6 +730,146 @@ internal static class Native
         _ = DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int));
     }
 
+    /// <summary>DWMWA_SYSTEMBACKDROP_TYPE = None — no Mica/Acrylic plate behind transparent XAML.</summary>
+    public static void NoBackdrop(IntPtr hwnd)
+    {
+        var none = 1; // DWMSBT_NONE
+        _ = DwmSetWindowAttribute(hwnd, 38, ref none, sizeof(int));
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Margins
+    {
+        public int Left;
+        public int Right;
+        public int Top;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BlurBehind
+    {
+        public uint Flags;
+        public int Enable;
+        public IntPtr Region;
+        public int TransitionOnMaximized;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DispatcherQueueOptions
+    {
+        public int Size;
+        public int ThreadType;
+        public int ApartmentType;
+    }
+
+    private static IntPtr _dispatcherQueueController;
+    private static readonly Dictionary<IntPtr, SubclassProc> ClearSubclass = new();
+    private static IntPtr _clearBrush;
+
+    private delegate IntPtr SubclassProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr id, IntPtr data);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins margins);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmEnableBlurBehindWindow(IntPtr hwnd, ref BlurBehind blur);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRectRgn(int x1, int y1, int x2, int y2);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateSolidBrush(int color);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr obj);
+
+    [DllImport("user32.dll")]
+    private static extern int FillRect(IntPtr hdc, ref RectI rect, IntPtr brush);
+
+    [DllImport("comctl32.dll", SetLastError = true)]
+    private static extern bool SetWindowSubclass(IntPtr hwnd, SubclassProc proc, IntPtr id, IntPtr data);
+
+    [DllImport("comctl32.dll")]
+    private static extern IntPtr DefSubclassProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("CoreMessaging.dll")]
+    private static extern int CreateDispatcherQueueController(DispatcherQueueOptions options, out IntPtr controller);
+
+    /// <summary>Windows.UI.Composition needs a dispatcher queue on this thread.</summary>
+    public static void EnsureDispatcherQueue()
+    {
+        if (Windows.System.DispatcherQueue.GetForCurrentThread() != null || _dispatcherQueueController != IntPtr.Zero)
+        {
+            return;
+        }
+        var options = new DispatcherQueueOptions
+        {
+            Size = Marshal.SizeOf<DispatcherQueueOptions>(),
+            ThreadType = 2,
+            ApartmentType = 2,
+        };
+        _ = CreateDispatcherQueueController(options, out _dispatcherQueueController);
+    }
+
+    /// <summary>
+    /// Punch a see-through client area for floating CAD chrome: extend DWM frame, enable a
+    /// zero-area blur region, and erase the GDI background so hatch shows through.
+    /// </summary>
+    public static void MakeWindowClear(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+        NoBackdrop(hwnd);
+        var margins = new Margins();
+        _ = DwmExtendFrameIntoClientArea(hwnd, ref margins);
+        var region = CreateRectRgn(-2, -2, -1, -1);
+        var blur = new BlurBehind
+        {
+            Flags = 0x1 | 0x2,
+            Enable = 1,
+            Region = region,
+            TransitionOnMaximized = 0,
+        };
+        _ = DwmEnableBlurBehindWindow(hwnd, ref blur);
+        if (region != IntPtr.Zero)
+        {
+            _ = DeleteObject(region);
+        }
+        if (!ClearSubclass.ContainsKey(hwnd))
+        {
+            SubclassProc proc = ClearEraseBackground;
+            if (SetWindowSubclass(hwnd, proc, new IntPtr(1), IntPtr.Zero))
+            {
+                ClearSubclass[hwnd] = proc;
+            }
+        }
+    }
+
+    private static IntPtr ClearEraseBackground(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr id, IntPtr data)
+    {
+        if (msg == 0x0014) // WM_ERASEBKGND
+        {
+            if (GetClientRect(hwnd, out var rect))
+            {
+                if (_clearBrush == IntPtr.Zero)
+                {
+                    _clearBrush = CreateSolidBrush(0);
+                }
+                _ = FillRect(wParam, ref rect, _clearBrush);
+                return new IntPtr(1);
+            }
+        }
+        if (msg == 0x031E) // WM_DWMCOMPOSITIONCHANGED
+        {
+            MakeWindowClear(hwnd);
+            return IntPtr.Zero;
+        }
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
+    }
+
     public static void Frame(IntPtr hwnd, int borderColor, bool dark)
     {
         const long caption = 0x00C00000;
@@ -740,6 +889,7 @@ internal static class Native
         _ = DwmSetWindowAttribute(hwnd, 20, ref mode, sizeof(int));
         _ = DwmSetWindowAttribute(hwnd, 34, ref borderColor, sizeof(int));
         _ = DwmSetWindowAttribute(hwnd, 35, ref borderColor, sizeof(int));
+        NoBackdrop(hwnd);
     }
 
     [DllImport("user32.dll")]

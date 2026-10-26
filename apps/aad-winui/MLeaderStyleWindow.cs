@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Aad.WinUi;
 
-/// <summary>Format &gt; Multileader Style… — list, set current, create, edit via <c>mleaderstyle</c>.</summary>
+/// <summary>Format &gt; Multileader Style? ? list, set current, create, edit via <c>mleaderstyle</c>.</summary>
 internal static class MLeaderStyleWindow
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -27,7 +27,7 @@ internal static class MLeaderStyleWindow
 
         var list = new ListBox { MinHeight = 160, MinWidth = 160 };
         Density.Name(list, "Multileader styles");
-        var currentLabel = Density.Secondary("Current style: —", TextWrapping.Wrap);
+        var currentLabel = Density.Secondary("Current style: ?", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current multileader style");
         var setCurrent = ActionButton("Set Current");
         var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = 140 };
@@ -309,12 +309,7 @@ internal static class MLeaderStyleWindow
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static TextBox Field(string name)
     {
@@ -335,9 +330,8 @@ internal static class MLeaderStyleWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 

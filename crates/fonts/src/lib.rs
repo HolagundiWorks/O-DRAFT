@@ -21,6 +21,9 @@ pub use mtext::{MTextColor, MTextLayout, MTextParams, MTextPiece, layout_mtext, 
 pub const BUILTIN_FONT: &str = "AAD Stroke";
 /// The name older drawings give the built-in font (before the rename to AAD): still recognised.
 pub const LEGACY_BUILTIN_FONT: &str = "CADCraft Stroke";
+/// Face used for all drawing text (TEXT / MTEXT / dims / tables / linetype text).
+/// Style font names are ignored; height, width factor, and oblique stay on the entity/style.
+pub const DRAWING_FONT: &str = "Segoe UI";
 
 /// Whether `name` is the built-in stroke font under its current or its earlier name.
 pub fn is_builtin_font(name: &str) -> bool {
@@ -196,21 +199,66 @@ pub enum TextFont {
 }
 
 impl TextFont {
-    /// Resolve a text style font name: an installed TTF/OTF/TTC when found; else, for a font we
-    /// can't find (an SHX file, a missing TTF), the FONTALT font ([`ttf::font_alt`]) when set;
-    /// else the stroke font.
-    pub fn resolve(name: &str) -> TextFont {
-        if let Some(f) = ttf::find(name) {
-            return TextFont::Outline(f);
-        }
-        let n = name.trim();
-        if n.is_empty() || is_builtin_font(n) {
-            return TextFont::Stroke;
+    /// Resolve a text style font name for drawing.
+    ///
+    /// All drawing text uses [`DRAWING_FONT`] (Segoe UI). The style/entity `name` is ignored for
+    /// face selection so SHX and foreign TTF styles render with the same family; height, width
+    /// factor, and oblique are applied later in [`shape_line`] / [`place`].
+    pub fn resolve(_name: &str) -> TextFont {
+        Self::drawing_face(false, false)
+    }
+
+    /// Segoe UI face for drawing text, with optional bold/italic (MTEXT `\f…|b1|i1`).
+    pub fn drawing_face(bold: bool, italic: bool) -> TextFont {
+        for cand in drawing_face_candidates(bold, italic) {
+            if let Some(f) = ttf::find(&cand) {
+                return TextFont::Outline(f);
+            }
         }
         ttf::find(&ttf::font_alt()).map(TextFont::Outline).unwrap_or(TextFont::Stroke)
     }
+
     pub fn is_outline(&self) -> bool {
         matches!(self, TextFont::Outline(_))
+    }
+}
+
+/// Candidate face names for Segoe UI (and a last-resort Arial) under Windows naming.
+fn drawing_face_candidates(bold: bool, italic: bool) -> Vec<&'static str> {
+    match (bold, italic) {
+        (true, true) => vec![
+            "Segoe UI Bold Italic",
+            "segoeuiz",
+            "Segoe UI Bold",
+            "segoeuib",
+            DRAWING_FONT,
+            "segoeui",
+            "Arial Bold Italic",
+            "Arial",
+        ],
+        (true, false) => vec![
+            "Segoe UI Bold",
+            "segoeuib",
+            "Segoe UI Semibold",
+            DRAWING_FONT,
+            "segoeui",
+            "Arial Bold",
+            "Arial",
+        ],
+        (false, true) => vec![
+            "Segoe UI Italic",
+            "segoeuii",
+            DRAWING_FONT,
+            "segoeui",
+            "Arial Italic",
+            "Arial",
+        ],
+        (false, false) => vec![
+            DRAWING_FONT,
+            "segoeui",
+            "Segoe UI Variable",
+            "Arial",
+        ],
     }
 }
 
@@ -561,15 +609,27 @@ mod ttf_tests {
     }
 
     #[test]
-    fn font_alt_that_is_not_installed_keeps_the_stroke_font() {
+    fn font_alt_list_still_parses_and_drawing_face_ignores_style_name() {
         crate::ttf::set_fallback_fonts(" no-such-font-130 ; . ,other-missing ");
         assert_eq!(crate::ttf::fallback_fonts(), "no-such-font-130, other-missing");
         crate::ttf::set_fallback_fonts("");
         crate::ttf::set_font_alt("no-such-font-130");
         assert_eq!(crate::ttf::font_alt(), "no-such-font-130");
-        assert!(!crate::TextFont::resolve("romans.shx").is_outline());
+        // Drawing text always prefers Segoe UI when installed (style name is ignored).
+        if crate::ttf::find(crate::DRAWING_FONT).is_some() || crate::ttf::find("segoeui").is_some() {
+            assert!(crate::TextFont::resolve("romans.shx").is_outline());
+            assert!(crate::TextFont::resolve("Arial").is_outline());
+        }
         crate::ttf::set_font_alt(".");
         assert_eq!(crate::ttf::font_alt(), "");
+    }
+
+    #[test]
+    fn drawing_text_preserves_height_when_forcing_segoe() {
+        let font = crate::TextFont::resolve("txt.shx");
+        let a = crate::shape_line(&font, "AB", 2.5, 1.0, 0.0);
+        let b = crate::shape_line(&font, "AB", 5.0, 1.0, 0.0);
+        assert!(a.width > 0.0 && b.width > a.width * 1.5, "height must scale advances");
     }
 
     #[test]

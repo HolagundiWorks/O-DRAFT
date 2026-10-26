@@ -236,9 +236,8 @@ pub fn chrome_json(session: &Session, cursor: Option<aad_geom::Vec2>, draft: &st
 }
 
 fn units_label(session: &Session) -> String {
-    let Ok(drawing) = session.doc() else { return "Units".into() };
-    let drawn = aad_engine::annot::drawing_unit(drawing).map_or("units?", |unit| unit.name());
-    let shown = aad_engine::annot::display_unit(drawing).map_or(drawn, |unit| unit.name());
-    let scale = drawing.header.f64("AADPLOTSCALE", 0.0);
-    if scale > 0.0 { format!("{drawn} → {shown}  1:{scale}") } else { format!("{drawn} → {shown}") }
+    // Drafting unit only (INSUNITS). Geometry is stored in these units; plot scale is separate.
+    let Ok(drawing) = session.doc() else { return "units?".into() };
+    aad_engine::annot::drawing_unit(drawing)
+        .map_or_else(|| "units?".into(), |unit| unit.name().to_string())
 }

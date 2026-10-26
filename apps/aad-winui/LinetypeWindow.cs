@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Aad.WinUi;
 
-/// <summary>Format &gt; Linetype… — load library patterns, set current, global scale.</summary>
+/// <summary>Format &gt; Linetype? ? load library patterns, set current, global scale.</summary>
 internal static class LinetypeWindow
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -26,9 +26,9 @@ internal static class LinetypeWindow
 
         var list = new ListBox { MinHeight = 220, MinWidth = 280 };
         Density.Name(list, "Linetypes");
-        var currentLabel = Density.Secondary("Current linetype: —", TextWrapping.Wrap);
+        var currentLabel = Density.Secondary("Current linetype: ?", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current linetype");
-        var load = new ComboBox { MinWidth = 140, MinHeight = Density.ControlHeight, PlaceholderText = "Load…" };
+        var load = new ComboBox { MinWidth = 140, MinHeight = Density.ControlHeight, PlaceholderText = "Load?" };
         Density.Name(load, "Load linetype");
         var setCurrent = ActionButton("Current");
         var scale = new TextBox { MinHeight = Density.ControlHeight, Width = 100 };
@@ -57,27 +57,38 @@ internal static class LinetypeWindow
 
         void Fail(string message) => status.Text = message;
 
-        bool Run(string command, object body)
+        string? ExecuteJson(string command, object body)
         {
             if (Native.Execute(host, command, JsonSerializer.Serialize(body, JsonOpts)) != 0)
             {
                 Fail(Native.LastError(host));
+                return null;
+            }
+            var json = Native.ReadResult(host);
+            status.Text = "";
+            return json;
+        }
+
+        bool Run(string command, object body)
+        {
+            if (ExecuteJson(command, body) is null)
+            {
                 return false;
             }
-            status.Text = "";
             changed();
             return true;
         }
 
         string GetVar(string name)
         {
-            if (Native.Execute(host, "getvar", JsonSerializer.Serialize(new { name }, JsonOpts)) != 0)
+            var json = ExecuteJson("getvar", new { name });
+            if (json is null)
             {
                 return "";
             }
             try
             {
-                using var doc = JsonDocument.Parse(Native.ReadResult(host));
+                using var doc = JsonDocument.Parse(json);
                 if (!doc.RootElement.TryGetProperty("value", out var value))
                 {
                     return "";
@@ -97,13 +108,15 @@ internal static class LinetypeWindow
 
         void Reload()
         {
-            if (!Run("linetype", new { }))
+            // Snapshot before AfterCommand overwrites the host result (e.g. vdb.status).
+            var listJson = ExecuteJson("linetype", new { });
+            if (listJson is null)
             {
                 return;
             }
             try
             {
-                using var doc = JsonDocument.Parse(Native.ReadResult(host));
+                using var doc = JsonDocument.Parse(listJson);
                 var current = GetVar("CELTYPE");
                 if (current.Length == 0)
                 {
@@ -129,7 +142,7 @@ internal static class LinetypeWindow
                             continue;
                         }
                         var desc = row.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
-                        list.Items.Add(desc.Length == 0 ? name : name + " — " + desc);
+                        list.Items.Add(desc.Length == 0 ? name : name + " ? " + desc);
                     }
                 }
                 library.Clear();
@@ -150,12 +163,13 @@ internal static class LinetypeWindow
                 }
                 var sel = list.Items.Cast<object>().Select(o => o as string ?? "").FirstOrDefault(item =>
                     item.Equals(current, StringComparison.OrdinalIgnoreCase)
-                    || item.StartsWith(current + " —", StringComparison.OrdinalIgnoreCase));
+                    || item.StartsWith(current + " ?", StringComparison.OrdinalIgnoreCase));
                 if (sel != null)
                 {
                     list.SelectedItem = sel;
                 }
                 loading = false;
+                changed();
             }
             catch (JsonException)
             {
@@ -167,7 +181,7 @@ internal static class LinetypeWindow
         string SelectedName()
         {
             var item = list.SelectedItem as string ?? "";
-            var sep = item.IndexOf(" —", StringComparison.Ordinal);
+            var sep = item.IndexOf(" ?", StringComparison.Ordinal);
             return sep < 0 ? item : item[..sep];
         }
 
@@ -234,18 +248,12 @@ internal static class LinetypeWindow
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 }

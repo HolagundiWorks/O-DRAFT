@@ -14,15 +14,20 @@ internal static class AboutWindow
         var theme = owner.Content is FrameworkElement shell ? shell.RequestedTheme : ElementTheme.Default;
         var logo = new Image { Width = 64, Height = 64, HorizontalAlignment = HorizontalAlignment.Left, Source = ShellIcon.Logo() };
         AutomationProperties.SetName(logo, "O-Draft");
-        var stack = new StackPanel { Spacing = Density.SpaceSm, Margin = new Thickness(Density.SpaceXl) };
+        var stack = new StackPanel { Spacing = Density.SpaceSm, Margin = Density.DialogMargin };
         stack.Children.Add(logo);
-        stack.Children.Add(new TextBlock { Text = "O-Draft", FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        stack.Children.Add(new TextBlock { Text = "Drafting. Part of OSAS, the Open Source Architecture Suite." });
+        stack.Children.Add(new TextBlock
+        {
+            Text = "O-Draft",
+            FontSize = Density.FontSection,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        });
+        stack.Children.Add(new TextBlock { Text = "Drafting. Part of OSAS, the Open Source Architecture Suite.", FontSize = Density.FontBody });
         if (version.Length > 0)
         {
-            stack.Children.Add(new TextBlock { Text = "Version " + version });
+            stack.Children.Add(new TextBlock { Text = "Version " + version, FontSize = Density.FontBody });
         }
-        stack.Children.Add(new TextBlock { Text = "2D architectural drafting. Open source, written in Rust.", TextWrapping = TextWrapping.Wrap });
+        stack.Children.Add(new TextBlock { Text = "2D architectural drafting. Open source, written in Rust.", TextWrapping = TextWrapping.Wrap, FontSize = Density.FontBody });
         stack.Children.Add(Density.Secondary("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.", TextWrapping.Wrap));
         Density.Apply(stack);
         _window?.Close();

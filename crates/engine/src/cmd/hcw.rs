@@ -158,7 +158,7 @@ const ROOM_TYPES: &[(&str, &str)] = &[
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("hcwlayers", "Architectural Layer Set", run_layers)
-            .menu(&["Architecture", "Layer Set"])
+            .menu(&["Format", "Architectural Layer Set"])
             .alias(&["hcwlayer", "archlayers", "stdlayers"])
             .params(
                 "{set?: \"standard\"|\"permit\"|\"presentation\"|\"both\"|\"all\" (aliases: hcw→standard, bp→permit; default standard)} → {created, existing, set}",

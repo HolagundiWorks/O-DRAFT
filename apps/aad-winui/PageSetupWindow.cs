@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Aad.WinUi;
 
-/// <summary>File &gt; Page Setup Managerâ€¦ â€” edit a layout's page setup via <c>pagesetup</c>.</summary>
+/// <summary>File &gt; Page Setup Manager… — edit a layout's page setup via <c>pagesetup</c>.</summary>
 internal static class PageSetupWindow
 {
     private static readonly string[] PlotAreas = ["layout", "extents", "display", "limits"];
@@ -132,7 +132,7 @@ internal static class PageSetupWindow
                     scale.Text = layout.Fit.Nearest;
                     nearest.Text = string.IsNullOrEmpty(layout.Fit.Label) || layout.Fit.Label == layout.Fit.Nearest
                         ? "Nearest scale that fits: " + layout.Fit.Nearest
-                        : "Fits at " + layout.Fit.Label + " Â· nearest: " + layout.Fit.Nearest;
+                        : "Fits at " + layout.Fit.Label + " · nearest: " + layout.Fit.Nearest;
                 }
                 else
                 {
@@ -145,7 +145,7 @@ internal static class PageSetupWindow
                 lineweights.IsChecked = page.Lineweights;
                 var w = page.Landscape ? page.HeightMm : page.WidthMm;
                 var h = page.Landscape ? page.WidthMm : page.HeightMm;
-                sizeLabel.Text = w.ToString("0.#", CultureInfo.InvariantCulture) + " Ã— " + h.ToString("0.#", CultureInfo.InvariantCulture) + " mm";
+                sizeLabel.Text = w.ToString("0.#", CultureInfo.InvariantCulture) + " × " + h.ToString("0.#", CultureInfo.InvariantCulture) + " mm";
             }
             finally
             {
@@ -325,9 +325,8 @@ internal static class PageSetupWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 

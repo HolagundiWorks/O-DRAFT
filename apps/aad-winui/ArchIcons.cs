@@ -14,7 +14,7 @@ internal static partial class ToolIcons
     {
         var canvas = new Canvas { Width = 24, Height = 24 };
         DrawArchitecture(new Pen(canvas, dark), id);
-        return new Viewbox { Width = 22, Height = 22, Child = canvas, Stretch = Stretch.Uniform };
+        return new Viewbox { Width = ToolIcons.DisplaySize, Height = ToolIcons.DisplaySize, Child = canvas, Stretch = Stretch.Uniform };
     }
 
     private static void DrawArchitecture(Pen pen, string id)

@@ -8,10 +8,12 @@ using WinRT.Interop;
 
 namespace Aad.WinUi;
 
-/// <summary>Drawing units, display units, plot scale and annotation, in their own window.</summary>
+/// <summary>
+/// Display units, plot scale and annotation. Drafting units are chosen on the status bar
+/// (geometry stays in those units; rescale is not offered here — scale at plot).
+/// </summary>
 internal static class UnitsWindow
 {
-    private static readonly string[] DrawingUnits = ["mm", "cm", "m", "in", "ft"];
     private static readonly string[] DisplayUnits = ["mm", "cm", "m", "in", "ft", "ftin"];
     private static readonly string[] Papers = ["A0", "A1", "A2", "A3", "A4"];
 
@@ -21,25 +23,18 @@ internal static class UnitsWindow
         var status = Density.Secondary("", TextWrapping.Wrap);
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         Density.Name(status, "Units status");
-        var drawing = Combo(DrawingUnits, "mm");
         var display = Combo(DisplayUnits, "mm");
         var paper = Combo(Papers, "A1");
-        Density.Name(drawing, "Drawing units");
         Density.Name(display, "Display units");
         Density.Name(paper, "Paper size");
         var scale = new TextBox { Text = "1:100", Width = 80, MinHeight = Density.ControlHeight };
         Density.Name(scale, "Plot scale");
-        var confirm = false;
-        var rescale = ActionButton("Change unit and rescaleâ€¦");
         var stack = new StackPanel { Spacing = Density.SpaceSm, Margin = Density.DialogMargin, MaxWidth = 420 };
-        stack.Children.Add(Heading("Drawing units"));
-        stack.Children.Add(Note("Changing the unit never rescales objects unless you confirm it."));
-        stack.Children.Add(drawing);
-        var unitRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm };
-        var metadata = ActionButton("Change unit only");
-        unitRow.Children.Add(metadata);
-        unitRow.Children.Add(rescale);
-        stack.Children.Add(unitRow);
+        stack.Children.Add(Heading("Drafting units"));
+        stack.Children.Add(Note(
+            "Pick the drafting unit on the status bar. Geometry is stored in those units. " +
+            "Typed distances already accept multi-unit suffixes (mm, cm, m, ', \"); they convert into the drafting unit. " +
+            "Use plot scale below when printing — not while drafting."));
         stack.Children.Add(Heading("Display units"));
         stack.Children.Add(Note("How dimensions show measurements. Geometry is not changed."));
         stack.Children.Add(display);
@@ -72,25 +67,6 @@ internal static class UnitsWindow
             changed();
         }
 
-        metadata.Click += (_, _) =>
-        {
-            confirm = false;
-            rescale.Content = "Change unit and rescaleâ€¦";
-            Run("drawing.units", Json(new { units = Selected(drawing), mode = "metadata" }));
-        };
-        rescale.Click += (_, _) =>
-        {
-            if (!confirm)
-            {
-                confirm = true;
-                rescale.Content = "Confirm: rescale all objects";
-                status.Text = "This multiplies every model-space coordinate. Undo restores it.";
-                return;
-            }
-            confirm = false;
-            rescale.Content = "Change unit and rescaleâ€¦";
-            Run("drawing.units", Json(new { units = Selected(drawing), mode = "scale" }));
-        };
         display.SelectionChanged += (_, _) =>
         {
             if (display.Tag is true)
@@ -108,7 +84,7 @@ internal static class UnitsWindow
         Density.Apply(stack);
         var window = new Window
         {
-            Title = "Units and plot",
+            Title = "Display units and plot",
             Content = new ScrollViewer
             {
                 Content = new Grid { RequestedTheme = theme, Children = { stack } },
@@ -124,12 +100,7 @@ internal static class UnitsWindow
         return window;
     }
 
-    private static Button ActionButton(string label)
-    {
-        var button = new Button { Content = label, MinHeight = Density.ControlHeight };
-        Density.Name(button, label);
-        return button;
-    }
+    private static Button ActionButton(string label) => Density.DialogAction(label);
 
     private static ComboBox Combo(IEnumerable<string> items, string selected)
     {
@@ -181,9 +152,8 @@ internal static class UnitsWindow
 
     private static TextBlock Heading(string text)
     {
-        var block = new TextBlock { Text = text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var block = Density.SectionHeading(text);
         AutomationProperties.SetHeadingLevel(block, AutomationHeadingLevel.Level2);
-        Density.Name(block, text);
         return block;
     }
 
