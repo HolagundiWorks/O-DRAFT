@@ -79,7 +79,9 @@ fn vs_quad(
     var pb = to_px(b);
     // A hairline is one logical pixel. Snap a thin axis-aligned stroke onto a pixel centre
     // so it fills one row or column instead of splitting across two.
-    let px_w = max(width * view.c.x, 1.0);
+    // Negative width = butt caps (joined strip edges). Positive = round end extensions.
+    let butt = width < 0.0;
+    let px_w = max(abs(width) * view.c.x, 1.0);
     let dlt = pb - pa;
     if (px_w <= 3.5 && abs(dlt.y) <= 0.75 && abs(dlt.x) >= abs(dlt.y)) {
         let y = floor((pa.y + pb.y) * 0.5) + 0.5;
@@ -100,7 +102,8 @@ fn vs_quad(
     let hw = 0.5 * px_w;
     let t = select(0.0, 1.0, vi == 1u || vi == 4u || vi == 5u);
     let s = select(-1.0, 1.0, vi == 2u || vi == 3u || vi == 5u);
-    let along = mix(pa - dir * hw, pb + dir * hw, t);
+    let extend = select(hw, 0.0, butt);
+    let along = mix(pa - dir * extend, pb + dir * extend, t);
     var o: VOut;
     o.pos = px_to_clip(along + n * hw * s);
     o.color = out_color(color);
@@ -182,6 +185,62 @@ fn push_instance(out: &mut Vec<u8>, a: [f32; 2], b: [f32; 2], c: [u8; 4], width:
     out.extend_from_slice(&width.to_le_bytes());
 }
 
+/// Screen-space stroke for a polyline: butt-ended edges plus round joins/caps.
+///
+/// One round-capped quad per segment double-blends soft edges at every joint (arcs look beaded).
+/// Joined strips use butt edges (`width` stored negative) and a round disc (a == b) at each join
+/// and open end so coverage meets once.
+pub fn stroke_polyline(out: &mut Vec<u8>, pts: &[Vec2], origin: Vec2, col: [u8; 4], width: f32) {
+    let width = if width.is_finite() && width > 0.0 { width } else { HAIRLINE_POINTS };
+    let mut clean: Vec<Vec2> = Vec::with_capacity(pts.len());
+    for &p in pts {
+        if !p.is_finite() {
+            continue;
+        }
+        if clean.last().is_some_and(|q| q.dist(p) < 1e-12) {
+            continue;
+        }
+        clean.push(p);
+    }
+    let n = clean.len();
+    if n < 2 {
+        return;
+    }
+    let closed = n >= 3 && clean[0].dist(clean[n - 1]) < 1e-9;
+    if closed {
+        clean.pop();
+    }
+    let n = clean.len();
+    if n < 2 {
+        return;
+    }
+    if n == 2 && !closed {
+        // Lone segment: one round-capped quad (same as the old path).
+        push_instance(out, rel(clean[0], origin), rel(clean[1], origin), col, width);
+        return;
+    }
+    let last = if closed { n - 1 } else { n - 2 };
+    for i in 0..=last {
+        let j = if i + 1 < n { i + 1 } else { 0 };
+        push_instance(out, rel(clean[i], origin), rel(clean[j], origin), col, -width);
+    }
+    if closed {
+        for p in &clean {
+            let r = rel(*p, origin);
+            push_instance(out, r, r, col, width);
+        }
+    } else {
+        let start = rel(clean[0], origin);
+        let end = rel(clean[n - 1], origin);
+        push_instance(out, start, start, col, width);
+        push_instance(out, end, end, col, width);
+        for p in &clean[1..n - 1] {
+            let r = rel(*p, origin);
+            push_instance(out, r, r, col, width);
+        }
+    }
+}
+
 /// Lineweight in screen points for a primitive (as on the CPU path), or `None` for a hairline.
 ///
 /// When LWDISPLAY is on, millimetre weights map to points (`lw × 3.78`) and are never thinner
@@ -208,23 +267,10 @@ pub fn build_mesh(list: &DisplayList, origin: Vec2, bg: Rgb, lwdisplay: bool) ->
         let col = [c.0, c.1, c.2, 255];
         let pts = list.points(prim);
         match prim.kind {
-            Kind::Polyline => match wide_width(prim.lw, lwdisplay) {
-                Some(w) => {
-                    for s in pts.windows(2) {
-                        if let [a, b] = s {
-                            push_instance(&mut m.quads, rel(*a, origin), rel(*b, origin), col, w);
-                        }
-                    }
-                }
-                None => {
-                    for s in pts.windows(2) {
-                        if let [a, b] = s {
-                            push_vertex(&mut m.lines, rel(*a, origin), col);
-                            push_vertex(&mut m.lines, rel(*b, origin), col);
-                        }
-                    }
-                }
-            },
+            Kind::Polyline => {
+                let w = wide_width(prim.lw, lwdisplay).unwrap_or(HAIRLINE_POINTS);
+                stroke_polyline(&mut m.quads, pts, origin, col, w);
+            }
             Kind::Tris => {
                 for t in pts.as_chunks::<3>().0 {
                     for q in t {
@@ -402,5 +448,71 @@ mod tests {
             prev = w;
         }
         assert!(prev > HAIRLINE_POINTS, "heavier standard weights must exceed the hairline floor");
+    }
+
+    fn instance_width(quads: &[u8], index: usize) -> f32 {
+        let at = index * INSTANCE_SIZE + 20;
+        f32::from_le_bytes(quads[at..at + 4].try_into().expect("width"))
+    }
+
+    fn instance_is_point(quads: &[u8], index: usize) -> bool {
+        let at = index * INSTANCE_SIZE;
+        let a = f32::from_le_bytes(quads[at..at + 4].try_into().unwrap());
+        let b = f32::from_le_bytes(quads[at + 4..at + 8].try_into().unwrap());
+        let c = f32::from_le_bytes(quads[at + 8..at + 12].try_into().unwrap());
+        let d = f32::from_le_bytes(quads[at + 12..at + 16].try_into().unwrap());
+        (a - c).abs() < 1e-6 && (b - d).abs() < 1e-6
+    }
+
+    #[test]
+    fn polyline_strip_uses_butt_edges_and_round_joins() {
+        let pts = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(10.0, 0.0),
+            Vec2::new(10.0, 10.0),
+            Vec2::new(0.0, 10.0),
+        ];
+        let mut quads = Vec::new();
+        stroke_polyline(&mut quads, &pts, Vec2::ZERO, [0, 0, 0, 255], 2.0);
+        // 3 butt edges + 2 end caps + 2 interior joins = 7
+        assert_eq!(quads.len() / INSTANCE_SIZE, 7);
+        let mut butts = 0;
+        let mut discs = 0;
+        for i in 0..7 {
+            let w = instance_width(&quads, i);
+            if instance_is_point(&quads, i) {
+                assert!(w > 0.0, "join/cap discs use round (positive) width");
+                discs += 1;
+            } else {
+                assert!(w < 0.0, "strip edges use butt (negative) width");
+                butts += 1;
+            }
+        }
+        assert_eq!(butts, 3);
+        assert_eq!(discs, 4);
+    }
+
+    #[test]
+    fn closed_polyline_strip_has_joins_at_every_vertex() {
+        let pts = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(1.0, 0.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(0.0, 0.0),
+        ];
+        let mut quads = Vec::new();
+        stroke_polyline(&mut quads, &pts, Vec2::ZERO, [0, 0, 0, 255], 1.5);
+        // 3 edges + 3 vertex discs
+        assert_eq!(quads.len() / INSTANCE_SIZE, 6);
+        assert_eq!((0..6).filter(|&i| instance_is_point(&quads, i)).count(), 3);
+    }
+
+    #[test]
+    fn two_point_polyline_stays_one_round_quad() {
+        let pts = [Vec2::new(0.0, 0.0), Vec2::new(5.0, 0.0)];
+        let mut quads = Vec::new();
+        stroke_polyline(&mut quads, &pts, Vec2::ZERO, [0, 0, 0, 255], HAIRLINE_POINTS);
+        assert_eq!(quads.len() / INSTANCE_SIZE, 1);
+        assert!(instance_width(&quads, 0) > 0.0);
     }
 }
