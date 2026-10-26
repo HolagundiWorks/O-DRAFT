@@ -389,15 +389,18 @@ mod tests {
     #[test]
     fn displayed_lineweights_are_monotonic_and_at_least_hairline() {
         assert!(wide_width(0.25, false).is_none());
-        let w25 = wide_width(0.25, true).expect("0.25 mm");
-        let w30 = wide_width(0.30, true).expect("0.30 mm");
-        let w35 = wide_width(0.35, true).expect("0.35 mm");
-        let w50 = wide_width(0.50, true).expect("0.50 mm");
-        // Below the hairline floor, weights share HAIRLINE_POINTS (never thinner than 0.25's path).
-        assert_eq!(w25, HAIRLINE_POINTS);
-        assert_eq!(w30, HAIRLINE_POINTS);
-        assert_eq!(w35, HAIRLINE_POINTS);
-        assert!(w50 > w35);
-        assert!(w50 >= w30 && w30 >= w25);
+        let mut prev = 0.0_f32;
+        for &hundredths in &aad_doc::Lineweight::STANDARD {
+            let mm = f32::from(hundredths) / 100.0;
+            let Some(w) = wide_width(mm, true) else {
+                // 0.00 mm stays a hairline expander path.
+                assert_eq!(hundredths, 0);
+                continue;
+            };
+            assert!(w >= HAIRLINE_POINTS, "{mm} mm → {w} pt below hairline");
+            assert!(w + 1e-5 >= prev, "{mm} mm ({w} pt) thinner than previous ({prev} pt)");
+            prev = w;
+        }
+        assert!(prev > HAIRLINE_POINTS, "heavier standard weights must exceed the hairline floor");
     }
 }

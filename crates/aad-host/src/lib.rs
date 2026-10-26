@@ -44,6 +44,44 @@ struct PendingList {
     rx: std::sync::mpsc::Receiver<DisplayList>,
 }
 
+/// Eased wheel zoom in progress (~120 ms). Fast notches accumulate onto `target`.
+struct ZoomAnim {
+    from: aad_engine::View,
+    target: aad_engine::View,
+    t0: std::time::Instant,
+}
+
+impl ZoomAnim {
+    fn sample(&self, now: std::time::Instant) -> aad_engine::View {
+        let ms = now.duration_since(self.t0).as_millis();
+        if ms >= ZOOM_ANIM_MS {
+            return self.target;
+        }
+        let t = ease_out_cubic(ms as f64 / ZOOM_ANIM_MS as f64);
+        let ln_h = self.from.height.ln() + (self.target.height.ln() - self.from.height.ln()) * t;
+        aad_engine::View {
+            center: Vec2::new(
+                self.from.center.x + (self.target.center.x - self.from.center.x) * t,
+                self.from.center.y + (self.target.center.y - self.from.center.y) * t,
+            ),
+            height: ln_h.exp(),
+        }
+    }
+}
+
+const ZOOM_ANIM_MS: u128 = 120;
+
+fn zoomed_view(v: aad_engine::View, factor: f64, about: Vec2) -> aad_engine::View {
+    let h = (v.height / factor).clamp(1e-9, 1e12);
+    let k = h / v.height;
+    aad_engine::View { center: about + (v.center - about) * k, height: h }
+}
+
+fn ease_out_cubic(t: f64) -> f64 {
+    let u = 1.0 - t;
+    1.0 - u * u * u
+}
+
 /// Cached display list / GPU mesh so pans and small edits do not rebuild everything every frame.
 struct FrameCache {
     list_key: ListKey,
@@ -334,6 +372,8 @@ pub struct Host {
     frame: FrameCache,
     /// Control-channel `app.open` / `app.save` waiting for a worker poll to finish.
     control_io: Option<(control::Job, ControlIoKind)>,
+    /// Wheel zoom easing; advanced on [`Host::pump`] / present.
+    zoom_anim: Option<ZoomAnim>,
 }
 
 /// Which file job a deferred control reply is waiting on.
@@ -432,6 +472,7 @@ impl Host {
             plotting: None,
             frame: FrameCache::default(),
             control_io: None,
+            zoom_anim: None,
         }
     }
 
@@ -1302,7 +1343,58 @@ impl Host {
         let about = self.screen_to_world(ev.x, ev.y)?;
         // One notch is 120 wheel units. Divisor 600 → ~1.22× per notch (was 300 → ~1.49×).
         let factor = (f64::from(ev.wheel) * 120.0 / 600.0).exp();
-        self.session.zoom_about(factor, about).map_err(|e| e.to_string())
+        let now = std::time::Instant::now();
+        let from = match &self.zoom_anim {
+            Some(anim) => anim.sample(now),
+            None => self.session.state().map_err(|e| e.to_string())?.view(),
+        };
+        let target = zoomed_view(from, factor, about);
+        self.zoom_anim = Some(ZoomAnim { from, target, t0: now });
+        self.fitted = None;
+        // Unit tests and hosts without a GPU pump loop need the final view immediately.
+        #[cfg(windows)]
+        let live = self.gpu.is_some();
+        #[cfg(not(windows))]
+        let live = false;
+        if live {
+            self.apply_zoom_sample(now)?;
+            #[cfg(windows)]
+            {
+                self.paint_dirty = true;
+            }
+        } else {
+            self.finish_zoom()?;
+        }
+        Ok(())
+    }
+
+    fn finish_zoom(&mut self) -> Result<(), String> {
+        if let Some(anim) = self.zoom_anim.take() {
+            self.session.state_mut().map_err(|e| e.to_string())?.set_view_quiet(anim.target);
+        }
+        Ok(())
+    }
+
+    fn apply_zoom_sample(&mut self, now: std::time::Instant) -> Result<(), String> {
+        let Some(anim) = &self.zoom_anim else {
+            return Ok(());
+        };
+        let view = anim.sample(now);
+        let done = now.duration_since(anim.t0).as_millis() >= ZOOM_ANIM_MS;
+        self.session.state_mut().map_err(|e| e.to_string())?.set_view_quiet(view);
+        if done {
+            self.zoom_anim = None;
+        }
+        Ok(())
+    }
+
+    /// Advance an in-flight wheel zoom; keep presenting while it runs.
+    fn tick_zoom(&mut self) -> Result<bool, String> {
+        if self.zoom_anim.is_none() {
+            return Ok(false);
+        }
+        self.apply_zoom_sample(std::time::Instant::now())?;
+        Ok(self.zoom_anim.is_some())
     }
 
     fn left_down(&mut self, ev: Pointer) -> Result<(), String> {
@@ -1998,12 +2090,13 @@ impl Host {
             for ev in events {
                 self.pointer(ev)?;
             }
+            let zooming = self.tick_zoom()?;
             // Idle pumps skip the GPU path: document/overlay only change on input, commands
-            // (`present_if_ready`), resize, or a background display-list band finishing.
-            let need = had_events || self.paint_dirty || self.frame.pending.is_some();
+            // (`present_if_ready`), resize, a zoom animation, or a background display-list band finishing.
+            let need = had_events || self.paint_dirty || zooming || self.frame.pending.is_some();
             if self.gpu.is_some() && need {
                 self.redraw()?;
-                self.paint_dirty = false;
+                self.paint_dirty = zooming;
             }
             Ok(())
         })();
@@ -2157,6 +2250,22 @@ mod tests {
         assert!((1.15..=1.30).contains(&step), "wheel step ≈1.22×, got {step}");
         host.pointer(Pointer { x: 600.0, y: 400.0, action: POINTER_WHEEL, wheel: -1.0, mods: 0 }).unwrap();
         assert!((host.stats().view_height - height).abs() / height < 1e-6);
+    }
+
+    #[test]
+    fn zoom_anim_eases_and_accumulates_notches() {
+        let start = aad_engine::View { center: Vec2::new(10.0, 5.0), height: 100.0 };
+        let about = Vec2::new(10.0, 5.0);
+        let mid = zoomed_view(start, (0.2_f64).exp(), about);
+        let end = zoomed_view(mid, (0.2_f64).exp(), about);
+        let t0 = std::time::Instant::now();
+        let anim = ZoomAnim { from: start, target: end, t0 };
+        let at_start = anim.sample(t0);
+        assert!((at_start.height - start.height).abs() < 1e-9);
+        let half = anim.sample(t0 + std::time::Duration::from_millis(60));
+        assert!(half.height < start.height && half.height > end.height);
+        let done = anim.sample(t0 + std::time::Duration::from_millis(ZOOM_ANIM_MS as u64));
+        assert!((done.height - end.height).abs() < 1e-9);
     }
 
     #[test]
