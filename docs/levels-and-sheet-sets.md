@@ -1,0 +1,164 @@
+# Levels and sheet sets
+
+**Status: planned.** Nothing on this page is implemented unless the "Roadmap" table marks a phase
+done. Capability matrix: [status.md](status.md). Source: the implementation plan "Level model spaces
+and sheet sets" (2026-10-26), taken as the decision record below.
+
+Summary: keep one drawing file, but split its single model space into named **levels** (each its own
+entity store at a shared origin) and add **sheet sets** (discipline annotation spaces that reference
+levels read-only). Every phase is useful and testable alone, starting with levels.
+
+## Requirements
+
+- Levels replace the single Model tab. Each level (Basement, Ground, First, Terrace, ...) is a model
+  space for drafting and design. Level tabs sit at the bottom, where the Model tab is now.
+- Any level can be **traced** under any other, several at once.
+- Sheet sets are tabs on the left (Working drawing, Electrical, Plumbing, Interior, False ceiling).
+  They hold annotation and dimensions, reference levels, and never change design geometry.
+- Paper layouts stay. Each viewport says which level and which sheet set it shows.
+
+## Concepts
+
+| Term | Meaning |
+|---|---|
+| Level | Named model space with its own objects. All levels share one world origin and one layer table. Walls, doors, rooms, columns, stairs, take-off and the parametric graph act on the active level only. Elevation and height come from the existing `levels` / `floors` data |
+| Trace | Read-only faded display of another level under the active one. Per trace: fade (0-90 %), colour (grey or true), order (below or above), object-snap switch, optional layer list. Never selectable or editable. At most 8 per level; a level may not trace itself |
+| Sheet set | Named discipline with one annotation store **per level** (text, dimensions, leaders, tags, symbols, hatches). While active, the level is shown locked and only annotation is drawn |
+| Sheet view | (sheet set, level): that level's geometry (locked, filtered by the set's layer visibility) plus the set's annotation for it |
+| Design mode | No sheet set picked. The default; where drafting happens |
+| Layout | Paper, unchanged. A viewport names a level, an optional sheet set and optional traces |
+
+Annotation lives in its own store, not on layers, so two disciplines never collide, take-off never
+counts annotation, and deleting a sheet set never touches the design.
+
+## Data model (`crates/doc`, L1)
+
+`Drawing.model` always holds the one store being edited; every other store waits in its slot. Commands
+keep writing to `d.model`, so the existing call sites do not change; only drawing-wide code (purge,
+audit, layer rename, extents) must learn about the other stores.
+
+```text
+LevelId(u32), SheetSetId(u32)        stable, never reused
+Level     { id, name (1..64, unique), tab_order, elevation, height, traces[<=8], view, entities (skip) }
+Trace     { level, fade 0..=90, colour Grey|TrueColour, order Below|Above, snap, layers? }
+SheetSet  { id, name, tab_order, space?, layer_prefix, dim_style?, text_style?, annotations: LevelId -> store (skip) }
+EditTarget = Level(LevelId) | Sheet(SheetSetId, LevelId)
+Drawing  += levels (<=64), sheet_sets (<=32), target
+```
+
+Methods: `switch_target(EditTarget)` (the only place the swap invariant lives; used by commands, undo and
+file load), `store(target)`, `all_stores()`, `reference_stores()`. Handles stay drawing-wide so a
+sheet-set dimension can reference a wall handle on its level. Because levels live inside `Drawing`,
+undo restores them, including the active tab. `Viewport` gains `level?` (none = first level),
+`sheet_set?` and `traces`. All limits are checked on every input path (JSON, DXF metadata).
+
+## Commands (`cmd/levels.rs`, `cmd/sheetset.rs`)
+
+| Command | Purpose |
+|---|---|
+| `level.list`, `level.new {name, elevation?, height?, after?, copyFrom?}`, `level.set`, `level.delete` (refused for the last level or one in use, unless `force`), `level.activate` | Manage levels; each is one undo step |
+| `level.trace {level?, add?, remove?, fade?, colour?, order?, snap?, layers?}` | Edit a level's traces |
+| `level.copyto {levels, selection?}`, `level.moveto {level}` | Copy or move the selection between levels at the same coordinates |
+| `sheetset.list / .new / .set / .delete`, `sheetset.activate {set\|null}` | Manage sheet sets; `new` with `preset` creates the five standard ones |
+| `viewport.set` (extended) `{handle, level?, sheetSet?, traces?}` | What a layout viewport shows |
+| `level.import / level.export {path, level}`; `level.fromfloors`; `project.merge` | Migration (below) |
+
+Rules: in a sheet view the `protect.rs` check treats reference stores as locked and names the level;
+draw commands in a sheet view put objects on the set's layers (`E-DIM`, `E-TEXT`, ...); selection,
+`qselect`, `filter`, `selectsimilar` see only the edit target; inquiry commands may read traces and
+the referenced level through snaps; programmatic calls never open dialogs.
+
+## UI (WinUI shell stays thin)
+
+- **Bottom tabs:** level tabs in tab order, a `+` (`level.new`), a divider, then layout tabs. Right
+  click on a level: Rename, Elevation and height, Copy level, Delete, Trace over current level. A
+  **Trace** flyout lists the other levels (tick, fade slider, grey/true colour, below/above, snap).
+- **Left sheet-set rail** (about 32 DIP): Design, then the sheet sets, then `+`. Choosing one keeps the
+  current level. In a sheet view the draw strip swaps to annotation tools and the Architecture bar
+  hides. The rail hides in layouts.
+- Layer manager "Show for" filter (All / This level / This sheet set); viewport properties gain Level,
+  Sheet set and Traces; new-drawing and `project.setup` offer levels; Ctrl+PageUp/PageDown change
+  level, Ctrl+Shift+PageUp/PageDown change sheet set. Tab data comes from `chrome_json`
+  (`levels`, `layouts`, `sheetSets`). The egui shell follows later.
+
+## Rendering, snaps and selection
+
+Phase 2 changes `aad_render` and the host canvas; **coordinate the order with the rendering work
+before starting it.**
+
+- One cached mesh per store. Draw order: traces Below, the referenced level (sheet view), the edit
+  target, traces Above. Grey maps colours to the theme's quiet colour; fade sets alpha; trace
+  lineweights draw thinnest.
+- A trace mesh rebuilds only when its level's store changes (`Arc::ptr_eq`), so tab switches and pans
+  stay on the cached path of [PERFORMANCE.md](PERFORMANCE.md). `lod_for_view` applies to traces.
+- Layout viewports read `d.store(viewport.level)` plus the set's annotation and the viewport's traces;
+  frozen layers and colour overrides apply to all.
+- Object snaps use the edit target, the referenced level in a sheet view, and traces with `snap` on
+  (markers in the quiet colour). Select and grips act on the edit target only. Zoom Extents uses the
+  edit target plus visible traces.
+- Budget: with three traces of 25 000 objects each, pan and zoom stay cached and a test shows that a
+  level switch does not rebuild unchanged meshes.
+
+## DXF and DWG round-trip
+
+The file stays a normal DXF. DWG uses the same bridge.
+
+| What | Written as |
+|---|---|
+| First level in tab order | Model space, whatever tab was active on save |
+| Other levels | Block `ODRAFT$LVL$<id>` |
+| Sheet-set annotation for a level | Block `ODRAFT$ANN$<set id>$<level id>` |
+| Keep-alive | One INSERT of each block in model space on layer `ODRAFT-STORES` (frozen, not plotted) so `PURGE` keeps them |
+| Level, trace, sheet-set records | JSON under `levels2` in `AAD_PROJECT` (version, ids, names, order, elevations, traces, sets, active target) |
+| Viewport level, set, traces | Extension data `AAD_VP` on the VIEWPORT |
+
+Reading: the blocks named in `levels2` are read back into stores and the keep-alive INSERTs and layer
+are hidden from the user. Missing or damaged metadata never fails the open: the drawing loads as one
+level and a warning is reported; a record naming a missing block gives an empty level and a warning.
+Handles inside level blocks keep their values. Counts, ids and nesting (`MAX_BLOCK_DEPTH`) are
+bounded, with a `hostile_dxf_does_not_panic`-style test. Known limit: in another CAD program a
+viewport set to a non-first level still shows model space; `level.export` gives one DXF per level.
+
+## Migration
+
+Nothing changes in an existing drawing until a second level or a sheet set is added; such files save
+as before. They open as one level named after `floor.current`, else "Level 1". `floors` / `levels`
+project data stay the source of names and elevations (`level.new` and `level.set` keep them in step).
+Floor projects (one file per floor with Xrefs) stay supported through `level.import`, `level.export`
+and `project.merge`. Drawing spaces keep working; a sheet set points at one. Take-off and ShilpiDB
+rows gain the level id in their slot; single-level rows keep their ids. Viewports without level data
+show the first level.
+
+## Decisions (from the plan's open questions)
+
+1. Levels in one file are the default for new projects; floor projects remain an import/export path.
+2. Sheet-set annotation is stored per level.
+3. The rail lists Design plus the five presets on every new drawing.
+4. Traces are saved with the level.
+
+## Roadmap
+
+The plan names five phases but its phase table was not part of the file; the split below is derived
+from the plan's text (Phase 1 carries the file format and drawing-wide audit; Phase 2 is the
+rendering work). Each phase ends with `cargo xtask ci` and its named tests, and updates
+[status.md](status.md) in the same change.
+
+| Phase | Scope | Done when |
+|---|---|---|
+| 1. Levels core | `doc` types, `switch_target`, `levels.rs` commands (list/new/set/delete/activate/copyto/moveto/fromfloors), classification of every `.model` use as edit-target or drawing-wide, drawing-wide commands use `all_stores()`, DXF/DWG round-trip with `levels2`, hostile-input tests | A two-level drawing saves, reopens and undoes identically; purge, audit, layer delete and extents see both levels; old files load as one level unchanged |
+| 2. Traces and level tabs | `level.trace`, trace rendering and cache, snaps, bottom level tabs and Trace flyout, `chrome_json` data | Three 25 000-object traces keep pans cached; a tab switch rebuilds no unchanged mesh |
+| 3. Sheet sets | `SheetSet`, per-level annotation stores, `sheetset.*`, `protect.rs` reference locking, annotation layer prefixes, left rail, annotation tool strip | In a sheet view a level object edit is refused naming the level; annotation of two sets on one level does not collide; presets create their spaces |
+| 4. Layouts and exchange | `Viewport.level/sheet_set/traces`, `viewport.set`, layout tessellation per store, `AAD_VP` data, Export for exchange | One layout holds the Electrical and Plumbing First-floor plans side by side and round-trips |
+| 5. Migration and polish | `level.import/export`, `project.merge`, take-off level ids, layer "Show for" filter, shortcuts, new-drawing and `project.setup` flow, egui tabs, memory load test (20 levels) | A floor project merges into one file in one undo step; docs and status complete |
+
+## Risks
+
+- **Drawing-wide code that only reads `model`** (purge, audit, layer rename/delete, find and replace,
+  data extraction, `overkill`, xref bind) would delete things used only on another level. Phase 1
+  classifies every `.model` user and adds a test per drawing-wide command with content on a second
+  level.
+- Another CAD program exploding or renaming the `ODRAFT$` blocks loses the level on reload; this is
+  reported as a warning.
+- Memory: all levels are in memory; entities are shared through `Arc`, but a 20-level tower needs a
+  load test.
+- Overlap with rendering work in Phase 2.
