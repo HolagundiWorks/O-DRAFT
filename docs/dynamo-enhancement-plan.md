@@ -1,8 +1,8 @@
 # Dynamo companion enhancement plan
 
-**Status: in progress.** Phases 1–3 are implemented and verified (O-Dynamo `dotnet test`: 12
-passed; O-Draft `cargo test -p aad-engine --test companion`: 8 passed). Phase 2 canvas ghost
-overlay is deferred. Phases 4–6 remain planned. Capability matrix: [status.md](status.md).
+**Status: in progress.** Phases 1–4 are implemented and verified (O-Dynamo `dotnet test`: 14
+passed; O-Draft `cargo test -p aad-engine --test companion`: 10 passed). Phase 2 canvas ghost
+overlay is deferred. Phases 5–6 remain planned. Capability matrix: [status.md](status.md).
 
 ## Goal
 
@@ -21,7 +21,7 @@ versionable.
 |---|---|
 | `ODraft.Geometry` | `Vec2`, `Line2`, `Circle2`, `Box2`, `Draft2D` (Rectangle, WallOutline, OffsetOpen, PolygonArea, Bounds) |
 | `ODraft.Units` | `Lengths` (mm ↔ m/cm/in/ft) |
-| `ODraft.Graph` | `GraphEngine.Evaluate` with drafting + context nodes, `GraphContext`, topological sort, diagnostics, `lines`/`circles`/`arcs` |
+| `ODraft.Graph` | `GraphEngine.Evaluate` with drafting + context + `blockInsert`/`titleField` nodes, `GraphContext`, topological sort, diagnostics, `lines`/`circles`/`arcs`/`inserts`/`titleFields` |
 | `ODynamo.Host` | WPF window (JSON editor + Run), pipe v2 (`evaluate`, `ping`, `context.*`, `subscribe`), named pipe `ODraft.Dynamo` |
 
 ### O-Draft engine commands that generate the same geometry
@@ -151,7 +151,11 @@ If absent, commit uses the active level (or `Level 1`).
 
 ---
 
-### Phase 4 — Smart-block insertion and title-plate fields (both repos)
+### Phase 4 — Smart-block insertion and title-plate fields (both repos) — **done**
+
+**Verified:** O-Dynamo `blockInsert` / `titleField` tests; `companion.commit` places a known
+block on Ground (warns and skips missing names), writes `REV`/`SCALE` onto the title block
+(`cargo test --test companion`: 10 passed; `dotnet test`: 14 passed).
 
 **Goal:** The graph can insert smart blocks from the discipline library and populate title-block
 fields.

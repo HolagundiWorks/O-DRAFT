@@ -5,10 +5,11 @@
 //! circles and arcs. `companion.subscribe` keeps a background reader that stores
 //! pushed `evaluation` messages into [`crate::Session::companion`] for preview.
 //!
-//! `companion.commit` writes evaluate output onto named levels (Phase 3). Ghost
-//! overlay rendering is still deferred. Non-Windows builds return a clear
-//! "not available" error for pipe methods (wasm stays green); commit from a
-//! supplied `result` works on every target.
+//! `companion.commit` writes evaluate output onto named levels (Phase 3) and
+//! places block inserts / title-block fields (Phase 4). Ghost overlay rendering
+//! is still deferred. Non-Windows builds return a clear "not available" error
+//! for pipe methods (wasm stays green); commit from a supplied `result` works
+//! on every target.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -99,7 +100,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo(),
         CommandSpec::new("companion.commit", "Commit Companion Graph", run_commit)
             .menu(&["Architecture", "Companion", "Commit"])
-            .params("{result?: evaluate result (else last preview)} → {committed, levels, lines, circles, arcs} (one undo step; creates missing levels)"),
+            .params("{result?: evaluate result (else last preview)} → {committed, levels, lines, circles, arcs, inserts, titleFields, warnings} (one undo step; creates missing levels; unknown blocks are skipped)"),
     ]
 }
 
@@ -245,20 +246,35 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
         .or_else(|| s.companion.preview.clone())
         .ok_or_else(|| bad("companion.commit", "no result to commit; evaluate first or pass `result`"))?;
     if !result.is_object() {
-        return Err(bad("companion.commit", "`result` must be an object with lines, circles and arcs"));
+        return Err(bad(
+            "companion.commit",
+            "`result` must be an object with lines, circles, arcs, inserts and/or titleFields",
+        ));
     }
 
     let active_name = s.doc()?.active_level_ref().map(|l| l.name.clone());
     let groups = group_by_level(&result, active_name.as_deref())?;
-    if groups.is_empty() {
-        return Ok(json!({ "committed": false, "levels": [], "lines": 0, "circles": 0, "arcs": 0 }));
+    let title_fields = parse_title_fields(&result)?;
+    if groups.is_empty() && title_fields.is_empty() {
+        return Ok(json!({
+            "committed": false,
+            "levels": [],
+            "lines": 0,
+            "circles": 0,
+            "arcs": 0,
+            "inserts": 0,
+            "titleFields": 0,
+            "warnings": [],
+        }));
     }
 
     let restore = s.doc()?.active_level;
     let mut total_lines = 0usize;
     let mut total_circles = 0usize;
     let mut total_arcs = 0usize;
+    let mut total_inserts = 0usize;
     let mut level_names = Vec::new();
+    let mut warnings = Vec::new();
 
     for (level_name, items) in groups {
         ensure_named_level(s, &level_name)?;
@@ -290,7 +306,36 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
                     add_on(s, &layer, arc(&geom))?;
                     total_arcs += 1;
                 }
+                CommitItem::Insert { name, at, rotation_deg, attribs } => {
+                    if s.doc()?.block(&name).is_none() {
+                        warnings.push(format!("block `{name}` is not in the drawing; skipped"));
+                        continue;
+                    }
+                    let rot = rotation_deg.to_radians();
+                    if !rot.is_finite() {
+                        warnings.push(format!("block `{name}` has a non-finite rotation; skipped"));
+                        continue;
+                    }
+                    match super::blocks::insert(s, &name, at, 1.0, rot, &attribs) {
+                        Ok(_) => total_inserts += 1,
+                        Err(e) => warnings.push(format!("block `{name}`: {e}")),
+                    }
+                }
             }
+        }
+    }
+
+    let mut title_written = 0usize;
+    if !title_fields.is_empty() {
+        match layout_for_title_fields(s)? {
+            Some(layout) => {
+                if super::sheet::title_inserts(s.doc()?, &layout).is_empty() {
+                    warnings.push(format!("layout `{layout}` has no title block; title fields skipped"));
+                } else {
+                    title_written = super::sheet::write_fields(s.doc_mut()?, &layout, &title_fields);
+                }
+            }
+            None => warnings.push("no paper layout for title fields; skipped".into()),
         }
     }
 
@@ -300,12 +345,16 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
 
+    let committed = total_lines + total_circles + total_arcs + total_inserts + title_written > 0;
     Ok(json!({
-        "committed": true,
+        "committed": committed,
         "levels": level_names,
         "lines": total_lines,
         "circles": total_circles,
         "arcs": total_arcs,
+        "inserts": total_inserts,
+        "titleFields": title_written,
+        "warnings": warnings,
     }))
 }
 
@@ -313,6 +362,12 @@ enum CommitItem {
     Line { a: Vec2, b: Vec2, layer: String },
     Circle { c: Vec2, r: f64, layer: String },
     Arc { c: Vec2, r: f64, start: f64, end: f64, layer: String },
+    Insert {
+        name: String,
+        at: Vec2,
+        rotation_deg: f64,
+        attribs: serde_json::Map<String, Value>,
+    },
 }
 
 fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<String, Vec<CommitItem>>> {
@@ -378,7 +433,102 @@ fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<Strin
             )?;
         }
     }
+    if let Some(arr) = result.get("inserts").and_then(Value::as_array) {
+        for (i, v) in arr.iter().enumerate() {
+            let name = v
+                .get("blockName")
+                .or_else(|| v.get("name"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && s.len() <= 255)
+                .ok_or_else(|| bad("companion.commit", format!("insert {i}: `blockName` is required")))?
+                .to_string();
+            let level = level_of(v, &default_level)?;
+            let x = num_field(v, "x", i, "insert")?;
+            let y = num_field(v, "y", i, "insert")?;
+            let rotation_deg = v.get("rotation").and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(0.0);
+            let mut attribs = serde_json::Map::new();
+            if let Some(obj) = v.get("attributes").or_else(|| v.get("attribs")).and_then(Value::as_object) {
+                if obj.len() > 64 {
+                    return Err(bad("companion.commit", format!("insert {i}: too many attributes")));
+                }
+                for (k, val) in obj {
+                    if k.is_empty() || k.len() > 64 {
+                        continue;
+                    }
+                    let text = match val {
+                        Value::String(s) => s.clone(),
+                        Value::Number(n) => n.to_string(),
+                        Value::Bool(b) => if *b { "1".into() } else { "0".into() },
+                        Value::Null => String::new(),
+                        _ => continue,
+                    };
+                    if text.chars().count() > 256 {
+                        return Err(bad("companion.commit", format!("insert {i}: attribute `{k}` is too long")));
+                    }
+                    attribs.insert(k.clone(), Value::String(text));
+                }
+            }
+            push(
+                &mut out,
+                level,
+                CommitItem::Insert {
+                    name,
+                    at: Vec2::new(x, y),
+                    rotation_deg,
+                    attribs,
+                },
+                &mut count,
+            )?;
+        }
+    }
     Ok(out)
+}
+
+fn parse_title_fields(result: &Value) -> Result<BTreeMap<String, String>> {
+    let mut out = BTreeMap::new();
+    let Some(arr) = result.get("titleFields").and_then(Value::as_array) else {
+        return Ok(out);
+    };
+    if arr.len() > 64 {
+        return Err(bad("companion.commit", "at most 64 title fields per commit"));
+    }
+    for (i, v) in arr.iter().enumerate() {
+        let field = v
+            .get("field")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && s.len() <= 32)
+            .ok_or_else(|| bad("companion.commit", format!("titleField {i}: `field` is required")))?
+            .to_ascii_uppercase();
+        let value = match v.get("value") {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Number(n)) => n.to_string(),
+            Some(Value::Null) | None => String::new(),
+            Some(Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
+            _ => return Err(bad("companion.commit", format!("titleField {i}: `value` must be text"))),
+        };
+        if value.chars().count() > 256 {
+            return Err(bad("companion.commit", format!("titleField {i}: value is too long")));
+        }
+        out.insert(field, value);
+    }
+    Ok(out)
+}
+
+fn layout_for_title_fields(s: &Session) -> Result<Option<String>> {
+    let d = s.doc()?;
+    if let crate::doc::Space::Paper(n) = s.layout_space() {
+        if d.layout(&n).is_some() {
+            return Ok(Some(n));
+        }
+    }
+    for layout in &d.layouts {
+        if !super::sheet::title_inserts(d, &layout.name).is_empty() {
+            return Ok(Some(layout.name.clone()));
+        }
+    }
+    Ok(d.layouts.first().map(|l| l.name.clone()))
 }
 
 fn layer_of(v: &Value, fallback: &str) -> String {

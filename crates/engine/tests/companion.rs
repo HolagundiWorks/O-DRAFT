@@ -1,6 +1,7 @@
 //! Companion pipe commands: clear errors without a host; status shape; hostile pipe names.
 
 use aad_engine::Session;
+use aad_engine::doc::EntityKind;
 use serde_json::json;
 
 fn metric() -> Session {
@@ -109,4 +110,75 @@ fn hostile_commit_coords_are_refused() {
         )
         .unwrap_err();
     assert!(err.to_string().contains("finite") || err.to_string().contains("number"), "{err}");
+}
+
+#[test]
+fn commit_places_known_block_and_warns_on_missing() {
+    let mut s = metric();
+    let h = s.execute("line", &json!({"points": [[0.0, 0.0], [100.0, 0.0]]})).unwrap()["handles"][0]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.execute("block", &json!({"name": "DOOR-STD", "base": [0, 0], "handles": [h], "keep": "delete"}))
+        .unwrap();
+
+    let r = s
+        .execute(
+            "companion.commit",
+            &json!({
+                "result": {
+                    "lines": [],
+                    "circles": [],
+                    "arcs": [],
+                    "inserts": [
+                        {"blockName": "DOOR-STD", "x": 500.0, "y": 0.0, "rotation": 0.0, "level": "Ground"},
+                        {"blockName": "MISSING", "x": 0.0, "y": 0.0, "level": "Ground"}
+                    ]
+                }
+            }),
+        )
+        .unwrap();
+    assert_eq!(r["committed"], true);
+    assert_eq!(r["inserts"], 1);
+    let warnings = r["warnings"].as_array().unwrap();
+    assert!(warnings.iter().any(|w| w.as_str().unwrap_or("").contains("MISSING")), "{warnings:?}");
+
+    let d = s.doc().unwrap();
+    let ground = d.level_by_name("Ground").expect("Ground");
+    let store = d.level_store(ground.id).expect("store");
+    let inserts: Vec<_> = store
+        .iter()
+        .filter_map(|e| match &e.kind {
+            EntityKind::Insert(i) => Some(i.block.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(inserts, vec!["DOOR-STD".to_string()]);
+}
+
+#[test]
+fn commit_writes_title_fields_on_title_block() {
+    let mut s = metric();
+    s.execute("layout.set", &json!({"name": "Layout1"})).unwrap();
+    s.execute("sheet.titleblock", &json!({"fields": {"REV": "A"}})).unwrap();
+
+    let r = s
+        .execute(
+            "companion.commit",
+            &json!({
+                "result": {
+                    "lines": [],
+                    "circles": [],
+                    "arcs": [],
+                    "titleFields": [{"field": "REV", "value": "B"}, {"field": "SCALE", "value": "1:100"}]
+                }
+            }),
+        )
+        .unwrap();
+    assert_eq!(r["committed"], true);
+    assert!(r["titleFields"].as_u64().unwrap() >= 1, "{r}");
+
+    let fields = s.execute("sheet.fields", &json!({"layout": "Layout1"})).unwrap()["fields"].clone();
+    assert_eq!(fields["REV"], "B");
+    assert_eq!(fields["SCALE"], "1:100");
 }

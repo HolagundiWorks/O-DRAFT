@@ -18,9 +18,11 @@ Named pipe: `ODraft.Dynamo` (Windows only). JSON lines, one request or push per 
 | `subscribe` | O-Draft → Host | Host pushes `evaluation` on graph edits (debounced 300 ms) |
 | `unsubscribe` | O-Draft → Host | Stop pushes |
 | `drawing.changed` | O-Draft → Host | Acknowledged; source-entity tracking is later |
-| `evaluation` | Host → O-Draft | Push: `{ lines, circles, arcs, diagnostics, generation }` |
+| `evaluation` | Host → O-Draft | Push: `{ lines, circles, arcs, inserts, titleFields, diagnostics, generation }` |
 
-Evaluate / evaluation `result` includes `arcs` (radians, CCW from +X) from Phase 1.
+Evaluate / evaluation `result` includes `arcs` (radians, CCW from +X), `inserts`
+(`blockName`, `x`, `y`, `rotation` degrees, `attributes`, optional `level`), and
+`titleFields` (`field`, `value`).
 
 ## Engine commands
 
@@ -32,7 +34,7 @@ Evaluate / evaluation `result` includes `arcs` (radians, CCW from +X) from Phase
 | `companion.evaluate` | One-shot evaluate; stores `preview` |
 | `companion.subscribe` / `unsubscribe` | Background reader for live pushes into `preview` |
 | `companion.preview` | Last stored preview |
-| `companion.commit` | Write `result` (or last preview) as lines/circles/arcs onto named levels; creates missing levels; one undo step |
+| `companion.commit` | Write `result` (or last preview): lines/circles/arcs/inserts onto named levels; title fields onto the active/first title block; creates missing levels; unknown blocks become warnings; one undo step |
 
 Menus: Architecture > Companion. WinUI invokes these through `app.run` (no separate bridge class).
 
@@ -44,14 +46,16 @@ Non-Windows / wasm: pipe methods return a clear error (`status.available` is fal
 |---|---|
 | `levelSelect` | Outputs level `name`, `elevation`, `height` from the last `context.levels` |
 | `projectField` | Reads a field from the last `context.project` (top-level or `details`) |
+| `blockInsert` | Emits a block insert (`name`, `x`, `y`, `rotation` degrees, `attribs`, optional `level`) |
+| `titleField` | Emits a title-block field tag/value (e.g. `REV`, `SCALE`) |
 
 ## Verified
 
-- O-Dynamo: `dotnet test` on `ODraft.Graph.Tests` (12 passed), including context nodes and level-tagged geometry.
-- O-Draft: `cargo test -p aad-engine --test companion` (8 passed): connect without host, commit to Ground/First + undo, hostile inputs.
+- O-Dynamo: `dotnet test` on `ODraft.Graph.Tests` (14 passed), including `blockInsert` and `titleField`.
+- O-Draft: `cargo test -p aad-engine --test companion` (10 passed): level commit + undo, block insert with missing-block warning, title-field write.
 
 ## Not done
 
 - GPU / overlay ghost of the preview on the canvas (preview is stored on the session only).
-- Smart-block inserts, title fields, sheet-set annotation (Phases 4–5).
+- Sheet-set annotation output (Phase 5).
 - In-shell WinUI node editor (Phase 6).

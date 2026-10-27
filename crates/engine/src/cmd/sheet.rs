@@ -236,7 +236,7 @@ fn ensure_title_block(s: &mut Session) -> Result<()> {
 }
 
 /// The handles of the title block references (or any block with title fields) in `layout`.
-fn title_inserts(d: &Drawing, layout: &str) -> Vec<aad_doc::Handle> {
+pub(crate) fn title_inserts(d: &Drawing, layout: &str) -> Vec<aad_doc::Handle> {
     let Some(l) = d.layouts.iter().find(|l| l.name == layout) else { return Vec::new() };
     l.entities
         .iter()
@@ -258,7 +258,8 @@ fn read_fields(d: &Drawing, layout: &str) -> BTreeMap<String, String> {
     out
 }
 
-fn write_fields(d: &mut Drawing, layout: &str, fields: &BTreeMap<String, String>) -> usize {
+/// Write title-block attribute values on `layout`. Used by `sheet.fields` and `companion.commit`.
+pub(crate) fn write_fields(d: &mut Drawing, layout: &str, fields: &BTreeMap<String, String>) -> usize {
     let mut changed = 0;
     for h in title_inserts(d, layout) {
         let Some(l) = d.layouts.iter_mut().find(|l| l.name == layout) else { continue };
