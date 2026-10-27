@@ -77,5 +77,5 @@ architectural walls and take-off is implemented; see [parametric.md](parametric.
 | Panels for Opening Schedule, Drawing Explorer, Xrefs, Measurement and Project Navigator; guarding block-definition edits against locked layers; export and import of drawing spaces | [ACTIVE_DRAWING_SPACE.md](ACTIVE_DRAWING_SPACE.md), section 4 |
 | Conversion of 3D solids, surfaces and meshes | They are kept as raw data and reported on import, not converted |
 | User coordinate systems, SHX fonts, DWG on the web | Not available |
-| Levels and sheet sets | Phase 1 is implemented (see Implemented: Levels); level tabs, traces, sheet sets, viewport binding and the Phase 5 migration are planned. Design and roadmap: [levels-and-sheet-sets.md](levels-and-sheet-sets.md) |
+| Levels and sheet sets | Phase 1 is implemented (see Implemented: Levels); level tabs, traces, sheet sets, sections and elevations (Phase 4), viewport binding and the Phase 6 migration are planned. Design and roadmap: [levels-and-sheet-sets.md](levels-and-sheet-sets.md) |
 | Other interface languages | Removed: the interface is English only |
