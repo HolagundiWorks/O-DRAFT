@@ -29,7 +29,9 @@ fn attribs(s: &Session, h: Handle) -> Vec<Attrib> {
 }
 
 fn segments(s: &Session) -> usize {
-    aad_render::build(s.doc().unwrap(), &Space::Model, &aad_render::Options::default()).segment_count()
+    // Text may be stroked (polylines) or filled (triangles), so count all drawn geometry.
+    let dl = aad_render::build(s.doc().unwrap(), &Space::Model, &aad_render::Options::default());
+    dl.segment_count() + dl.tris.len()
 }
 
 #[test]

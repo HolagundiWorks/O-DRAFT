@@ -20,7 +20,9 @@ fn builds_lines_and_circles() {
     let d = sample();
     let l = build(&d, &Space::Model, &Options { tolerance: 0.01, ..Default::default() });
     assert_eq!(l.prims.len(), 2);
-    assert!(l.prims[1].len > 20);
+    // A circle is one GPU ring primitive: its centre and a rim point.
+    assert!(matches!(l.prims[1].kind, Kind::Arc { sweep } if sweep > std::f32::consts::TAU - 1e-3), "{:?}", l.prims[1].kind);
+    assert_eq!(l.prims[1].len, 2);
     assert_eq!(l.prims[1].color, Rgb(255, 0, 0));
 }
 
@@ -144,9 +146,16 @@ fn layout_viewport_shows_model_clipped() {
         }
     }
     // The circle (red) is visible, scaled by 0.5 about the view centre: radius 1.5 around (5,4).
-    let red: Vec<Vec2> = content.iter().filter(|p| p.color == Rgb(255, 0, 0)).flat_map(|p| l.points(p).to_vec()).collect();
+    let red: Vec<&&DPrim> = content.iter().filter(|p| p.color == Rgb(255, 0, 0)).collect();
     assert!(!red.is_empty());
-    assert!(red.iter().all(|q| (q.dist(Vec2::new(5.0, 4.0)) - 1.5).abs() < 0.02));
+    let c = Vec2::new(5.0, 4.0);
+    for p in red {
+        match (p.kind, l.points(p)) {
+            // A ring that fits inside the viewport stays one primitive: centre and rim point.
+            (Kind::Arc { .. }, [centre, rim]) => assert!(centre.dist(c) < 1e-9 && (rim.dist(*centre) - 1.5).abs() < 0.02, "{centre:?} {rim:?}"),
+            (_, pts) => assert!(pts.iter().all(|q| (q.dist(c) - 1.5).abs() < 0.02)),
+        }
+    }
     // The line y=0 maps to paper y=1.5, below the viewport: clipped away entirely.
     assert!(content.iter().filter(|p| p.color != Rgb(255, 0, 0)).all(|p| l.points(p).iter().all(|q| q.y > 1.9)));
     // The border is drawn with the viewport's own handle.
@@ -237,23 +246,27 @@ fn truetype_text_is_filled_or_outlined() {
 fn missing_font_falls_back_to_stroke() {
     let d = text_doc("NoSuchFontAnywhere.ttf", "OH");
     let l = build(&d, &Space::Model, &Options::default());
-    assert!(!l.prims.is_empty() && l.prims.iter().all(|p| p.kind == Kind::Polyline));
+    assert!(
+        !l.prims.is_empty() && l.prims.iter().all(|p| matches!(p.kind, Kind::Polyline | Kind::Tris)),
+        "the drafting font draws, as strokes or filled glyphs"
+    );
 }
 
 #[test]
 fn backwards_and_upside_down_mirror_text() {
     let mut d = text_doc("AAD Stroke", "ABC");
     let normal = build(&d, &Space::Model, &Options::default()).bounds;
-    assert!(normal.min.x >= -1e-9 && normal.min.y >= -1e-9);
+    // Glyph outlines may overshoot the baseline and left edge slightly.
+    assert!(normal.min.x >= -0.05 && normal.min.y >= -0.05, "{normal:?}");
     d.text_styles.iter_mut().for_each(|s| s.backwards = true);
     let back = build(&d, &Space::Model, &Options::default()).bounds;
-    assert!(back.max.x <= 1e-9 && (back.width() - normal.width()).abs() < 1e-9, "mirrored to the left");
+    assert!(back.max.x <= 0.05 && (back.width() - normal.width()).abs() < 1e-9, "mirrored to the left");
     d.text_styles.iter_mut().for_each(|s| {
         s.backwards = false;
         s.upside_down = true;
     });
     let up = build(&d, &Space::Model, &Options::default()).bounds;
-    assert!(up.max.y <= 1e-9 && up.min.y < -0.9, "mirrored below the baseline");
+    assert!(up.max.y <= 0.05 && up.min.y < -0.9, "mirrored below the baseline");
 }
 
 #[test]
@@ -320,7 +333,7 @@ fn dimension_colours_by_role() {
     let has = |c: Rgb, k: Kind| l.prims.iter().any(|p| p.color == c && p.kind == k);
     assert!(has(Rgb(255, 0, 0), Kind::Polyline) && has(Rgb(255, 0, 0), Kind::Tris), "dimension line and arrows red");
     assert!(has(Rgb(0, 255, 0), Kind::Polyline), "extension lines green");
-    assert!(has(Rgb(0, 0, 255), Kind::Polyline), "text blue");
+    assert!(has(Rgb(0, 0, 255), Kind::Polyline) || has(Rgb(0, 0, 255), Kind::Tris), "text blue (stroked or filled glyphs)");
     // ByBlock (the default) takes the dimension's own colour.
     let mut d = Drawing::new_imperial();
     d.add(&Space::Model, Common { color: Color::Index(6), ..Default::default() }, EntityKind::Dimension(lin_dim())).unwrap();
@@ -362,7 +375,7 @@ fn table_title_is_centred_and_merged() {
     let text: Vec<Vec2> = l
         .prims
         .iter()
-        .filter(|p| p.kind == Kind::Polyline)
+        .filter(|p| matches!(p.kind, Kind::Polyline | Kind::Tris))
         .flat_map(|p| l.points(p).to_vec())
         .filter(|q| q.y > -0.95 && q.y < -0.05 && q.x > 0.05 && q.x < 5.95)
         .collect();

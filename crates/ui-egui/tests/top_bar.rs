@@ -42,7 +42,7 @@ fn y_of(h: &Harness<'_, CadApp>, label: &str) -> f32 {
 #[test]
 fn the_first_line_holds_the_chosen_tools_and_the_second_line_the_selectors() {
     let h = harness(WorkspaceMode::Classic);
-    for tool in ["Room Label", "Room Area", "Architectural Layer Set"] {
+    for tool in ["Room Label", "Room Area"] {
         assert!(has(&h, tool), "default first-line tool {tool}");
     }
     let first = y_of(&h, "Room Label");

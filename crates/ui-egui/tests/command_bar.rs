@@ -232,11 +232,12 @@ fn the_slash_menu_lists_references_and_arrows_tab_enter_and_escape_work_on_it() 
     key(&mut h, Key::ArrowDown);
     assert_eq!(h.state().cmd.sug_sel, Some(1));
     key(&mut h, Key::Enter);
-    assert_eq!(buffer(&h), "/ see /view ", "the second reference (/drawing, /view, ...), inserted at the word being typed");
+    let second = aad_engine::cmd::context::PROVIDERS[1].name;
+    assert_eq!(buffer(&h), format!("/ see /{second} "), "the second reference in the list, inserted at the word being typed");
     assert!(sent(&s).is_empty(), "Enter accepted the reference, it did not send");
     typed(&mut h, "/la");
     typed_raw(&mut h, "	");
-    assert_eq!(buffer(&h), "/ see /view /layers ");
+    assert_eq!(buffer(&h), format!("/ see /{second} /layers "));
     key(&mut h, Key::ArrowUp);
     assert!(h.state().cmd.sug_sel.is_none(), "with no menu open the arrows are for the history");
 }

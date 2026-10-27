@@ -94,7 +94,7 @@ pub fn render(list: &DisplayList, view: &View, o: &RasterOptions) -> Option<Pixm
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
                 let bb = Bounds2::from_points(tess.iter().copied());
                 if !bb.intersects(&vis) {
                     continue;

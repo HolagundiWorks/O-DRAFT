@@ -53,7 +53,7 @@ pub fn export_window(d: &Drawing, space: &Space, window: Option<Bounds2>) -> Str
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
                 let _ = write!(
                     s,
                     r#"<polyline fill="none" stroke="{c}" stroke-width="{stroke:.6}" stroke-linecap="round" stroke-linejoin="round" points=""#

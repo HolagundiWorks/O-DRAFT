@@ -832,7 +832,7 @@ fn map_similarity_arc(xf: Mat3, center: Vec2, radius: f64, start: f64, sweep: f6
 fn arc_world_bounds(center: Vec2, rim: Vec2, sweep: f32) -> Bounds2 {
     let radius = center.dist(rim);
     let start = center.angle_to(rim);
-    aad_geom::Arc::new(center, radius, start, start + f64::from(sweep)).bounds()
+    aad_geom::Arc::from_sweep(center, radius, start, f64::from(sweep)).bounds()
 }
 
 /// Map every point of `src` by `xf` (infinite lines map base and direction).
@@ -866,7 +866,7 @@ fn transform_list(src: &DisplayList, xf: Mat3) -> DisplayList {
                         out.prims.push(DPrim { start, len: 2, kind: Kind::Arc { sweep: sw as f32 }, ..*p });
                     } else {
                         let mut tess = Vec::new();
-                        aad_geom::Arc::new(*center, radius, start_a, start_a + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                        aad_geom::Arc::from_sweep(*center, radius, start_a, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
                         let start = out.verts.len() as u32;
                         out.verts.extend(tess.iter().copied().map(map));
                         out.prims.push(DPrim { start, len: tess.len() as u32, kind: Kind::Polyline, ..*p });
@@ -1063,7 +1063,7 @@ fn append_clipped_arc(dst: &mut DisplayList, p: &DPrim, pts: &[Vec2], sweep: f32
     let radius = center.dist(*rim);
     let start = center.angle_to(*rim);
     let mut tess = Vec::new();
-    aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+    aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
     match poly {
         Some(poly) => {
             for piece in clip::clip_polyline_poly(&tess, poly) {

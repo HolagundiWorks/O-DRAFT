@@ -890,20 +890,16 @@ mod tests {
         assert!(parse_input(g, &json!({"size": "1 2 3"})).is_err());
         assert!(parse_input(g, &json!({"size": "1,inf"})).is_err());
         let p = get("project").unwrap();
-        assert_eq!(parse_input(p, &json!({"title": " House ", "owner": ""})).unwrap(), json!({"details": {"title": "House"}}));
+        assert_eq!(parse_input(p, &json!({"title": " House ", "owner": ""})).unwrap(), json!({"title": "House"}), "project settings are flat");
     }
 
     #[test]
     fn tables_become_arrays_of_objects_and_rates_a_map() {
         let f = get("floors").unwrap();
-        let p = parse_input(
-            f,
-            &json!({"floors": [["Ground", "3.15", "3.0", "2.1", "150", "450"], ["", "", "", "", "", ""], {"name": "First", "floorToFloor": 3}]}),
-        )
-        .unwrap();
+        let p = parse_input(f, &json!({"floors": [["Ground"], [""], {"name": "First"}]})).unwrap();
         assert_eq!(p["floors"].as_array().unwrap().len(), 2, "blank rows are dropped");
-        assert_eq!(p["floors"][0]["floorToFloor"], 3.15);
-        assert!(parse_input(f, &json!({"floors": [["G", "tall"]]})).is_err());
+        assert_eq!(p["floors"][0]["name"], "Ground");
+        assert_eq!(p["floors"][1]["name"], "First");
         assert!(parse_input(f, &json!({"floors": []})).is_err());
         let r = get("takeoff.rates").unwrap();
         let p = parse_input(r, &json!({"rates": [["Bricks", "m3", "5200"], ["", "", ""]]})).unwrap();

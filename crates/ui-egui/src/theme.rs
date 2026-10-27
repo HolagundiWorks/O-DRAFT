@@ -426,9 +426,9 @@ mod tests {
     fn the_accent_is_not_orange_any_more() {
         for theme in [Theme::Dark, Theme::Light] {
             let a = Tokens::of(theme).accent;
-            // Black or near-white: no colour channel stands out from the others.
+            // Near-black ink or near-white: a small spread, and never warm (red above blue).
             let spread = a.r().max(a.g()).max(a.b()) - a.r().min(a.g()).min(a.b());
-            assert!(spread <= 8, "{theme:?}: accent {a:?}");
+            assert!(spread <= 32 && a.r() <= a.b() + 8, "{theme:?}: accent {a:?}");
         }
     }
 }

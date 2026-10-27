@@ -336,7 +336,7 @@ fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay:
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate(px.max(1e-9), &mut tess);
+                aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate(px.max(1e-9), &mut tess);
                 let bb = Bounds2::from_points(tess.iter().copied());
                 if !bb.intersects(&vis) {
                     continue;
@@ -388,11 +388,8 @@ fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay:
 fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdisplay: bool, true_scale: bool) {
     let Some(list) = &c.list else { return };
     let origin = crate::gpu::choose_origin(&list.bounds, xf.center, f64::from(xf.rect.height()) / xf.scale.max(1e-300));
-    let lw_mode = lwdisplay.then_some(if true_scale {
-        aad_render::mesh::LineweightMode::TrueScale
-    } else {
-        aad_render::mesh::LineweightMode::Screen
-    });
+    let lw_mode =
+        lwdisplay.then_some(if true_scale { aad_render::mesh::LineweightMode::TrueScale } else { aad_render::mesh::LineweightMode::Screen });
     let key = {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -459,7 +456,7 @@ fn draw_highlight(p: &egui::Painter, xf: &Xf, list: &DisplayList, prims: &[usize
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
                 let screen: Vec<Pos2> = tess.iter().map(|q| xf.to_screen(*q)).collect();
                 if dashed {
                     shapes.extend(Shape::dashed_line(&screen, Stroke::new(width, color), 6.0, 4.0));

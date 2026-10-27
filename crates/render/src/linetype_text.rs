@@ -153,7 +153,7 @@ mod tests {
 
     /// The leftmost x of each text.
     fn starts(sh: &[Shaped]) -> Vec<f64> {
-        sh.iter().map(|s| s.strokes.iter().flatten().map(|p| p.x).fold(f64::INFINITY, f64::min)).collect()
+        sh.iter().map(|s| s.strokes.iter().flatten().chain(s.glyphs.iter().flatten().flatten()).map(|p| p.x).fold(f64::INFINITY, f64::min)).collect()
     }
 
     #[test]

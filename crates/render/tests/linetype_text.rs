@@ -13,14 +13,14 @@ fn drawing(lt: Linetype, a: Vec2, b: Vec2) -> Drawing {
     d
 }
 
-/// Bounds of the drawn polylines that leave the line through `a`-`b` (the text strokes).
+/// Bounds of the drawn primitives that leave the line through `a`-`b` (the text, stroked or filled).
 fn off_line(d: &Drawing, opts: &Options, a: Vec2, b: Vec2) -> Vec<Bounds2> {
     let l = build(d, &Space::Model, opts);
     let dir = (b - a).normalized();
     let dist = |p: Vec2| (p - a).x * dir.y - (p - a).y * dir.x;
     l.prims
         .iter()
-        .filter(|p| p.kind == Kind::Polyline)
+        .filter(|p| matches!(p.kind, Kind::Polyline | Kind::Tris))
         .map(|p| l.points(p))
         .filter(|pts| pts.iter().any(|q| dist(*q).abs() > 1e-6))
         .map(|pts| Bounds2::from_points(pts.iter().copied()))

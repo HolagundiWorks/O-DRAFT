@@ -353,9 +353,7 @@ pub enum LineweightMode {
 /// Screen mode: millimetres → points (`lw × 3.78`), never thinner than [`HAIRLINE_POINTS`].
 /// True scale: returns `lw` as world millimetres for the shader to scale with the view.
 pub fn wide_width(lw: f32, mode: Option<LineweightMode>) -> Option<f32> {
-    let Some(mode) = mode else {
-        return None;
-    };
+    let mode = mode?;
     if lw <= 0.0 {
         return None;
     }

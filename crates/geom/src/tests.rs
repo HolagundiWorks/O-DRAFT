@@ -321,3 +321,19 @@ fn long_secant_keeps_both_intersections() {
     assert!(hits[0].0.near(Vec2::new(-2.0, 0.0), 1e-8), "{hits:?}");
     assert!(hits[1].0.near(Vec2::new(2.0, 0.0), 1e-8), "{hits:?}");
 }
+
+#[test]
+fn a_sweep_stored_as_f32_tau_is_still_a_full_circle() {
+    // Display lists keep the sweep as `f32`; `TAU as f32` widens to a little more than `TAU`.
+    let sweep = f64::from(TAU as f32);
+    assert!(sweep > TAU);
+    let a = Arc::from_sweep(Vec2::new(5.0, 5.0), 3.0, 0.7, sweep);
+    let mut pts = Vec::new();
+    a.tessellate(0.01, &mut pts);
+    assert!(pts.len() > 20, "{} points", pts.len());
+    let b = a.bounds();
+    assert!((b.width() - 6.0).abs() < 1e-9 && (b.height() - 6.0).abs() < 1e-9, "{b:?}");
+    // A real partial arc is untouched.
+    let q = Arc::from_sweep(Vec2::ZERO, 1.0, 0.0, PI / 2.0);
+    assert!((q.sweep() - PI / 2.0).abs() < 1e-12);
+}

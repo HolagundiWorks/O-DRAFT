@@ -125,6 +125,8 @@ fn attrib_at(d: &Drawing, x0: f64) -> Option<(Rgb, f32)> {
 #[test]
 fn attributes_draw_with_their_own_properties() {
     let mut d = Drawing::new_imperial();
+    // Outlined text carries a lineweight; filled glyphs do not.
+    d.header.set_i64("TEXTFILL", 0);
     layer(&mut d, "TXT", 2, Lineweight::Mm100(50));
     layer(&mut d, "INS", 5, Lineweight::Mm100(18));
     let mut blk = Block::new("TAGS");

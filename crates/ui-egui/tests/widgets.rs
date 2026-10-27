@@ -141,9 +141,9 @@ fn menu_commands_that_need_input_open_their_dialog() {
     h.run_steps(5);
     assert!(has(&h, "Project title"), "the Project Details dialog is open");
     let n = h.query_all_by_role(Role::TextInput).count();
-    h.query_all_by_role(Role::TextInput).nth(n - 11).unwrap().click();
+    h.query_all_by_role(Role::TextInput).nth(n - 13).unwrap().click();
     h.run_steps(2);
-    h.query_all_by_role(Role::TextInput).nth(n - 11).unwrap().type_text("Rao House");
+    h.query_all_by_role(Role::TextInput).nth(n - 13).unwrap().type_text("Rao House");
     h.run_steps(3);
     h.query_all_by_label("OK").last().unwrap().click();
     h.run_steps(5);
@@ -153,7 +153,7 @@ fn menu_commands_that_need_input_open_their_dialog() {
     // Floors: a table, prefilled from the drawing.
     h.state_mut().start("floors");
     h.run_steps(5);
-    assert!(has(&h, "Add row") && has(&h, "Floor to floor (m)"));
+    assert!(has(&h, "Add row") && has(&h, "Floor names"));
     h.query_all_by_label("Cancel").last().unwrap().click();
     h.run_steps(3);
     assert!(!has(&h, "Add row"));

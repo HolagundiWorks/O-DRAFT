@@ -96,6 +96,13 @@ impl Arc {
         // CCW from p1 to p3 must pass p2; otherwise go the other way.
         if angle_in_sweep(a2, a1, a3) { Some(Arc::new(c.center, c.radius, a1, a3)) } else { Some(Arc::new(c.center, c.radius, a3, a1)) }
     }
+    /// Arc of `sweep` radians CCW from `start`. A sweep within `f32` rounding of a full turn is a
+    /// full circle: display lists store the sweep as `f32`, so a circle comes back as `TAU` plus about
+    /// 2e-7, which [`ccw_sweep`] would otherwise read as no sweep at all.
+    pub fn from_sweep(center: Vec2, radius: f64, start: f64, sweep: f64) -> Arc {
+        let end = if sweep >= TAU - 1e-5 { start + TAU } else { start + sweep };
+        Arc::new(center, radius, start, end)
+    }
     /// Arc from start point, center and end point (CCW).
     pub fn from_start_center_end(s: Vec2, c: Vec2, e: Vec2) -> Arc {
         Arc::new(c, s.dist(c), c.angle_to(s), c.angle_to(e))

@@ -69,8 +69,10 @@ fn lod_uses_greek_text_and_hatch_tint_in_the_mid_band() {
 #[test]
 fn fill_tint_replaces_pattern_lines_with_a_solid() {
     let d = hatch_and_circles();
-    let full = build(&d, &Space::Model, &Options { text: true, fill: true, fill_tint: false, view_height: 40.0, tolerance: 0.01, ..Default::default() });
-    let tint = build(&d, &Space::Model, &Options { text: true, fill: true, fill_tint: true, view_height: 40.0, tolerance: 0.01, ..Default::default() });
+    let full =
+        build(&d, &Space::Model, &Options { text: true, fill: true, fill_tint: false, view_height: 40.0, tolerance: 0.01, ..Default::default() });
+    let tint =
+        build(&d, &Space::Model, &Options { text: true, fill: true, fill_tint: true, view_height: 40.0, tolerance: 0.01, ..Default::default() });
     assert!(tint.prims.len() < full.prims.len(), "tint={} full={}", tint.prims.len(), full.prims.len());
     assert!(tint.prims.iter().any(|p| matches!(p.kind, aad_render::Kind::Tris)), "tint should keep a solid fill");
 }
