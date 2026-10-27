@@ -226,3 +226,5 @@ the parametric library is O-Draft's own.
 ## Drawing units
 
 Block geometry is in millimetres and is scaled to the drawing's unit (`INSUNITS`; `units` overrides). A header that says inches or feet on a plan that would then be longer than 500 m is taken to be an untouched template default, and the unit that makes the plan 3-500 m long (millimetres, then centimetres, then metres) is used instead; a stated metric unit is always trusted. This also applies to the other commands that read the drawing unit (rooms, permit layers, areas). Verified by `a_metric_plan_flagged_as_inches_still_gets_blocks_at_millimetre_scale` and on a copy of the OSAS demo drawing (header inches, 57 m wide plan in mm: scale 1.0 instead of 0.039). A drawing whose size is ambiguous (a small plan flagged as inches) keeps the header's unit.
+
+The Blocks panel shows the library as two-column thumbnails (`blocks.preview {smartblock: id}` draws the block with its default parameters without touching the drawing; every built-in block has one, tested). The thumbnails were built into the shell but not looked at on screen: the desktop was locked during the check.

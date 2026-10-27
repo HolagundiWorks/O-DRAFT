@@ -336,3 +336,17 @@ fn a_metric_plan_flagged_as_inches_still_gets_blocks_at_millimetre_scale() {
     let r = metres.execute("smartblock.insert", &json!({ "id": "int.bed", "at": [0, 0] })).unwrap();
     assert!((reference(&metres, r["handle"].as_str().unwrap()).3 - 0.001).abs() < 1e-12);
 }
+
+#[test]
+fn every_smart_block_has_a_thumbnail_and_previewing_changes_nothing() {
+    let mut s = metric();
+    let ids: Vec<String> =
+        s.execute("smartblock.list", &json!({})).unwrap()["blocks"].as_array().unwrap().iter().map(|b| b["id"].as_str().unwrap().to_string()).collect();
+    let before = s.doc().unwrap().blocks.len();
+    for id in &ids {
+        let r = s.execute("blocks.preview", &json!({ "smartblock": id })).unwrap();
+        assert!(!r["strokes"].as_array().unwrap().is_empty(), "{id} has no thumbnail strokes");
+    }
+    assert_eq!(s.doc().unwrap().blocks.len(), before);
+    assert!(s.execute("blocks.preview", &json!({ "smartblock": "no.such" })).is_err());
+}

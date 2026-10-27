@@ -800,6 +800,24 @@ fn context<'a>(d: &'a Def, vals: &BTreeMap<String, f64>) -> Result<Ctx<'a>> {
     Ok(cx)
 }
 
+/// The objects of smart block `id` with its default parameters (millimetres, about the origin), for a
+/// thumbnail. Nothing is added to the drawing.
+pub(super) fn default_entities(d: &aad_doc::Drawing, id: &str) -> Result<Vec<Entity>> {
+    let found = find_def(d, id)?;
+    let vals = resolve("blocks.preview", &found.def, &Map::new(), &Map::new())?;
+    let objs = evaluate(&found.def, &vals)?;
+    Ok(objs
+        .into_iter()
+        .map(|(layer, _, kind)| {
+            let mut e = Entity::new(aad_doc::Handle(0), kind);
+            if let Some(l) = layer {
+                e.common.layer = l;
+            }
+            e
+        })
+        .collect())
+}
+
 /// Evaluate `d` with parameter values `vals` into objects (millimetres, about the origin).
 fn evaluate(d: &Def, vals: &BTreeMap<String, f64>) -> Result<Vec<(Option<String>, Option<String>, EntityKind)>> {
     let mut cx = context(d, vals)?;

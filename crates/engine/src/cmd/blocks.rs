@@ -38,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{name (or name=path for a DXF/DWG), at?: [x,y] (scripted), scale?: (default 1), rotation?: (default 0)} → insert at drawing scale; interactive: name then point only")
             .interactive(|_| Ok(Box::new(InsertM { quick: true, ..InsertM::default() }))),
         CommandSpec::new("blocks.preview", "Block Preview", run_preview)
-            .params("{name? | path?: DXF/DWG} → {strokes: [{color: \"#RRGGBB\", points: [[x,y],…]}], segments: [[[x,y],…],…] (compat), solid: false} — DesignCenter-style coloured line swatch in the unit square")
+            .params("{name? | path?: DXF/DWG | smartblock?: id (its default parameters)} → {strokes: [{color: \"#RRGGBB\", points: [[x,y],…]}], segments: [[[x,y],…],…] (compat), solid: false} — DesignCenter-style coloured line swatch in the unit square")
             .noundo(),
         CommandSpec::new("attdef", "Define Attributes...", run_attdef)
             .menu(&["Draw", "Block", "Define Attributes..."])
@@ -326,7 +326,12 @@ fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(path) = str_param(p, "path") {
         return preview_path(path);
     }
-    let name = str_param(p, "name").ok_or_else(|| bad("blocks.preview", "`name` or `path` is required"))?;
+    if let Some(id) = str_param(p, "smartblock") {
+        let d = s.doc()?;
+        let ents = super::smartblock::default_entities(d, id)?;
+        return Ok(preview_entities(d, ents.iter()));
+    }
+    let name = str_param(p, "name").ok_or_else(|| bad("blocks.preview", "`name`, `path` or `smartblock` is required"))?;
     let d = s.doc()?;
     let b = d.block(name).ok_or_else(|| bad("blocks.preview", format!("no block `{name}`")))?;
     Ok(preview_entities(d, b.entities.iter().map(|e| e.as_ref())))
