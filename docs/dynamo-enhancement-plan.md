@@ -2,7 +2,8 @@
 
 **Status: in progress.** Phases 1–5 are implemented and verified (O-Dynamo `dotnet test`: 15
 passed; O-Draft `cargo test -p aad-engine --test companion`: 11 passed). Phase 2 canvas ghost
-overlay is deferred. Phase 6 remains planned. Capability matrix: [status.md](status.md).
+overlay is deferred. Phase 6 has a JSON Graph side panel (visual node canvas still open).
+Capability matrix: [status.md](status.md).
 
 ## Goal
 
@@ -226,7 +227,12 @@ Ground, and switching to Design mode does not show it.
 
 ---
 
-### Phase 6 — WinUI graph editor (O-Draft only, optional)
+### Phase 6 — WinUI graph editor (O-Draft only, optional) — **partial**
+
+**Shipped:** Side rail **Graph** tab with JSON editor, Evaluate and Commit. When the sibling
+`O-Dynamo` repo is present at build time (`ODRAFT_GRAPH`), Evaluate uses in-process
+`GraphEngine`; Commit always uses `companion.commit`. Visual node canvas and full pipe removal
+remain open.
 
 **Goal:** Replace the WPF JSON editor with a node-graph panel inside the WinUI shell, removing
 the separate process and the pipe.

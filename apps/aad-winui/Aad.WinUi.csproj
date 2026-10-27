@@ -19,9 +19,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- Sibling O-Dynamo checkout enables in-process GraphEngine (Phase 6). -->
+    <_ODraftGraphProj>$(MSBuildThisFileDirectory)..\..\..\O-Dynamo\src\ODraft\ODraft.Graph\ODraft.Graph.csproj</_ODraftGraphProj>
+  </PropertyGroup>
+  <PropertyGroup Condition="Exists('$(_ODraftGraphProj)')">
+    <DefineConstants>$(DefineConstants);ODRAFT_GRAPH</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250205002" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(_ODraftGraphProj)')">
+    <ProjectReference Include="$(_ODraftGraphProj)" />
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />

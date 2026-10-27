@@ -56,7 +56,12 @@ Non-Windows / wasm: pipe methods return a clear error (`status.available` is fal
 - O-Dynamo: `dotnet test` on `ODraft.Graph.Tests` (15 passed), including annotation nodes.
 - O-Draft: `cargo test -p aad-engine --test companion` (11 passed): level commit, inserts, title fields, Electrical annotation on Ground.
 
+## WinUI Graph panel (Phase 6 partial)
+
+Side rail **Graph** tab edits JSON, Evaluate (in-process `GraphEngine` when built with sibling
+O-Dynamo / `ODRAFT_GRAPH`, else `companion.evaluate`), Commit via `companion.commit`.
+
 ## Not done
 
 - GPU / overlay ghost of the preview on the canvas (preview is stored on the session only).
-- In-shell WinUI node editor (Phase 6).
+- Visual node-graph canvas (JSON editor only for now).

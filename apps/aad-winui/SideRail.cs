@@ -26,6 +26,7 @@ public sealed partial class MainWindow
         (SideTab.Layers, "Layers"),
         (SideTab.Blocks, "Blocks"),
         (SideTab.Project, "Project"),
+        (SideTab.Graph, "Graph"),
     ];
 
     private void BuildSideRail()

@@ -122,6 +122,41 @@
                             <StackPanel x:Name="ProjectPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
                         </ScrollViewer>
                     </Grid>
+                    <Grid x:Name="GraphTab" Visibility="Collapsed" AutomationProperties.Name="Graph">
+                        <Grid x:Name="GraphHost" Margin="{StaticResource PaddingPanel}" RowSpacing="{StaticResource SpaceXs}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock
+                                Grid.Row="0"
+                                Text="Companion graph (JSON)"
+                                FontSize="{StaticResource FontSizeCaption}"
+                                Foreground="{ThemeResource TextSecondaryBrush}" />
+                            <TextBox
+                                x:Name="GraphEditor"
+                                Grid.Row="1"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                FontFamily="{StaticResource FontFamilyMono}"
+                                FontSize="{StaticResource FontSizeCaption}"
+                                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                AutomationProperties.Name="Graph JSON" />
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                                <Button x:Name="GraphEvaluateButton" Content="Evaluate" Click="OnGraphEvaluate" Style="{StaticResource CompactButtonStyle}" />
+                                <Button x:Name="GraphCommitButton" Content="Commit" Click="OnGraphCommit" Style="{StaticResource CompactButtonStyle}" />
+                            </StackPanel>
+                            <TextBlock
+                                x:Name="GraphStatus"
+                                Grid.Row="3"
+                                TextWrapping="Wrap"
+                                FontSize="{StaticResource FontSizeCaption}"
+                                Foreground="{ThemeResource TextSecondaryBrush}"
+                                AutomationProperties.Name="Graph status" />
+                        </Grid>
+                    </Grid>
                 </Grid>
             </Grid>
             <Border

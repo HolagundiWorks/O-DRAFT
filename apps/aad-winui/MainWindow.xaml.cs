@@ -4707,24 +4707,61 @@ public sealed partial class MainWindow : Window
         // The library for the tab on screen (all of it in the design view): one click opens the insert form.
         if (snapshot.Library.Count > 0)
         {
-            BlocksPanel.Children.Add(FieldLabel(snapshot.Library.Count + " in the library for this tab"));
-            foreach (var entry in snapshot.Library)
+            BlocksPanel.Children.Add(FieldLabel(snapshot.Library.Count + " in the library for this tab. Click a thumbnail to insert."));
+            var tiles = new Grid { ColumnSpacing = Density.SpaceMd, RowSpacing = Density.SpaceMd };
+            tiles.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            tiles.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            for (var i = 0; i < snapshot.Library.Count; i++)
             {
-                var item = new Button
+                var entry = snapshot.Library[i];
+                var row = i / 2;
+                while (tiles.RowDefinitions.Count <= row)
                 {
-                    Content = entry.Title,
-                    MinHeight = Density.ControlHeight,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                };
-                Density.Name(item, "Insert smart block " + entry.Title);
-                ToolTipService.SetToolTip(item, entry.Description);
+                    tiles.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                }
+                var card = DesignCenterCard(false, "Insert smart block " + entry.Title, entry.Title + (entry.Description.Length > 0 ? ": " + entry.Description : ""));
+                var stack = new StackPanel { Spacing = 2 };
+                stack.Children.Add(PreviewCanvas("Smart block preview " + entry.Title, CachedSmartBlockPreviewJson(entry.Id), 72));
+                stack.Children.Add(new TextBlock
+                {
+                    Text = entry.Title,
+                    FontSize = Density.FontCaption,
+                    TextAlignment = TextAlignment.Center,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxLines = 2,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                });
+                card.Child = stack;
                 var id = entry.Id;
-                item.Click += (_, _) => InsertLibrarySmartBlock(id);
-                BlocksPanel.Children.Add(item);
+                card.Tapped += (_, _) => InsertLibrarySmartBlock(id);
+                Grid.SetRow(card, row);
+                Grid.SetColumn(card, i % 2);
+                tiles.Children.Add(card);
             }
+            BlocksPanel.Children.Add(tiles);
         }
         BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+    }
+
+    private readonly Dictionary<string, string> _smartPreviewJson = new();
+
+    /// <summary>The thumbnail geometry of a smart block with its default parameters; kept for the session.</summary>
+    private string? CachedSmartBlockPreviewJson(string id)
+    {
+        if (_smartPreviewJson.TryGetValue(id, out var cached))
+        {
+            return cached;
+        }
+        if (_host == IntPtr.Zero || Native.Execute(_host, "blocks.preview", JsonSerializer.Serialize(new Dictionary<string, object> { ["smartblock"] = id })) != 0)
+        {
+            return null;
+        }
+        var json = Native.ReadResult(_host);
+        if (!string.IsNullOrEmpty(json))
+        {
+            _smartPreviewJson[id] = json;
+        }
+        return json;
     }
 
     private void InsertLibrarySmartBlock(string id)
@@ -5930,6 +5967,7 @@ public sealed partial class MainWindow : Window
         CommandItem(window, "Layers palette", () => ShowSidePanel(SideTab.Layers));
         CommandItem(window, "Blocks", () => ShowSidePanel(SideTab.Blocks));
         CommandItem(window, "Project settings", () => ShowSidePanel(SideTab.Project));
+        CommandItem(window, "Graph", () => ShowSidePanel(SideTab.Graph));
         CommandItem(window, "Parameters Manager", OpenParameters);
         CommandItem(window, "Classic workspace", () => SwitchWorkspace(classic: true));
         CommandItem(window, "Pro workspace", () => SwitchWorkspace(classic: false));
@@ -5953,6 +5991,7 @@ public sealed partial class MainWindow : Window
         Layers,
         Blocks,
         Project,
+        Graph,
     }
 
     /// Expands the side column (and floats it back if needed), then selects a panel tab.
@@ -5974,6 +6013,7 @@ public sealed partial class MainWindow : Window
             SideTab.Layers => LayersTab,
             SideTab.Blocks => BlocksTab,
             SideTab.Project => ProjectTab,
+            SideTab.Graph => GraphTab,
             _ => PropertiesTab,
         };
         // Only the chosen panel is shown: there are no tabs inside the panel.
@@ -5982,6 +6022,11 @@ public sealed partial class MainWindow : Window
         LayersTab.Visibility = item == LayersTab ? Visibility.Visible : Visibility.Collapsed;
         BlocksTab.Visibility = item == BlocksTab ? Visibility.Visible : Visibility.Collapsed;
         ProjectTab.Visibility = item == ProjectTab ? Visibility.Visible : Visibility.Collapsed;
+        GraphTab.Visibility = item == GraphTab ? Visibility.Visible : Visibility.Collapsed;
+        if (tab == SideTab.Graph)
+        {
+            EnsureGraphEditorSeeded();
+        }
         RefreshSideRail();
     }
 
