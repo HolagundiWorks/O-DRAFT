@@ -5,6 +5,7 @@ rail and a Trace settings form (see "WinUI shell status"); the annotation tool s
 Sheet set / Traces editor, a Show-for dropdown in the Layer manager, the new-drawing option, the
 take-off level ids and the egui tabs are not built.** Only what the "Phase N status" sections list is
 implemented and tested.
+Sections and elevations (Phase 6) are a design only and are not built: see "Sections and elevations".
 
 Summary: keep one drawing file, but split its single model space into named **levels** (each its own
 entity store at a shared origin) and add **sheet sets** (discipline annotation spaces that reference
@@ -17,7 +18,10 @@ levels read-only). Every phase is useful and testable alone, starting with level
 - Any level can be **traced** under any other, several at once.
 - Sheet sets are tabs on the left (Working drawing, Electrical, Plumbing, Interior, False ceiling).
   They hold annotation and dimensions, reference levels, and never change design geometry.
-- Paper layouts stay. Each viewport says which level and which sheet set it shows.
+- Paper layouts stay. Each viewport says which level, section or elevation and which sheet set it shows.
+- **Sections and elevations** (added 2026-10-27) are a second kind of model space, drafted by hand
+  in 2D, each tied to a marker on a level, with read-only projection guides worked out from the
+  levels. See [Sections and elevations](#sections-and-elevations-phase-6-planned).
 
 ## Concepts
 
@@ -28,10 +32,99 @@ levels read-only). Every phase is useful and testable alone, starting with level
 | Sheet set | Named discipline with one annotation store **per level** (text, dimensions, leaders, tags, symbols, hatches). While active, the level is shown locked and only annotation is drawn |
 | Sheet view | (sheet set, level): that level's geometry (locked, filtered by the set's layer visibility) plus the set's annotation for it |
 | Design mode | No sheet set picked. The default; where drafting happens |
-| Layout | Paper, unchanged. A viewport names a level, an optional sheet set and optional traces |
+| View space | A section or elevation: its own store, tied to a marker on a level, drafted by hand, with projection guides (Phase 6, planned) |
+| Layout | Paper, unchanged. A viewport names a level or view space, an optional sheet set and optional traces |
 
 Annotation lives in its own store, not on layers, so two disciplines never collide, take-off never
 counts annotation, and deleting a sheet set never touches the design.
+
+## Sections and elevations (Phase 6, planned)
+
+Sections and elevations are a second kind of model space (a **view space**), drafted by hand in 2D
+like a level, but each is tied to a marker on a level and shows **projection guides** computed from
+the plans. Nothing is generated from a 3D model: guides are 2D projections of plan geometry plus
+heights already stored in the drawing, so the 2D-only scope holds.
+
+### View space
+
+- Its own store and tab (`Section A-A`, `Elevation North`), drafted with the normal tools.
+- Fixed coordinates: X is the distance along the marker line from its first point; Y is height in
+  drawing units from datum 0. A level at +3.150 m is at Y = 3150 (mm drawings) in every section.
+- Tied to a **marker** on a level. Today `section.marker` and `elevation.marker` (`cmd/symbols.rs`)
+  draw loose lines, circles and text with no link. They become one block insert each
+  (`AAD-SECTION`, `AAD-ELEVATION`) carrying the view id as extension data, so moving or rotating
+  the marker updates the view. `section.link {handle | window}` adopts an existing loose marker.
+- A **depth** (how far past the line it looks, > 0) and the levels it covers (default all).
+
+```text
+SpaceId(u32)                      shares the id counter with LevelId; never reused
+ViewSpace { id, kind Section|Elevation, name (1..64, unique among views), level: LevelId (the marker's plan),
+            marker: Option<Handle>, line: (Vec2, Vec2) plan coords, look Left|Right, depth > 0,
+            covers: Option<Vec<LevelId>>, traces[<=8] (other view spaces only), view, entities (skip) }
+Drawing += views (<=128)
+EditTarget += View(SpaceId); SheetSet.annotations is keyed by space (level or view), not LevelId only
+```
+
+`switch_level` generalises to the edit-target switch (Phase 3 introduces `EditTarget`); the swap
+invariant stays in one function. `model_stores` / `model_stores_mut` include view stores, so purge,
+audit, layer rename and the other drawing-wide walks of Phase 1 cover them with no new call sites.
+
+### Projection guides
+
+Read-only lines computed from the levels, drawn through the existing trace path
+(`crates/render/src/trace.rs`, quiet colour, `VIEWPORT_CONTENT` handle so never selectable),
+snappable, and recomputed when a covered level's store changes (`Arc::ptr_eq`, the same cache rule
+as traces). Guides are never saved; they are recomputed on open. What the user drafts is never moved.
+
+| Guide | Source | Section | Elevation |
+|---|---|---|---|
+| Floor and top-of-storey lines, labelled with the level name | each level's `elevation`, `height` | yes | yes |
+| Wall faces | cut line crossing wall lines on each covered level | cut walls, both faces | outer faces seen within depth |
+| Door and window jambs | opening inserts (`walls.rs`) within depth | yes | yes |
+| Sill and head lines | opening attributes `OSILL`, `OHEIGHT`, `OHEAD` | yes | yes |
+| Columns, stair start and end | column and stair objects crossing or seen | yes | seen only |
+
+Guide maths lives in `crates/engine/src/sectionguide.rs`: plain 2D line/segment intersection and
+projection onto the marker line. Hostile-input rules apply: zero-length line, depth 0 or negative,
+NaN or infinite heights, more than 100 000 guide lines (capped, with a note), nested blocks bounded by
+`MAX_BLOCK_DEPTH`. Guides know only O-Draft walls, openings, columns and stairs (or objects carrying
+their attributes); plain lines give none. Roofs, sloped slabs and curved walls in elevation are
+drafted by hand.
+
+### Commands (`cmd/views.rs`)
+
+| Command | Purpose |
+|---|---|
+| `section.new {p1, p2, look?, depth?, label?, level?}` | Place a linked section marker on a level and create its view space (does not switch to it from JSON) |
+| `elevation.new {at, angle, depth?, name?, level?}` | Same for an elevation |
+| `view.list`, `view.set {view, name?, depth?, covers?, look?}`, `view.delete {view, force?}`, `view.activate {view}` | Manage view spaces; each is one undo step; deleting the marker leaves the view with `marker: None` and a note |
+| `view.trace` | Traces between view spaces (levels are not offered: plan and section coordinates differ; guides do that job) |
+| `section.link {handle}` | Adopt an existing loose marker |
+| `section.draft {view, slabThickness?}` | Turn the current guides into ordinary editable objects in one undo step: cut walls as closed outlines, slabs as bands, openings as outlines between sill and head. Running again adds only what is new; never moves drafted objects |
+| `section.check {view}` | List guides that no longer meet drafted geometry (for example a wall moved 150 mm), as a report; changes nothing |
+| `section.levelmarks {view}` | Place `level.mark` symbols at each floor line, named after the levels |
+
+### UI, sheet sets, layouts, files
+
+- **Tabs:** a second group in the bottom row between levels and layouts
+  (`Ground | First · Section A-A | Elevation North · Title plate | Layout1`); a group with more than
+  about six tabs collapses into a dropdown chip (`Sections ▾`). Double-click on a marker opens its
+  view; right-click on a view tab offers Show marker. `chrome_json` gains `views`.
+- **Sheet sets:** annotation per space, so Working drawing holds Section A-A's dimensions and
+  Electrical the switch heights on Elevation North.
+- **Layouts:** `Viewport.level` generalises to a space id (level or view). The marker head's sheet
+  field is filled from the layout whose viewport shows that view, as `elevation.marker` takes `sheet`
+  by hand today.
+- **Files:** view stores as blocks `ODRAFT$VIEW$<id>` with keep-alive INSERTs on `ODRAFT-STORES`;
+  view records (kind, marker handle, line, look, depth, covers, traces) in `levels2` (bump its
+  version; older readers already fall back to one level on an unknown version). The marker stays an
+  ordinary block in other CAD programs.
+
+### Done when
+
+Moving a wall on Ground moves its guide in Section A-A without touching drafted lines,
+`section.check` reports the gap, the drawing round-trips through DXF and DWG with views, markers and
+links intact, and the hostile-input tests pass.
 
 ## Data model (`crates/doc`, L1)
 
@@ -112,6 +205,7 @@ The file stays a normal DXF. DWG uses the same bridge.
 | Sheet-set annotation for a level | Block `ODRAFT$ANN$<set id>$<level id>` |
 | Keep-alive | One INSERT of each block in model space on layer `ODRAFT-STORES` (frozen, not plotted) so `PURGE` keeps them |
 | Level, trace, sheet-set records | JSON under `levels2` in `AAD_PROJECT` (version, ids, names, order, elevations, traces, sets, active target) |
+| Section and elevation spaces (Phase 6, planned) | Blocks `ODRAFT$VIEW$<id>`; records in `levels2` |
 | Viewport level, set, traces | Extension data `AAD_VP` on the VIEWPORT |
 
 Reading: the blocks named in `levels2` are read back into stores and the keep-alive INSERTs and layer
@@ -137,11 +231,13 @@ show the first level.
 2. Sheet-set annotation is stored per level.
 3. The rail lists Design plus the five presets on every new drawing.
 4. Traces are saved with the level.
+5. Open: sections and elevations use guides plus an on-demand `section.draft`; drafted lines do not
+   follow plan changes automatically (assumed until the owner decides otherwise).
 
 ## Roadmap
 
-The plan names five phases but its phase table was not part of the file; the split below is derived
-from the plan's text (Phase 1 carries the file format and drawing-wide audit; Phase 2 is the
+The plan names six phases (sections and elevations were added on 2026-10-27 as a sixth phase, after the five built ones); the split
+below follows the plan (Phase 1 carries the file format and drawing-wide audit; Phase 2 is the
 rendering work). Each phase ends with `cargo xtask ci` and its named tests, and updates
 [status.md](status.md) in the same change.
 
@@ -152,6 +248,7 @@ rendering work). Each phase ends with `cargo xtask ci` and its named tests, and 
 | 3. Sheet sets | `SheetSet`, per-level annotation stores, `sheetset.*`, `protect.rs` reference locking, annotation layer prefixes, left rail, annotation tool strip | In a sheet view a level object edit is refused naming the level; annotation of two sets on one level does not collide; presets create their spaces |
 | 4. Layouts and exchange | `Viewport.level/sheet_set/traces`, `viewport.set`, layout tessellation per store, `AAD_VP` data, Export for exchange | One layout holds the Electrical and Plumbing First-floor plans side by side and round-trips |
 | 5. Migration and polish (engine done; take-off ids, shell UI and egui not) | `level.import/export`, `project.merge`, take-off level ids, layer "Show for" filter, shortcuts, new-drawing and `project.setup` flow, egui tabs, memory load test (20 levels) | A floor project merges into one file in one undo step; docs and status complete |
+| 6. Sections and elevations (planned, not built) | View spaces, linked markers, `section.*` / `view.*` commands, projection guides (`sectionguide.rs`), view tab group, per-space annotation, `ODRAFT$VIEW$` round-trip | See [Done when](#done-when) above |
 
 ## Phase 1 status: done, with the limits below
 
