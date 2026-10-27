@@ -1112,10 +1112,10 @@ fn draw_crosshair(app: &CadApp, p: &egui::Painter, rect: Rect, at: Pos2, shape: 
     p.line_segment([pos2(at.x + gap, at.y), pos2(at.x + len, at.y)], st);
     p.line_segment([pos2(at.x, at.y - len), pos2(at.x, at.y - gap)], st);
     p.line_segment([pos2(at.x, at.y + gap), pos2(at.x, at.y + len)], st);
-    if shape == aad_engine::CursorShape::CrosshairsAndPickbox {
-        if let Some(half) = pb {
-            p.rect_stroke(Rect::from_center_size(at, vec2(half * 2.0, half * 2.0)), 0.0, st, egui::StrokeKind::Middle);
-        }
+    if shape == aad_engine::CursorShape::CrosshairsAndPickbox
+        && let Some(half) = pb
+    {
+        p.rect_stroke(Rect::from_center_size(at, vec2(half * 2.0, half * 2.0)), 0.0, st, egui::StrokeKind::Middle);
     }
 }
 

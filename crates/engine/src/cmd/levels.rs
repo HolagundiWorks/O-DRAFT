@@ -5,7 +5,7 @@
 //! no explicit levels is one implicit level; the first `level.new` makes it explicit, named after
 //! the current floor (else `Level 1`), and adds the new level after it.
 
-use aad_doc::{Level, LevelId};
+use aad_doc::{Level, LevelId, MAX_LEVELS};
 use serde_json::{Value, json};
 
 use super::project;
@@ -27,6 +27,15 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("level.delete", "Delete Level", run_delete)
             .menu(&["Architecture", "Levels", "Delete Level"])
             .params("{level, force? (delete although objects or traces are on it)} → {deleted, active}"),
+        CommandSpec::new("level.moveto", "Move to Level", run_moveto)
+            .menu(&["Architecture", "Levels", "Move to Level"])
+            .params("{level, handles? (default the selection)} → {moved}. Moves objects of the active level to another level at the same coordinates."),
+        CommandSpec::new("level.copyto", "Copy to Levels", run_copyto)
+            .menu(&["Architecture", "Levels", "Copy to Levels"])
+            .params("{levels: [level..], handles? (default the selection)} → {copied}. Copies objects of the active level to other levels at the same coordinates (column grids, stair cores)."),
+        CommandSpec::new("level.fromfloors", "Levels from Floors", run_fromfloors)
+            .menu(&["Architecture", "Levels", "Levels from Floors"])
+            .params("{} → {created: [names], levels}. Adds an empty level for each floor of the project data that has none; elevation is the sum of the floor heights below it."),
         CommandSpec::new("level.activate", "Activate Level", run_activate)
             .menu(&["Architecture", "Levels", "Activate Level"])
             .alias(&["levelactivate"])
@@ -130,7 +139,12 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let d = s.doc_mut()?;
     if let Some(n) = str_param(p, "name") {
+        let old = d.level(id).map(|l| l.name.clone()).unwrap_or_default();
         d.rename_level(id, n)?;
+        let new = d.level(id).map(|l| l.name.clone()).unwrap_or_default();
+        if old != new {
+            sync_floor_name(d, &old, &new);
+        }
     }
     if let Some(l) = d.levels.iter_mut().find(|l| l.id == id) {
         if let Some(e) = elevation {
@@ -185,4 +199,157 @@ fn run_activate(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let d = s.doc()?;
     Ok(json!({ "active": d.active_level_ref().map(|l| l.name.clone()), "objects": d.model.len() }))
+}
+
+/// Keep the project's floor list, the chosen floor and the title blocks' `FLOOR` fields in step
+/// with a level that was renamed.
+fn sync_floor_name(d: &mut aad_doc::Drawing, old: &str, new: &str) {
+    if let Value::Array(mut fl) = project::get(d, "floors") {
+        let mut changed = false;
+        for f in &mut fl {
+            if f.get("name").and_then(Value::as_str).is_some_and(|n| n.eq_ignore_ascii_case(old)) {
+                f["name"] = json!(new);
+                changed = true;
+            }
+        }
+        if changed {
+            project::set(d, "floors", &Value::Array(fl));
+            if project::get(d, "activeFloor").as_str().is_some_and(|n| n.eq_ignore_ascii_case(old)) {
+                project::set(d, "activeFloor", &json!(new));
+            }
+        }
+    }
+    for layout in &mut d.layouts {
+        let hits: Vec<aad_doc::Handle> = layout
+            .entities
+            .iter()
+            .filter(|e| matches!(&e.kind, aad_doc::EntityKind::Insert(i) if i.attribs.iter().any(|a| a.tag.eq_ignore_ascii_case("FLOOR") && a.text.value.eq_ignore_ascii_case(old))))
+            .map(|e| e.handle)
+            .collect();
+        for h in hits {
+            layout.entities.modify(h, |e| {
+                if let aad_doc::EntityKind::Insert(i) = &mut e.kind {
+                    for a in &mut i.attribs {
+                        if a.tag.eq_ignore_ascii_case("FLOOR") && a.text.value.eq_ignore_ascii_case(old) {
+                            a.text.value = new.to_string();
+                        }
+                    }
+                }
+            });
+        }
+    }
+}
+
+/// The objects to carry to another level: `handles` or the selection, kept to the active level.
+fn objects_of_active(s: &Session, cmd: &str, p: &Value) -> Result<Vec<aad_doc::Handle>> {
+    if !s.doc()?.has_levels() {
+        return Err(bad(cmd, "the drawing has one level; add another with level.new first"));
+    }
+    let d = s.doc()?;
+    let hs: Vec<_> = targets(s, p)?.into_iter().filter(|h| d.model.contains(*h)).collect();
+    if hs.is_empty() {
+        return Err(bad(cmd, "no objects of the active level are selected"));
+    }
+    Ok(hs)
+}
+
+fn run_moveto(s: &mut Session, p: &Value) -> Result<Value> {
+    let to = find(s, "level.moveto", p, "level")?;
+    if s.doc()?.active_level == Some(to) {
+        return Err(bad("level.moveto", "the objects are already on that level"));
+    }
+    if s.block_edit.is_some() {
+        return Err(bad("level.moveto", "close the block editor first"));
+    }
+    let hs = objects_of_active(s, "level.moveto", p)?;
+    let d = s.doc_mut()?;
+    let mut moved = Vec::with_capacity(hs.len());
+    for h in hs {
+        if let Some(e) = d.model.remove(h) {
+            moved.push(e);
+        }
+    }
+    let n = moved.len();
+    if let Some(l) = d.levels.iter_mut().find(|l| l.id == to) {
+        for e in moved {
+            l.entities.push((*e).clone());
+        }
+    }
+    s.set_selection(Vec::new());
+    Ok(json!({ "moved": n }))
+}
+
+/// Most objects one `level.copyto` may create.
+const MAX_COPIES: usize = 2_000_000;
+
+fn run_copyto(s: &mut Session, p: &Value) -> Result<Value> {
+    let list = p.get("levels").and_then(Value::as_array).ok_or_else(|| bad("level.copyto", "`levels` (a list of level ids or names) is required"))?;
+    if list.is_empty() || list.len() > MAX_LEVELS {
+        return Err(bad("level.copyto", format!("`levels` needs 1 to {MAX_LEVELS} entries")));
+    }
+    let mut to = Vec::new();
+    for v in list {
+        let id = find(s, "level.copyto", &json!({ "level": v }), "level")?;
+        if s.doc()?.active_level == Some(id) {
+            return Err(bad("level.copyto", "the active level is the source; pick other levels"));
+        }
+        if !to.contains(&id) {
+            to.push(id);
+        }
+    }
+    let hs = objects_of_active(s, "level.copyto", p)?;
+    if hs.len().saturating_mul(to.len()) > MAX_COPIES {
+        return Err(bad("level.copyto", "too many objects to copy at once"));
+    }
+    let d = s.doc_mut()?;
+    let source: Vec<_> = hs.iter().filter_map(|h| d.model.get(*h).cloned()).collect();
+    let mut copied = 0usize;
+    for id in to {
+        let mut fresh = Vec::with_capacity(source.len());
+        for e in &source {
+            let mut c = (**e).clone();
+            c.handle = d.new_handle();
+            fresh.push(c);
+        }
+        copied += fresh.len();
+        if let Some(l) = d.levels.iter_mut().find(|l| l.id == id) {
+            for e in fresh {
+                l.entities.push(e);
+            }
+        }
+    }
+    Ok(json!({ "copied": copied }))
+}
+
+fn run_fromfloors(s: &mut Session, _p: &Value) -> Result<Value> {
+    if s.block_edit.is_some() {
+        return Err(bad("level.fromfloors", "close the block editor first"));
+    }
+    let Value::Array(floors) = project::get(s.doc()?, "floors") else {
+        return Err(bad("level.fromfloors", "the drawing has no floor list; set one with the `floors` command"));
+    };
+    if floors.is_empty() || floors.len() > MAX_LEVELS {
+        return Err(bad("level.fromfloors", format!("the floor list needs 1 to {MAX_LEVELS} floors")));
+    }
+    let m = crate::annot::drawing_unit(s.doc()?).map_or(0.001, |u| u.metres());
+    let mut created = Vec::new();
+    let mut elevation = 0.0;
+    let d = s.doc_mut()?;
+    for f in &floors {
+        let Some(name) = f.get("name").and_then(Value::as_str).filter(|n| aad_doc::level_name_ok(n)) else { continue };
+        let ftf = f.get("floorToFloor").and_then(Value::as_f64).filter(|n| n.is_finite() && *n >= 0.0).unwrap_or(3.0);
+        let (elev_du, height_du) = (elevation / m, ftf / m);
+        elevation += ftf;
+        if d.level_by_name(name).is_some() {
+            continue;
+        }
+        if !d.has_levels() {
+            // The existing objects become the first floor's level.
+            d.materialize_levels(name, elev_du, height_du)?;
+        } else {
+            d.add_level(name, elev_du, height_du, None)?;
+        }
+        created.push(name.to_string());
+    }
+    Ok(json!({ "created": created, "levels": all(d) }))
 }

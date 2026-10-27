@@ -178,14 +178,121 @@ fn audit_and_extents_do_not_lose_the_other_levels() {
 }
 
 #[test]
-fn a_drawing_with_several_levels_is_not_written_to_dxf_so_no_level_is_lost_silently() {
+fn levels_round_trip_through_a_dxf_file() {
     let mut s = Session::new();
     line(&mut s, 0.0);
-    assert!(aad_io::write(s.doc().unwrap(), "a.dxf").is_ok(), "an implicit single level saves as before");
+    s.execute("level.new", &json!({"name": "First", "first": "Ground", "elevation": 3000.0})).unwrap();
+    s.execute("level.activate", &json!({"level": "First"})).unwrap();
+    line(&mut s, 5.0);
+    let bytes = aad_io::write(s.doc().unwrap(), "a.dxf").unwrap();
+    assert!(aad_io::write(s.doc().unwrap(), "a.svg").is_ok(), "images show the active level");
+
+    let back = aad_io::read(&bytes, "a.dxf").unwrap();
+    assert_eq!(back.levels.len(), 2);
+    assert_eq!(back.active_level_ref().unwrap().name, "First");
+    assert_eq!(back.entity_count(), 2);
+    assert_eq!(back.level_by_name("First").unwrap().elevation, 3000.0);
+}
+
+fn xs(s: &Session, level: &str) -> usize {
+    let d = s.doc().unwrap();
+    d.level_store(d.level_by_name(level).unwrap().id).unwrap().len()
+}
+
+#[test]
+fn objects_move_and_copy_between_levels_at_the_same_coordinates() {
+    let mut s = Session::new();
+    for y in [0.0, 1.0, 2.0] {
+        line(&mut s, y);
+    }
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    s.execute("level.new", &json!({"name": "Roof"})).unwrap();
+    let hs: Vec<String> = s.doc().unwrap().model.iter().map(|e| e.handle.hex()).collect();
+
+    let r = s.execute("level.copyto", &json!({"levels": ["First", "Roof"], "handles": [hs[0], hs[1]]})).unwrap();
+    assert_eq!(r["copied"], 4);
+    assert_eq!((xs(&s, "Ground"), xs(&s, "First"), xs(&s, "Roof")), (3, 2, 2));
+    let d = s.doc().unwrap();
+    let first = d.level_store(d.level_by_name("First").unwrap().id).unwrap();
+    assert!(first.iter().all(|e| !d.model.contains(e.handle)), "copies get new handles");
+
+    let r = s.execute("level.moveto", &json!({"level": "Roof", "handles": [hs[2]]})).unwrap();
+    assert_eq!(r["moved"], 1);
+    assert_eq!((xs(&s, "Ground"), xs(&s, "Roof")), (2, 3));
+    assert_eq!(s.doc().unwrap().entity_count(), 7);
+
+    assert!(s.execute("level.moveto", &json!({"level": "Ground", "handles": [hs[0]]})).is_err(), "already there");
+    assert!(s.execute("level.copyto", &json!({"levels": ["Ground"], "handles": [hs[0]]})).is_err(), "the source level");
+    assert!(s.execute("level.copyto", &json!({"levels": [], "handles": [hs[0]]})).is_err());
+    assert!(s.execute("level.moveto", &json!({"level": "First", "handles": ["FFFFFF"]})).is_err(), "nothing of this level");
+
+    s.execute("undo", &json!({})).unwrap();
+    assert_eq!((xs(&s, "Ground"), xs(&s, "Roof")), (3, 2), "undo restores the move");
+}
+
+#[test]
+fn objects_on_a_locked_layer_do_not_move_to_another_level() {
+    let mut s = Session::new();
+    s.execute("layer.new", &json!({"name": "LOCKED"})).unwrap();
+    s.execute("layer.current", &json!({"name": "LOCKED"})).unwrap();
+    line(&mut s, 0.0);
+    s.execute("layer.current", &json!({"name": "0"})).unwrap();
+    s.execute("layer.set", &json!({"name": "LOCKED", "locked": true})).unwrap();
     s.execute("level.new", &json!({"name": "First"})).unwrap();
-    assert!(aad_io::write(s.doc().unwrap(), "a.dxf").is_err());
-    assert!(aad_io::write(s.doc().unwrap(), "a.dwg").is_err());
-    assert!(aad_io::write(s.doc().unwrap(), "a.svg").is_ok(), "images show the active level and are still allowed");
-    s.execute("level.delete", &json!({"level": "First"})).unwrap();
-    assert!(aad_io::write(s.doc().unwrap(), "a.dxf").is_ok(), "one explicit level saves again");
+    let h = s.doc().unwrap().model.iter().next().unwrap().handle.hex();
+    assert!(s.execute("level.moveto", &json!({"level": "First", "handles": [h]})).is_err());
+    assert_eq!(s.doc().unwrap().model.len(), 1);
+}
+
+#[test]
+fn levels_come_from_the_floor_list_and_a_rename_keeps_the_floor_data_in_step() {
+    let mut s = Session::new();
+    s.execute("drawing.units", &json!({"units": "mm", "mode": "metadata"})).unwrap();
+    line(&mut s, 0.0);
+    assert!(s.execute("level.fromfloors", &json!({})).is_err(), "no floor list yet");
+    s.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.0}, {"name": "First", "floorToFloor": 3.2}, {"name": "Terrace", "floorToFloor": 3.0}]})).unwrap();
+    let r = s.execute("level.fromfloors", &json!({})).unwrap();
+    assert_eq!(r["created"], json!(["Ground", "First", "Terrace"]));
+    let ls = levels(&mut s);
+    assert_eq!(ls.iter().map(|l| l["elevation"].as_f64().unwrap()).collect::<Vec<_>>(), [0.0, 3000.0, 6200.0]);
+    assert_eq!(objects(&ls[0]), 1, "the existing objects stay on the first floor");
+    assert_eq!(s.execute("level.fromfloors", &json!({})).unwrap()["created"], json!([]), "running it again adds nothing");
+
+    s.execute("level.set", &json!({"level": "First", "name": "Mezzanine"})).unwrap();
+    let names: Vec<String> =
+        s.execute("floors", &json!({})).unwrap()["floors"].as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap().to_string()).collect();
+    assert_eq!(names, ["Ground", "Mezzanine", "Terrace"]);
+}
+
+#[test]
+fn a_renamed_level_updates_the_floor_field_of_the_title_block() {
+    let mut s = Session::new();
+    s.execute("floors", &json!({"floors": [{"name": "Ground"}, {"name": "First"}]})).unwrap();
+    s.execute("level.fromfloors", &json!({})).unwrap();
+    s.execute("layout.set", &json!({"name": "Layout1"})).unwrap();
+    s.execute("sheet.titleblock", &json!({"fields": {"FLOOR": "First"}})).unwrap();
+    s.execute("level.set", &json!({"level": "First", "name": "Podium"})).unwrap();
+    assert_eq!(s.execute("sheet.fields", &json!({})).unwrap()["fields"]["FLOOR"], "Podium");
+}
+
+#[test]
+fn audit_finds_and_repairs_errors_on_a_level_that_is_not_being_edited() {
+    use aad_engine::doc::{Common, Entity, EntityKind, Line};
+    use aad_engine::geom::Vec3;
+    let mut s = Session::new();
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    let first = s.doc().unwrap().level_by_name("First").unwrap().id;
+    // An object on a layer that does not exist, on the inactive level.
+    {
+        let d = s.doc_mut().unwrap();
+        let h = d.new_handle();
+        let kind = EntityKind::Line(Line { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(1.0, 0.0, 0.0) });
+        let e = Entity { handle: h, common: Common { layer: "Ghost".into(), ..Common::default() }, kind };
+        d.levels.iter_mut().find(|l| l.id == first).unwrap().entities.push(e);
+    }
+    let r = s.execute("audit", &json!({})).unwrap();
+    assert!(r["errors"].as_u64().unwrap() >= 1, "the error on the other level is reported: {r}");
+    s.execute("audit", &json!({"fix": true})).unwrap();
+    assert!(s.doc().unwrap().layer("Ghost").is_some(), "and repaired");
+    assert_eq!(s.execute("audit", &json!({})).unwrap()["errors"], 0);
 }

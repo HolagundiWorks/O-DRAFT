@@ -152,7 +152,7 @@ fn run_vhlayers(s: &mut Session, _p: &Value) -> Result<Value> {
 
 /// Whether anything still sits on `layer`: an object in any space or a block definition.
 fn layer_in_use(d: &Drawing, layer: &str) -> bool {
-    let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
+    let stores = d.model_stores().chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
     stores.flat_map(|st| st.iter()).any(|e| e.common.layer == layer)
 }
 

@@ -333,7 +333,7 @@ fn run_bytes(s: &mut Session, p: &Value) -> Result<Value> {
 /// not written), counted by DXF type across model space, layouts and block definitions.
 pub fn not_saved(d: &Drawing) -> std::collections::BTreeMap<String, usize> {
     let mut out: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
-    let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
+    let stores = d.model_stores().chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
     for e in stores.flat_map(|s| s.iter()) {
         if let aad_doc::EntityKind::Unknown(u) = &e.kind {
             let n = out.entry(u.dxf_type.clone()).or_insert(0);

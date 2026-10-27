@@ -691,7 +691,7 @@ fn run_style_current(s: &mut Session, p: &Value) -> Result<Value> {
 pub(super) fn text_styles_in_use(d: &aad_doc::Drawing) -> Vec<String> {
     let mut out: Vec<String> = d.dim_styles.iter().map(|s| s.text_style.clone()).collect();
     out.extend(d.mleader_styles.iter().map(|s| s.text_style.clone()));
-    let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
+    let stores = d.model_stores().chain(d.layouts.iter().map(|l| &l.entities)).chain(d.blocks.values().map(|b| &b.entities));
     for st in stores {
         for e in st.iter() {
             match &e.kind {

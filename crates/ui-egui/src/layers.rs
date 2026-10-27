@@ -657,7 +657,11 @@ fn row(
 /// Lower-case names of layers with objects on them.
 fn used_layers(d: &aad_doc::Drawing) -> std::collections::HashSet<String> {
     let mut set = std::collections::HashSet::new();
-    let ents = d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())).chain(d.blocks.values().flat_map(|b| b.entities.iter()));
+    let ents = d
+        .model_stores()
+        .flat_map(|s| s.iter())
+        .chain(d.layouts.iter().flat_map(|l| l.entities.iter()))
+        .chain(d.blocks.values().flat_map(|b| b.entities.iter()));
     for e in ents.take(5_000_000) {
         if !set.contains(&e.common.layer.to_ascii_lowercase()) {
             set.insert(e.common.layer.to_ascii_lowercase());

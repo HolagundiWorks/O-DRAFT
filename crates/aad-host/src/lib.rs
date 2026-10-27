@@ -963,11 +963,8 @@ impl Host {
                 continue;
             }
             if matches!(job.method.as_str(), "app.open" | "app.save") {
-                if let Some(err) = self.queue_control_io(job) {
-                    // queue_control_io already replied on failure paths that keep the job;
-                    // when it returns Some the reply was not sent.
-                    let _ = err;
-                }
+                // queue_control_io replies itself on every path that does not start the worker.
+                let _ = self.queue_control_io(job);
                 continue;
             }
             let value = self.control_one(&job.method, &job.params);
@@ -1810,14 +1807,14 @@ impl Host {
         if let Some(p) = &self.frame.pending {
             match p.rx.try_recv() {
                 Ok(list) => {
-                    if let Some(p) = self.frame.pending.take() {
-                        if (p.key.0, p.key.1, p.key.3, p.key.4) == (list_key.0, list_key.1, list_key.3, list_key.4) {
-                            self.frame.list = Some(list);
-                            self.frame.list_key = p.key;
-                            self.frame.list_doc = Some(state.doc.clone());
-                            self.frame.mesh_key = None;
-                            self.frame.mesh = None;
-                        }
+                    if let Some(p) = self.frame.pending.take()
+                        && (p.key.0, p.key.1, p.key.3, p.key.4) == (list_key.0, list_key.1, list_key.3, list_key.4)
+                    {
+                        self.frame.list = Some(list);
+                        self.frame.list_key = p.key;
+                        self.frame.list_doc = Some(state.doc.clone());
+                        self.frame.mesh_key = None;
+                        self.frame.mesh = None;
                     }
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}

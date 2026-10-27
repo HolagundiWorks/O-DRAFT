@@ -6,6 +6,7 @@ mod dxf_ext;
 mod dxf_image;
 mod dxf_read;
 mod dxf_write;
+mod levels_file;
 pub mod pdf;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod pdfread;
@@ -34,11 +35,11 @@ fn ext(name: &str) -> String {
 pub fn read(bytes: &[u8], name: &str) -> Result<Drawing> {
     if aad_dwg::is_dwg(bytes) {
         let dxf = aad_dwg::dwg_to_dxf(bytes).map_err(IoError::Format)?;
-        return dxf_read::read(&dxf).map_err(|e| IoError::Format(format!("{e} (in the DXF converted from this DWG)")));
+        return dxf_read::read(&dxf).map(levels_file::from_file).map_err(|e| IoError::Format(format!("{e} (in the DXF converted from this DWG)")));
     }
     match ext(name).as_str() {
-        "dxf" | "" => dxf_read::read(bytes),
-        e if bytes.len() > 4 => dxf_read::read(bytes).map_err(|_| IoError::Unsupported(e.to_string())),
+        "dxf" | "" => dxf_read::read(bytes).map(levels_file::from_file),
+        e if bytes.len() > 4 => dxf_read::read(bytes).map(levels_file::from_file).map_err(|_| IoError::Unsupported(e.to_string())),
         e => Err(IoError::Unsupported(e.to_string())),
     }
 }
@@ -59,16 +60,9 @@ pub fn write_framed(d: &Drawing, name: &str, window: Option<Bounds2>) -> Result<
     {
         check_window(w)?;
     }
-    // Levels are not stored in DXF/DWG yet (planned: docs/levels-and-sheet-sets.md). Writing would
-    // silently drop every level but the active one, so refuse instead of losing work.
-    if d.levels.len() > 1 && matches!(ext(name).as_str(), "dxf" | "dwg" | "") {
-        return Err(IoError::Format(
-            "this drawing has several levels, and saving levels to DXF/DWG is not available yet; the file would keep only the active level. Export a PDF/PNG/SVG instead, or delete the extra levels".into(),
-        ));
-    }
     match ext(name).as_str() {
-        "dxf" | "" => Ok(dxf_write::write(d).into_bytes()),
-        "dwg" => aad_dwg::dxf_to_dwg(dxf_write::write(d).as_bytes()).map_err(IoError::Format),
+        "dxf" | "" => Ok(dxf_write::write(&levels_file::to_file(d)).into_bytes()),
+        "dwg" => aad_dwg::dxf_to_dwg(dxf_write::write(&levels_file::to_file(d)).as_bytes()).map_err(IoError::Format),
         "svg" => Ok(svg::export_window(d, &Space::Model, window).into_bytes()),
         "png" => png_framed(d, &Space::Model, 2400, 1600, window),
         "pdf" => pdf::pdf(d, &Space::Model, &PdfOptions { compress: true, window, ..PdfOptions::default() }),
@@ -126,10 +120,10 @@ pub fn png_view(extents: &Bounds2, width: u32, height: u32, window: Option<Bound
 }
 
 pub fn read_dxf(bytes: &[u8]) -> Result<Drawing> {
-    dxf_read::read(bytes)
+    dxf_read::read(bytes).map(levels_file::from_file)
 }
 pub fn write_dxf(d: &Drawing) -> String {
-    dxf_write::write(d)
+    dxf_write::write(&levels_file::to_file(d))
 }
 
 #[cfg(test)]

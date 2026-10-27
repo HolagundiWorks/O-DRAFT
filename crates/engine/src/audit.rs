@@ -99,6 +99,8 @@ pub fn fix(d: &mut Drawing) -> Report {
 #[derive(Clone, Debug)]
 enum Loc {
     Model,
+    /// A level that is not the one being edited (its objects wait in its slot).
+    Level(aad_doc::LevelId),
     Layout(usize),
     Block(String),
 }
@@ -107,6 +109,7 @@ impl Loc {
     fn label(&self, d: &Drawing) -> String {
         match self {
             Loc::Model => "Model".into(),
+            Loc::Level(id) => format!("level {}", d.level(*id).map(|l| l.name.as_str()).unwrap_or("?")),
             Loc::Layout(i) => format!("layout {}", d.layouts.get(*i).map(|l| l.name.as_str()).unwrap_or("?")),
             Loc::Block(n) => format!("block {n}"),
         }
@@ -114,12 +117,17 @@ impl Loc {
 }
 
 fn locations(d: &Drawing) -> Vec<Loc> {
-    std::iter::once(Loc::Model).chain((0..d.layouts.len()).map(Loc::Layout)).chain(d.blocks.keys().cloned().map(Loc::Block)).collect()
+    std::iter::once(Loc::Model)
+        .chain(d.levels.iter().filter(|l| Some(l.id) != d.active_level).map(|l| Loc::Level(l.id)))
+        .chain((0..d.layouts.len()).map(Loc::Layout))
+        .chain(d.blocks.keys().cloned().map(Loc::Block))
+        .collect()
 }
 
 fn store<'a>(d: &'a Drawing, l: &Loc) -> Option<&'a EntityStore> {
     match l {
         Loc::Model => Some(&d.model),
+        Loc::Level(id) => d.levels.iter().find(|l| l.id == *id).map(|l| &l.entities),
         Loc::Layout(i) => d.layouts.get(*i).map(|l| &l.entities),
         Loc::Block(n) => d.blocks.get(n).map(|b| &b.entities),
     }
@@ -128,6 +136,7 @@ fn store<'a>(d: &'a Drawing, l: &Loc) -> Option<&'a EntityStore> {
 fn store_mut<'a>(d: &'a mut Drawing, l: &Loc) -> Option<&'a mut EntityStore> {
     match l {
         Loc::Model => Some(&mut d.model),
+        Loc::Level(id) => d.levels.iter_mut().find(|l| l.id == *id).map(|l| &mut l.entities),
         Loc::Layout(i) => d.layouts.get_mut(*i).map(|l| &mut l.entities),
         Loc::Block(n) => d.blocks.get_mut(n).map(|b| &mut Arc::make_mut(b).entities),
     }
