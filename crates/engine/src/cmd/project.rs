@@ -16,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("project", "Project Settings", run_project)
             .menu(&["Architecture", "Project", "Project Settings"])
             .alias(&["hcwproject"])
-            .params("{details?: {title, owner, …}, slabMm?, beamMm?, structure?: {slabMm, beamMm}} → {details, structure}"),
+            .params("{details?: {title, owner, architect, engineer, pid, siteArea, plotUse, address, authority, date, location, summary}, slabMm?, beamMm?, structure?: {slabMm, beamMm}} → {details, structure, company}. `company` is what the company file gave the drawing (name, address, phone, email, pan, gstin, coa_registration, architect_name, prepared_on), read only here: set it with `companyfile`."),
         CommandSpec::new("floors", "Floors", run_floors)
             .menu(&["Architecture", "Project", "Floors"])
             .alias(&["hcwfloors"])
@@ -190,7 +190,7 @@ pub(super) fn run_project(s: &mut Session, p: &Value) -> Result<Value> {
         apply_structure(s.doc_mut()?, slab, beam)?;
     }
     let (slab, beam) = structure_mm(s.doc()?);
-    Ok(json!({ "details": cur, "structure": { "slabMm": slab, "beamMm": beam } }))
+    Ok(json!({ "details": cur, "structure": { "slabMm": slab, "beamMm": beam }, "company": super::companyfile::company(s.doc()?) }))
 }
 
 pub(super) fn run_floors(s: &mut Session, p: &Value) -> Result<Value> {

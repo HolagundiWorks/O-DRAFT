@@ -4423,6 +4423,53 @@ public sealed partial class MainWindow : Window
     private bool _fillingProject;
     private string _projectPanelKey = "";
 
+    /// <summary>The project's own details, in panel order: the engine key and the label shown.</summary>
+    private static readonly (string Key, string Label)[] ProjectDetailFields =
+    [
+        ("title", "Project name"),
+        ("owner", "Client"),
+        ("location", "Location"),
+        ("address", "Site address"),
+        ("pid", "Property ID"),
+        ("siteArea", "Site area (m2)"),
+        ("plotUse", "Plot use"),
+        ("authority", "Approving authority"),
+        ("architect", "Architect"),
+        ("engineer", "Engineer"),
+        ("date", "Date"),
+        ("summary", "Summary"),
+    ];
+
+    /// <summary>What the company file gave the drawing (read only here), in panel order.</summary>
+    private static readonly (string Key, string Label)[] CompanyDetailFields =
+    [
+        ("name", "Company"),
+        ("address", "Address"),
+        ("phone", "Phone"),
+        ("email", "Email"),
+        ("architect_name", "Architect"),
+        ("coa_registration", "COA registration"),
+        ("pan", "PAN"),
+        ("gstin", "GSTIN"),
+        ("prepared_on", "Prepared on"),
+    ];
+
+    private static Dictionary<string, string> TextMap(JsonElement root, string name)
+    {
+        var map = new Dictionary<string, string>();
+        if (root.TryGetProperty(name, out var obj) && obj.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in obj.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.String)
+                {
+                    map[prop.Name] = prop.Value.GetString() ?? "";
+                }
+            }
+        }
+        return map;
+    }
+
     private void FillProject()
     {
         if (_host == IntPtr.Zero || _fillingProject)
@@ -4433,16 +4480,15 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        string title = "";
+        Dictionary<string, string> details;
+        Dictionary<string, string> company;
         string slab = "150";
         string beam = "450";
         try
         {
             using var doc = JsonDocument.Parse(Native.ReadResult(_host));
-            if (doc.RootElement.TryGetProperty("details", out var det) && det.TryGetProperty("title", out var t))
-            {
-                title = t.GetString() ?? "";
-            }
+            details = TextMap(doc.RootElement, "details");
+            company = TextMap(doc.RootElement, "company");
             if (doc.RootElement.TryGetProperty("structure", out var st))
             {
                 if (st.TryGetProperty("slabMm", out var s) && s.TryGetDouble(out var sv))
@@ -4459,7 +4505,9 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        var key = title + "|" + slab + "|" + beam;
+        var key = string.Join("\u0001", ProjectDetailFields.Select(f => details.GetValueOrDefault(f.Key, "")))
+            + "|" + string.Join("\u0001", CompanyDetailFields.Select(f => company.GetValueOrDefault(f.Key, "")))
+            + "|" + slab + "|" + beam;
         if (key == _projectPanelKey && ProjectPanel.Children.Count > 0)
         {
             return;
@@ -4469,11 +4517,80 @@ public sealed partial class MainWindow : Window
         try
         {
             ProjectPanel.Children.Clear();
-            ProjectPanel.Children.Add(Heading("Project settings"));
-            if (!string.IsNullOrEmpty(title))
+            ProjectPanel.Children.Add(Heading("Project"));
+            foreach (var (detail, label) in ProjectDetailFields)
             {
-                ProjectPanel.Children.Add(FieldLabel(title));
+                var current = details.GetValueOrDefault(detail, "");
+                ProjectPanel.Children.Add(FieldLabel(label));
+                var box = Density.DialogField(current, label);
+                var field = detail;
+                var original = current;
+                void Commit()
+                {
+                    var text = box.Text.Trim();
+                    if (text == original)
+                    {
+                        return;
+                    }
+                    var body = JsonSerializer.Serialize(new Dictionary<string, object> { [field] = text });
+                    if (Native.Execute(_host, "project", body) != 0)
+                    {
+                        History.Text = Native.LastError(_host);
+                        return;
+                    }
+                    _projectPanelKey = "";
+                    AfterCommand();
+                }
+                box.LostFocus += (_, _) => Commit();
+                box.KeyDown += (_, e) =>
+                {
+                    if (e.Key == Windows.System.VirtualKey.Enter)
+                    {
+                        Commit();
+                        e.Handled = true;
+                    }
+                };
+                ProjectPanel.Children.Add(box);
             }
+
+            ProjectPanel.Children.Add(Heading("Company"));
+            var shown = 0;
+            foreach (var (detail, label) in CompanyDetailFields)
+            {
+                var value = company.GetValueOrDefault(detail, "");
+                if (value.Length == 0)
+                {
+                    continue;
+                }
+                shown++;
+                ProjectPanel.Children.Add(FieldLabel(label));
+                ProjectPanel.Children.Add(new TextBlock
+                {
+                    Text = value,
+                    TextWrapping = TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true,
+                    FontSize = Density.FontBody,
+                });
+            }
+            if (shown == 0)
+            {
+                ProjectPanel.Children.Add(FieldLabel("No company details in this drawing yet. Read them from the company file."));
+            }
+            var read = Density.DialogAction("Read company file");
+            ToolTipService.SetToolTip(read, "Reads the company and the project's details from the OSAS company file (read only)");
+            read.Click += (_, _) =>
+            {
+                if (Native.Execute(_host, "companyfile", "{\"refresh\":true}") != 0)
+                {
+                    History.Text = Native.LastError(_host);
+                    return;
+                }
+                _projectPanelKey = "";
+                AfterCommand();
+            };
+            ProjectPanel.Children.Add(read);
+
+            ProjectPanel.Children.Add(Heading("Structure"));
             ProjectPanel.Children.Add(FieldLabel("Default slab thickness (mm)"));
             var slabBox = Density.DialogField(slab, "Slab thickness");
             ProjectPanel.Children.Add(slabBox);
@@ -4498,10 +4615,7 @@ public sealed partial class MainWindow : Window
             }
             slabBox.LostFocus += (_, _) => SaveStructure();
             beamBox.LostFocus += (_, _) => SaveStructure();
-            var details = Density.DialogAction("Project details?");
-            details.Click += (_, _) => StartCommand("project");
-            ProjectPanel.Children.Add(details);
-            var floors = Density.DialogAction("Floors?");
+            var floors = Density.DialogAction("Floors...");
             floors.Click += (_, _) => StartCommand("floors");
             ProjectPanel.Children.Add(floors);
             ProjectPanel.Children.Add(FieldLabel("Door and Window take the selected Blocks-panel block; opening width on the drawing updates the schedule."));
