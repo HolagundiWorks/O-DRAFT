@@ -381,13 +381,15 @@ carried `levels`, `sheetSets` and `designMode`):
   are also what a typed `level.new`, `level.set`, `level.trace` or `level.delete` starts. To take what
   a dialog sends, `level.trace` accepts a whole-number float for `fade` and a comma-separated text
   (or `*`) for `layers`, besides the JSON forms it took before.
-- **Sheet-set rail** left of the tool strip: Design, then one entry per sheet set, the active one
+- **Sheet-set rail** on the left edge as vertical tabs (the name rotated 90 degrees, reading
+  upward): Design, then one tab per sheet set, the active one
   selected; a click runs `sheetset.activate`. The rail is hidden while the drawing has no sheet
   sets (create them with `level.setup` or `sheetset.new`, from the Architecture menu or the
   command line). In a sheet view the bar says which set is being annotated.
-- **The Floor selector follows the level**: `level.activate` (and so the tabs, Ctrl+PageUp and
-  Ctrl+PageDown, `level.next` and `level.prev`) sets the project's active floor when the level has
-  the name of a listed floor.
+- **The project's active floor follows the level**: `level.activate` (and so the tabs, Ctrl+PageUp
+  and Ctrl+PageDown, `level.next` and `level.prev`) sets the active floor when the level has the
+  name of a listed floor. The Floor selector is no longer in the context bar (the level tabs
+  replace it); `floor.current` still sets the floor for a drawing without levels.
 - Also fixed on the way: the canvas panicked at start-up on a real GPU ("cad_lines" pipeline) because
   the view uniform was bound to the vertex stage only while the ring shader reads it in the
   fragment stage; both GPU files now bind it to both stages.

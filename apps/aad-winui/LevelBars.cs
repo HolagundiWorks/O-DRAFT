@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 
 namespace Aad.WinUi;
 
@@ -176,23 +177,37 @@ public sealed partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// A vertical tab: the name is rotated 90 degrees (reading upward) inside a canvas of fixed size,
+    /// because a render transform does not change layout and the canvas does not clip.
+    /// </summary>
     private static ToggleButton MakeRailEntry(string name, string tip, bool active, Action activate)
     {
+        const double width = 26;
+        const double lineHeight = 15;
+        var length = Math.Clamp(name.Length * 6.5 + 28, 72, 168);
+        var text = new TextBlock
+        {
+            Text = name,
+            Width = length,
+            TextAlignment = TextAlignment.Center,
+            FontSize = Density.FontCaption,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal,
+            RenderTransformOrigin = new Windows.Foundation.Point(0, 0),
+            RenderTransform = new RotateTransform { Angle = -90 },
+        };
+        Canvas.SetLeft(text, (width - lineHeight) / 2);
+        Canvas.SetTop(text, length);
         var entry = new ToggleButton
         {
-            Content = new TextBlock
-            {
-                Text = name,
-                MaxWidth = 92,
-                FontSize = Density.FontCaption,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal,
-            },
+            Content = new Canvas { Width = width, Height = length, Children = { text } },
             IsChecked = active,
-            Width = 108,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            MinHeight = Density.ControlHeight,
-            Padding = new Thickness(8, 2, 8, 2),
+            Width = width,
+            Height = length,
+            MinWidth = width,
+            MinHeight = length,
+            Padding = new Thickness(0),
         };
         AutomationProperties.SetName(entry, (active ? "Current: " : "Switch to ") + name);
         ToolTipService.SetToolTip(entry, tip);

@@ -515,7 +515,7 @@ public sealed partial class MainWindow : Window
     private bool CloseOpenComboBoxes()
     {
         var closed = false;
-        foreach (var box in new ComboBox?[] { LayerBox, ColorBox, LinetypeBox, FloorBox, UnitsBox, PaperBox, OrientBox })
+        foreach (var box in new ComboBox?[] { LayerBox, ColorBox, LinetypeBox, UnitsBox, PaperBox, OrientBox })
         {
             if (box is { IsDropDownOpen: true })
             {
@@ -5112,7 +5112,6 @@ public sealed partial class MainWindow : Window
             FillCombo(LayerBox, snapshot.Layers.Select(layer => (layer.Name, layer.Name)), current);
             FillColorBox(snapshot);
             FillLinetypeBox(snapshot);
-            FillFloor();
             SyncPaperSize();
         }
         finally
@@ -5211,36 +5210,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void FillFloor()
-    {
-        if (Native.Execute(_host, "floor.current", "{}") != 0)
-        {
-            FloorBox.IsEnabled = false;
-            return;
-        }
-        try
-        {
-            using var doc = JsonDocument.Parse(Native.ReadResult(_host));
-            var current = doc.RootElement.TryGetProperty("floor", out var floor) && floor.ValueKind == JsonValueKind.String ? floor.GetString() : null;
-            var names = new List<(string, string)>();
-            if (doc.RootElement.TryGetProperty("floors", out var floors) && floors.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in floors.EnumerateArray())
-                {
-                    if (item.ValueKind == JsonValueKind.String && item.GetString() is string name && name.Length > 0)
-                    {
-                        names.Add((name, name));
-                    }
-                }
-            }
-            FillCombo(FloorBox, names, current);
-        }
-        catch (JsonException)
-        {
-            FloorBox.IsEnabled = false;
-        }
-    }
-
     private static void FillCombo(ComboBox box, IEnumerable<(string Tag, string Label)> items, string? selected)
     {
         var list = items.ToList();
@@ -5283,8 +5252,6 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnLayerPicked(object sender, SelectionChangedEventArgs e) => PickContext(LayerBox, "layer.current", "name");
-
-    private void OnFloorPicked(object sender, SelectionChangedEventArgs e) => PickContext(FloorBox, "floor.current", "name");
 
     private void OnColorPicked(object sender, SelectionChangedEventArgs e) => PickContext(ColorBox, "color", "color");
 
@@ -5406,7 +5373,7 @@ public sealed partial class MainWindow : Window
             }
             if (!first)
             {
-                ToolStrip.Children.Add(MakeToolDivider());
+                ToolStrip.Children.Add(MakeToolDivider(horizontalBar: true));
             }
             first = false;
             foreach (var id in visible)
@@ -5420,7 +5387,7 @@ public sealed partial class MainWindow : Window
         }
         if (ToolStrip.Children.Count > 0)
         {
-            ToolStrip.Children.Add(MakeToolDivider());
+            ToolStrip.Children.Add(MakeToolDivider(horizontalBar: true));
         }
         var gear = MakeToolTile(ToolIcons.For("gear", _dark), "Customize tool bar");
         gear.Click += (_, _) => OpenTools();
