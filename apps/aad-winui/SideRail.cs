@@ -9,8 +9,8 @@ namespace Aad.WinUi;
 
 /// <summary>
 /// The rail on the right edge: one vertical title per side panel (Properties, Layers, Blocks,
-/// Project). It is always visible, open or collapsed. A title opens its panel and only that panel;
-/// clicking the title of the open panel collapses the dock to the rail.
+/// Project, Graph, History, Revisions). It is always visible, open or collapsed. A title opens its
+/// panel and only that panel; clicking the title of the open panel collapses the dock to the rail.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -27,6 +27,8 @@ public sealed partial class MainWindow
         (SideTab.Blocks, "Blocks"),
         (SideTab.Project, "Project"),
         (SideTab.Graph, "Graph"),
+        (SideTab.History, "History"),
+        (SideTab.Revisions, "Revisions"),
     ];
 
     private void BuildSideRail()

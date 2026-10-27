@@ -10,6 +10,7 @@
 
 mod client;
 mod file;
+pub mod history;
 mod payload;
 
 pub use client::VdbClient;

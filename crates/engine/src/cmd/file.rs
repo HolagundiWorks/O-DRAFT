@@ -248,6 +248,7 @@ pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<usize> {
         if let Err(e) = crate::revision::record(path, &bytes, entities) {
             s.echo(format!("Drawing revision not recorded: {e}"));
         }
+        super::history::auto_snapshot_after_save(s, path);
     }
     Ok(n)
 }

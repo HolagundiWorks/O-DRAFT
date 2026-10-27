@@ -482,7 +482,7 @@ carried `levels`, `sheetSets` and `designMode`):
 - **Right-hand panels and the layer selector**: the top tool bar starts with the current-layer
   selector (Color and Linetype stay removed). While a sheet-set tab is active its list holds only the
   layers that tab maps (`layer.scope all` lists every layer). The right edge has a rail of four
-  vertical titles, Properties, Layers, Blocks and Project, that is always visible, open or
+  vertical titles (Properties, Layers, Blocks, Project, Graph, History, Revisions) that is always visible, open or
   collapsed. Clicking a title opens that panel and only that panel (the tab strip inside the panel is
   gone; the panel's own title, such as `Layer . Outline`, sits above it with the Pin and Float
   buttons); clicking the title of the open panel collapses the dock to the rail. Hovering no longer

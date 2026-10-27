@@ -247,6 +247,8 @@ dependencies = [
 name = "aad-vdb"
 version = "0.6.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "shilpi-client",
  "shilpidb",
  "tempfile",

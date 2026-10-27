@@ -122,28 +122,23 @@ fn run_connect(s: &mut Session, p: &Value) -> Result<Value> {
         stop_subscriber(&mut s.companion);
         s.companion.pipe_name = pipe.to_string();
         let id = next_id(&s.companion);
-        let pong = pipe_roundtrip(&s.companion.pipe_name, &json!({ "v": 2, "id": id, "method": "ping" }))
-            .map_err(|e| bad("companion.connect", e))?;
+        let pong = pipe_roundtrip(&s.companion.pipe_name, &json!({ "v": 2, "id": id, "method": "ping" })).map_err(|e| bad("companion.connect", e))?;
         if pong.get("ok") != Some(&Value::Bool(true)) {
             return Err(bad("companion.connect", format!("ping failed: {pong}")));
         }
         let levels = levels_payload(s)?;
         let project = project_payload(s)?;
         let id_l = next_id(&s.companion);
-        let lvl_resp = pipe_roundtrip(
-            &s.companion.pipe_name,
-            &json!({ "v": 2, "id": id_l, "method": "context.levels", "params": { "levels": levels } }),
-        )
-        .map_err(|e| bad("companion.connect", e))?;
+        let lvl_resp =
+            pipe_roundtrip(&s.companion.pipe_name, &json!({ "v": 2, "id": id_l, "method": "context.levels", "params": { "levels": levels } }))
+                .map_err(|e| bad("companion.connect", e))?;
         if lvl_resp.get("ok") != Some(&Value::Bool(true)) {
             return Err(bad("companion.connect", format!("context.levels failed: {lvl_resp}")));
         }
         let id_p = next_id(&s.companion);
-        let proj_resp = pipe_roundtrip(
-            &s.companion.pipe_name,
-            &json!({ "v": 2, "id": id_p, "method": "context.project", "params": { "project": project } }),
-        )
-        .map_err(|e| bad("companion.connect", e))?;
+        let proj_resp =
+            pipe_roundtrip(&s.companion.pipe_name, &json!({ "v": 2, "id": id_p, "method": "context.project", "params": { "project": project } }))
+                .map_err(|e| bad("companion.connect", e))?;
         if proj_resp.get("ok") != Some(&Value::Bool(true)) {
             return Err(bad("companion.connect", format!("context.project failed: {proj_resp}")));
         }
@@ -254,26 +249,14 @@ pub fn preview_entities(c: &CompanionState) -> Vec<aad_doc::Entity> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    let common = aad_doc::Common {
-        layer: "_COMPANION".into(),
-        ..Default::default()
-    };
+    let common = aad_doc::Common { layer: "_COMPANION".into(), ..Default::default() };
     const MAX_GHOST: usize = 4_000;
     if let Some(arr) = result.get("lines").and_then(Value::as_array) {
         for v in arr.iter().take(MAX_GHOST.saturating_sub(out.len())) {
-            let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (
-                ghost_num(v, "x0"),
-                ghost_num(v, "y0"),
-                ghost_num(v, "x1"),
-                ghost_num(v, "y1"),
-            ) else {
+            let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (ghost_num(v, "x0"), ghost_num(v, "y0"), ghost_num(v, "x1"), ghost_num(v, "y1")) else {
                 continue;
             };
-            out.push(aad_doc::Entity {
-                handle: aad_doc::Handle(0),
-                common: common.clone(),
-                kind: line(Vec2::new(x0, y0), Vec2::new(x1, y1)),
-            });
+            out.push(aad_doc::Entity { handle: aad_doc::Handle(0), common: common.clone(), kind: line(Vec2::new(x0, y0), Vec2::new(x1, y1)) });
         }
     }
     if let Some(arr) = result.get("circles").and_then(Value::as_array) {
@@ -281,46 +264,31 @@ pub fn preview_entities(c: &CompanionState) -> Vec<aad_doc::Entity> {
             let (Ok(cx), Ok(cy), Ok(r)) = (ghost_num(v, "cx"), ghost_num(v, "cy"), ghost_num(v, "r")) else {
                 continue;
             };
-            if !(r > 0.0) {
+            if !r.is_finite() || r <= 0.0 {
                 continue;
             }
-            out.push(aad_doc::Entity {
-                handle: aad_doc::Handle(0),
-                common: common.clone(),
-                kind: circle(Vec2::new(cx, cy), r),
-            });
+            out.push(aad_doc::Entity { handle: aad_doc::Handle(0), common: common.clone(), kind: circle(Vec2::new(cx, cy), r) });
         }
     }
     if let Some(arr) = result.get("arcs").and_then(Value::as_array) {
         for v in arr.iter().take(MAX_GHOST.saturating_sub(out.len())) {
-            let (Ok(cx), Ok(cy), Ok(r), Ok(start), Ok(end)) = (
-                ghost_num(v, "cx"),
-                ghost_num(v, "cy"),
-                ghost_num(v, "r"),
-                ghost_num(v, "startAngle"),
-                ghost_num(v, "endAngle"),
-            ) else {
+            let (Ok(cx), Ok(cy), Ok(r), Ok(start), Ok(end)) =
+                (ghost_num(v, "cx"), ghost_num(v, "cy"), ghost_num(v, "r"), ghost_num(v, "startAngle"), ghost_num(v, "endAngle"))
+            else {
                 continue;
             };
-            if !(r > 0.0) {
+            if !r.is_finite() || r <= 0.0 {
                 continue;
             }
             let geom = GeomArc::new(Vec2::new(cx, cy), r, start, end);
-            out.push(aad_doc::Entity {
-                handle: aad_doc::Handle(0),
-                common: common.clone(),
-                kind: arc(&geom),
-            });
+            out.push(aad_doc::Entity { handle: aad_doc::Handle(0), common: common.clone(), kind: arc(&geom) });
         }
     }
     out
 }
 
 fn ghost_num(v: &Value, key: &str) -> Result<f64> {
-    v.get(key)
-        .and_then(Value::as_f64)
-        .filter(|n| n.is_finite())
-        .ok_or_else(|| bad("companion.preview", "non-finite"))
+    v.get(key).and_then(Value::as_f64).filter(|n| n.is_finite()).ok_or_else(|| bad("companion.preview", "non-finite"))
 }
 
 fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
@@ -334,10 +302,7 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
         .or_else(|| s.companion.preview.clone())
         .ok_or_else(|| bad("companion.commit", "no result to commit; evaluate first or pass `result`"))?;
     if !result.is_object() {
-        return Err(bad(
-            "companion.commit",
-            "`result` must be an object with lines, circles, arcs, inserts, titleFields, texts and/or dimensions",
-        ));
+        return Err(bad("companion.commit", "`result` must be an object with lines, circles, arcs, inserts, titleFields, texts and/or dimensions"));
     }
 
     let active_name = s.doc()?.active_level_ref().map(|l| l.name.clone());
@@ -445,9 +410,7 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
             .map(|l| l.id)
             .ok_or_else(|| bad("companion.commit", format!("level `{level_name}` could not be created")))?;
         if s.doc()?.target() != Some(EditTarget::Sheet(set, level)) {
-            s.doc_mut()?
-                .switch_target(EditTarget::Sheet(set, level))
-                .map_err(|e| bad("companion.commit", e.to_string()))?;
+            s.doc_mut()?.switch_target(EditTarget::Sheet(set, level)).map_err(|e| bad("companion.commit", e.to_string()))?;
             s.set_selection(Vec::new());
         }
         if !level_names.iter().any(|n| n == &level_name) {
@@ -460,7 +423,7 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
                     let layer = anno_layer(&layer, &prefix, "TEXT");
                     ensure_layer(s.doc_mut()?, &layer, 7, "Continuous", 25, "Companion annotation");
                     let rot = rotation_deg.to_radians();
-                    if !rot.is_finite() || !(height > 0.0) {
+                    if !rot.is_finite() || !height.is_finite() || height <= 0.0 {
                         warnings.push("text note has invalid height or rotation; skipped".into());
                         continue;
                     }
@@ -485,8 +448,7 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
 
     restore_edit_target(s, restore_level, restore_sheet);
 
-    let committed =
-        total_lines + total_circles + total_arcs + total_inserts + title_written + total_texts + total_dims > 0;
+    let committed = total_lines + total_circles + total_arcs + total_inserts + title_written + total_texts + total_dims > 0;
     Ok(json!({
         "committed": committed,
         "levels": level_names,
@@ -505,28 +467,12 @@ enum CommitItem {
     Line { a: Vec2, b: Vec2, layer: String },
     Circle { c: Vec2, r: f64, layer: String },
     Arc { c: Vec2, r: f64, start: f64, end: f64, layer: String },
-    Insert {
-        name: String,
-        at: Vec2,
-        rotation_deg: f64,
-        attribs: serde_json::Map<String, Value>,
-    },
+    Insert { name: String, at: Vec2, rotation_deg: f64, attribs: serde_json::Map<String, Value> },
 }
 
 enum AnnoItem {
-    Text {
-        text: String,
-        at: Vec2,
-        height: f64,
-        rotation_deg: f64,
-        layer: String,
-    },
-    Dim {
-        a: Vec2,
-        b: Vec2,
-        offset: f64,
-        layer: String,
-    },
+    Text { text: String, at: Vec2, height: f64, rotation_deg: f64, layer: String },
+    Dim { a: Vec2, b: Vec2, offset: f64, layer: String },
 }
 
 fn anno_layer(requested: &str, prefix: &str, kind: &str) -> String {
@@ -534,17 +480,13 @@ fn anno_layer(requested: &str, prefix: &str, kind: &str) -> String {
     if !trimmed.is_empty() && trimmed.len() <= 255 {
         return trimmed.to_string();
     }
-    if prefix.is_empty() {
-        format!("A-{kind}")
-    } else {
-        format!("{prefix}{kind}")
-    }
+    if prefix.is_empty() { format!("A-{kind}") } else { format!("{prefix}{kind}") }
 }
 
 fn dim_at(a: Vec2, b: Vec2, offset: f64) -> Option<Vec2> {
     let d = b - a;
     let len = d.len();
-    if !(len > 1e-12) || !offset.is_finite() {
+    if !len.is_finite() || len <= 1e-12 || !offset.is_finite() {
         return None;
     }
     let perp = Vec2::new(-d.y / len, d.x / len) * offset;
@@ -557,11 +499,7 @@ fn linear_dim_entity(s: &Session, a: Vec2, b: Vec2, at: Vec2) -> EntityKind {
         let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
         let outside_y = at.y < y0 || at.y > y1;
         let outside_x = at.x < x0 || at.x > x1;
-        if outside_x && !outside_y {
-            std::f64::consts::FRAC_PI_2
-        } else {
-            0.0
-        }
+        if outside_x && !outside_y { std::f64::consts::FRAC_PI_2 } else { 0.0 }
     };
     let style = s.doc().map(|d| d.header.str("DIMSTYLE", "Standard")).unwrap_or_else(|_| "Standard".into());
     let overrides = s.doc().map(|d| d.dim_overrides()).unwrap_or_default();
@@ -598,19 +536,12 @@ fn restore_edit_target(s: &mut Session, level: Option<aad_doc::LevelId>, sheet: 
     let _ = s.doc_mut().map(|d| d.switch_target(target));
 }
 
-fn group_annotations(
-    result: &Value,
-    active: Option<&str>,
-) -> Result<BTreeMap<(String, String), Vec<AnnoItem>>> {
+fn group_annotations(result: &Value, active: Option<&str>) -> Result<BTreeMap<(String, String), Vec<AnnoItem>>> {
     let mut out: BTreeMap<(String, String), Vec<AnnoItem>> = BTreeMap::new();
     let mut count = 0usize;
     let default_level = active.unwrap_or("Level 1").to_string();
 
-    let push = |out: &mut BTreeMap<(String, String), Vec<AnnoItem>>,
-                key: (String, String),
-                item: AnnoItem,
-                count: &mut usize|
-     -> Result<()> {
+    let push = |out: &mut BTreeMap<(String, String), Vec<AnnoItem>>, key: (String, String), item: AnnoItem, count: &mut usize| -> Result<()> {
         *count = count.saturating_add(1);
         if *count > MAX_COMMIT_ITEMS {
             return Err(bad("companion.commit", format!("at most {MAX_COMMIT_ITEMS} entities per commit")));
@@ -637,18 +568,7 @@ fn group_annotations(
             let height = v.get("height").and_then(Value::as_f64).filter(|n| n.is_finite() && *n > 0.0).unwrap_or(250.0);
             let rotation_deg = v.get("rotation").and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(0.0);
             let layer = layer_of(v, "");
-            push(
-                &mut out,
-                (set, level),
-                AnnoItem::Text {
-                    text,
-                    at: Vec2::new(x, y),
-                    height,
-                    rotation_deg,
-                    layer,
-                },
-                &mut count,
-            )?;
+            push(&mut out, (set, level), AnnoItem::Text { text, at: Vec2::new(x, y), height, rotation_deg, layer }, &mut count)?;
         }
     }
     if let Some(arr) = result.get("dimensions").and_then(Value::as_array) {
@@ -663,17 +583,7 @@ fn group_annotations(
             let y1 = num_field(v, "y1", i, "dimension")?;
             let offset = v.get("offset").and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(500.0);
             let layer = layer_of(v, "");
-            push(
-                &mut out,
-                (set, level),
-                AnnoItem::Dim {
-                    a: Vec2::new(x0, y0),
-                    b: Vec2::new(x1, y1),
-                    offset,
-                    layer,
-                },
-                &mut count,
-            )?;
+            push(&mut out, (set, level), AnnoItem::Dim { a: Vec2::new(x0, y0), b: Vec2::new(x1, y1), offset, layer }, &mut count)?;
         }
     }
     Ok(out)
@@ -709,12 +619,7 @@ fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<Strin
             let y0 = num_field(v, "y0", i, "line")?;
             let x1 = num_field(v, "x1", i, "line")?;
             let y1 = num_field(v, "y1", i, "line")?;
-            push(
-                &mut out,
-                level,
-                CommitItem::Line { a: Vec2::new(x0, y0), b: Vec2::new(x1, y1), layer },
-                &mut count,
-            )?;
+            push(&mut out, level, CommitItem::Line { a: Vec2::new(x0, y0), b: Vec2::new(x1, y1), layer }, &mut count)?;
         }
     }
     if let Some(arr) = result.get("circles").and_then(Value::as_array) {
@@ -724,7 +629,7 @@ fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<Strin
             let cx = num_field(v, "cx", i, "circle")?;
             let cy = num_field(v, "cy", i, "circle")?;
             let r = num_field(v, "r", i, "circle")?;
-            if !(r > 0.0) {
+            if !r.is_finite() || r <= 0.0 {
                 return Err(bad("companion.commit", format!("circle {i}: `r` must be positive")));
             }
             push(&mut out, level, CommitItem::Circle { c: Vec2::new(cx, cy), r, layer }, &mut count)?;
@@ -739,15 +644,10 @@ fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<Strin
             let r = num_field(v, "r", i, "arc")?;
             let start = num_field(v, "startAngle", i, "arc")?;
             let end = num_field(v, "endAngle", i, "arc")?;
-            if !(r > 0.0) {
+            if !r.is_finite() || r <= 0.0 {
                 return Err(bad("companion.commit", format!("arc {i}: `r` must be positive")));
             }
-            push(
-                &mut out,
-                level,
-                CommitItem::Arc { c: Vec2::new(cx, cy), r, start, end, layer },
-                &mut count,
-            )?;
+            push(&mut out, level, CommitItem::Arc { c: Vec2::new(cx, cy), r, start, end, layer }, &mut count)?;
         }
     }
     if let Some(arr) = result.get("inserts").and_then(Value::as_array) {
@@ -776,7 +676,13 @@ fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<Strin
                     let text = match val {
                         Value::String(s) => s.clone(),
                         Value::Number(n) => n.to_string(),
-                        Value::Bool(b) => if *b { "1".into() } else { "0".into() },
+                        Value::Bool(b) => {
+                            if *b {
+                                "1".into()
+                            } else {
+                                "0".into()
+                            }
+                        }
                         Value::Null => String::new(),
                         _ => continue,
                     };
@@ -786,17 +692,7 @@ fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<Strin
                     attribs.insert(k.clone(), Value::String(text));
                 }
             }
-            push(
-                &mut out,
-                level,
-                CommitItem::Insert {
-                    name,
-                    at: Vec2::new(x, y),
-                    rotation_deg,
-                    attribs,
-                },
-                &mut count,
-            )?;
+            push(&mut out, level, CommitItem::Insert { name, at: Vec2::new(x, y), rotation_deg, attribs }, &mut count)?;
         }
     }
     Ok(out)
@@ -822,7 +718,13 @@ fn parse_title_fields(result: &Value) -> Result<BTreeMap<String, String>> {
             Some(Value::String(s)) => s.clone(),
             Some(Value::Number(n)) => n.to_string(),
             Some(Value::Null) | None => String::new(),
-            Some(Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
+            Some(Value::Bool(b)) => {
+                if *b {
+                    "1".into()
+                } else {
+                    "0".into()
+                }
+            }
             _ => return Err(bad("companion.commit", format!("titleField {i}: `value` must be text"))),
         };
         if value.chars().count() > 256 {
@@ -835,10 +737,10 @@ fn parse_title_fields(result: &Value) -> Result<BTreeMap<String, String>> {
 
 fn layout_for_title_fields(s: &Session) -> Result<Option<String>> {
     let d = s.doc()?;
-    if let crate::doc::Space::Paper(n) = s.layout_space() {
-        if d.layout(&n).is_some() {
-            return Ok(Some(n));
-        }
+    if let crate::doc::Space::Paper(n) = s.layout_space()
+        && d.layout(&n).is_some()
+    {
+        return Ok(Some(n));
     }
     for layout in &d.layouts {
         if !super::sheet::title_inserts(d, &layout.name).is_empty() {
@@ -849,12 +751,7 @@ fn layout_for_title_fields(s: &Session) -> Result<Option<String>> {
 }
 
 fn layer_of(v: &Value, fallback: &str) -> String {
-    v.get("layer")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty() && s.len() <= 255)
-        .unwrap_or(fallback)
-        .to_string()
+    v.get("layer").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty() && s.len() <= 255).unwrap_or(fallback).to_string()
 }
 
 fn level_of(v: &Value, fallback: &str) -> Result<String> {
@@ -893,11 +790,7 @@ fn ensure_named_level(s: &mut Session, name: &str) -> Result<()> {
 }
 
 fn ensure_connected(s: &Session) -> Result<()> {
-    if s.companion.connected {
-        Ok(())
-    } else {
-        Err(bad("companion", "not connected; run companion.connect first"))
-    }
+    if s.companion.connected { Ok(()) } else { Err(bad("companion", "not connected; run companion.connect first")) }
 }
 
 fn next_id(c: &CompanionState) -> u64 {

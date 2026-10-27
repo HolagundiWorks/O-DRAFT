@@ -151,10 +151,66 @@ public sealed partial class MainWindow
             menu.Items.Add(settingsItem);
         }
         menu.Items.Add(new MenuFlyoutSeparator());
+        var saveMilestone = new MenuFlyoutItem { Text = "Save milestone..." };
+        saveMilestone.Click += (_, _) => _ = SaveMilestoneAsync("level", level.Id, level.Name);
+        menu.Items.Add(saveMilestone);
+        var history = new MenuFlyoutItem { Text = "History" };
+        history.Click += (_, _) => ShowSidePanel(SideTab.History);
+        menu.Items.Add(history);
+        menu.Items.Add(new MenuFlyoutSeparator());
         var delete = new MenuFlyoutItem { Text = "Delete level..." };
         delete.Click += (_, _) => StartLevelForm("level.delete", level);
         menu.Items.Add(delete);
         return menu;
+    }
+
+    private async Task SaveMilestoneAsync(string scope, long scopeId, string label)
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        var box = new TextBox
+        {
+            Text = label + " milestone",
+            PlaceholderText = "e.g. Issued for tender",
+            MinWidth = 260,
+        };
+        Density.Name(box, "Milestone name");
+        var dialog = new ContentDialog
+        {
+            Title = "Save milestone",
+            Content = DialogLayout.Labeled("Milestone name", box),
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content?.XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+        var name = box.Text?.Trim() ?? "";
+        if (name.Length == 0)
+        {
+            History.Text = "Enter a milestone name.";
+            return;
+        }
+        var body = new Dictionary<string, object>
+        {
+            ["name"] = name,
+            ["scope"] = scope,
+        };
+        if (scope == "level")
+        {
+            body["level"] = scopeId;
+        }
+        else if (scope == "sheet")
+        {
+            body["sheetSet"] = scopeId;
+        }
+        RunShellCommand("history.save", body);
+        ShowSidePanel(SideTab.History);
     }
 
     private void ShowSheetRail(ChromeState state)
@@ -171,12 +227,18 @@ public sealed partial class MainWindow
             "Design",
             "Design: draw the building. Sheet-set annotation is not shown.",
             state.DesignMode,
-            () => RunShellCommand("sheetset.activate", new Dictionary<string, object>())));
+            () => RunShellCommand("sheetset.activate", new Dictionary<string, object>()),
+            BuildDesignSheetMenu));
         foreach (var set in state.SheetSets.ToList())
         {
             var item = set;
             var tip = item.Name + ": annotation for each level" + (item.LayerPrefix.Length > 0 ? ", on layers starting " + item.LayerPrefix : "");
-            SheetRail.Children.Add(MakeRailEntry(item.Name, tip, item.Active, () => RunShellCommand("sheetset.activate", new Dictionary<string, object> { ["set"] = item.Id })));
+            SheetRail.Children.Add(MakeRailEntry(
+                item.Name,
+                tip,
+                item.Active,
+                () => RunShellCommand("sheetset.activate", new Dictionary<string, object> { ["set"] = item.Id }),
+                () => BuildSheetSetMenu(item)));
         }
         // Without tabs the rail would be empty: this makes the standard discipline tabs (and layers, symbols).
         if (state.SheetSets.Count == 0)
@@ -189,11 +251,32 @@ public sealed partial class MainWindow
         }
     }
 
+    private MenuFlyout BuildDesignSheetMenu()
+    {
+        var menu = new MenuFlyout { Placement = FlyoutPlacementMode.RightEdgeAlignedTop };
+        var history = new MenuFlyoutItem { Text = "History" };
+        history.Click += (_, _) => ShowSidePanel(SideTab.History);
+        menu.Items.Add(history);
+        return menu;
+    }
+
+    private MenuFlyout BuildSheetSetMenu(SheetSetTab set)
+    {
+        var menu = new MenuFlyout { Placement = FlyoutPlacementMode.RightEdgeAlignedTop };
+        var saveMilestone = new MenuFlyoutItem { Text = "Save milestone..." };
+        saveMilestone.Click += (_, _) => _ = SaveMilestoneAsync("sheet", set.Id, set.Name);
+        menu.Items.Add(saveMilestone);
+        var history = new MenuFlyoutItem { Text = "History" };
+        history.Click += (_, _) => ShowSidePanel(SideTab.History);
+        menu.Items.Add(history);
+        return menu;
+    }
+
     /// <summary>
     /// A vertical tab: the name is rotated 90 degrees (reading upward) inside a canvas of fixed size,
     /// because a render transform does not change layout and the canvas does not clip.
     /// </summary>
-    private static Button MakeRailEntry(string name, string tip, bool active, Action activate)
+    private static Button MakeRailEntry(string name, string tip, bool active, Action activate, Func<MenuFlyout>? menu = null)
     {
         const double width = 26;
         const double lineHeight = 15;
@@ -217,8 +300,16 @@ public sealed partial class MainWindow
         entry.MinWidth = width;
         entry.MinHeight = length;
         AutomationProperties.SetName(entry, (active ? "Current: " : "Switch to ") + name);
-        ToolTipService.SetToolTip(entry, tip);
+        ToolTipService.SetToolTip(entry, tip + (menu != null ? "  (right-click for more)" : ""));
         entry.Click += (_, _) => activate();
+        if (menu != null)
+        {
+            entry.RightTapped += (_, e) =>
+            {
+                e.Handled = true;
+                menu().ShowAt(entry, new FlyoutShowOptions { Placement = FlyoutPlacementMode.RightEdgeAlignedTop });
+            };
+        }
         return entry;
     }
 

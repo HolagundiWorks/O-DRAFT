@@ -530,6 +530,8 @@ pub struct Session {
     pub param_cache: aad_param::Cache,
     /// O-Dynamo companion pipe state (`companion.*`); disposable, never saved.
     pub companion: cmd::companion::CompanionState,
+    /// History milestone preview overlay (`history.preview`); disposable, never saved.
+    pub history_preview: Option<cmd::history::HistoryPreviewState>,
     /// Open 2D block editor (`bedit` / `refedit`); `None` when not editing.
     pub block_edit: Option<cmd::bedit::BlockEdit>,
 }
@@ -576,6 +578,7 @@ impl Session {
             vdb_addr: None,
             param_cache: aad_param::Cache::default(),
             companion: cmd::companion::CompanionState::default(),
+            history_preview: None,
             block_edit: None,
         }
     }
@@ -971,11 +974,14 @@ impl Session {
         }
     }
 
-    /// Cancel the running command (Esc). With no command, clears the selection.
+    /// Cancel the running command (Esc). With no command, clears the selection and history preview.
     pub fn cancel(&mut self) {
         self.point_mods.clear();
         if self.running.is_some() {
             let _ = self.feed(Some(Input::Cancel));
+        } else if self.history_preview.is_some() {
+            self.history_preview = None;
+            self.echo("History preview ended.");
         } else {
             self.pending_window = None;
             self.set_selection(Vec::new());
@@ -1024,6 +1030,14 @@ impl Session {
     /// Companion graph preview for the canvas ghost overlay (not selectable).
     pub fn companion_ghost(&self) -> Vec<Entity> {
         cmd::companion::preview_entities(&self.companion)
+    }
+
+    /// History milestone diff overlay (added / removed / changed); not selectable.
+    pub fn history_ghost(&self) -> cmd::history::HistoryGhostEntities {
+        match &self.history_preview {
+            Some(p) => cmd::history::preview_entities(p),
+            None => cmd::history::HistoryGhostEntities::default(),
+        }
     }
 
     /// Process one line typed at the command line (Enter pressed).

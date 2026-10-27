@@ -21,6 +21,10 @@ const HOVER_INK: Rgb = Rgb(0x9c, 0xc6, 0xff);
 const ACTIVE_INK: Rgb = Rgb(0x00, 0xe6, 0xff);
 /// Companion graph ghost (faded cyan; not selectable).
 const COMPANION_INK: Rgb = Rgb(0x5a, 0xb8, 0xd4);
+/// History preview: added (blue), removed (red), changed (amber).
+const HISTORY_ADDED: Rgb = Rgb(0x4a, 0x8f, 0xff);
+const HISTORY_REMOVED: Rgb = Rgb(0xe0, 0x55, 0x55);
+const HISTORY_CHANGED: Rgb = Rgb(0xe0, 0xa8, 0x30);
 /// Object-snap and tracking ink (matches egui `Tokens::snap`).
 const SNAP_INK: Rgb = Rgb(0x2f, 0xd0, 0x62);
 /// Overlay hairline width in points: near one device pixel on typical DPI (AutoCAD-thin).
@@ -147,6 +151,31 @@ pub fn mesh(
             );
             tint(&mut ghost_list, COMPANION_INK);
             append_display(&mut list, ghost_list);
+        }
+        // History milestone preview: added blue, removed red, changed amber.
+        let hist = session.history_ghost();
+        if !hist.is_empty() {
+            let opts = aad_render::Options {
+                tolerance: 0.2 / scale,
+                min_dash: 2.0 / scale,
+                text: false,
+                fill: false,
+                lineweights: false,
+                view_height: view.height,
+                ..Default::default()
+            };
+            for (ents, color) in [
+                (hist.added.as_slice(), HISTORY_ADDED),
+                (hist.removed.as_slice(), HISTORY_REMOVED),
+                (hist.changed.as_slice(), HISTORY_CHANGED),
+            ] {
+                if ents.is_empty() {
+                    continue;
+                }
+                let mut ghost_list = aad_render::build_entities(&state.doc, ents.iter(), &opts);
+                tint(&mut ghost_list, color);
+                append_display(&mut list, ghost_list);
+            }
         }
         if cursor.hot.is_none() {
             if let Some(hover) = cursor.hover.filter(|h| !session.selection().iter().any(|s| s == h)) {
@@ -677,15 +706,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(session.companion_ghost().len(), 1);
-        let cursor = Cursor {
-            aim: Vec2::ZERO,
-            raw: Some(Vec2::ZERO),
-            snap: None,
-            track: None,
-            hot: None,
-            hover: None,
-            warm_grip: None,
-        };
+        let cursor = Cursor { aim: Vec2::ZERO, raw: Some(Vec2::ZERO), snap: None, track: None, hot: None, hover: None, warm_grip: None };
         let with_ghost = mesh(&session, Some(&cursor), Rgb(0, 0, 0), 600, Vec2::ZERO, None, 800, false, 24.0);
         session.execute("companion.preview", &serde_json::json!({ "result": null })).unwrap();
         let without = mesh(&session, Some(&cursor), Rgb(0, 0, 0), 600, Vec2::ZERO, None, 800, false, 24.0);

@@ -340,8 +340,12 @@ fn a_metric_plan_flagged_as_inches_still_gets_blocks_at_millimetre_scale() {
 #[test]
 fn every_smart_block_has_a_thumbnail_and_previewing_changes_nothing() {
     let mut s = metric();
-    let ids: Vec<String> =
-        s.execute("smartblock.list", &json!({})).unwrap()["blocks"].as_array().unwrap().iter().map(|b| b["id"].as_str().unwrap().to_string()).collect();
+    let ids: Vec<String> = s.execute("smartblock.list", &json!({})).unwrap()["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["id"].as_str().unwrap().to_string())
+        .collect();
     let before = s.doc().unwrap().blocks.len();
     for id in &ids {
         let r = s.execute("blocks.preview", &json!({ "smartblock": id })).unwrap();

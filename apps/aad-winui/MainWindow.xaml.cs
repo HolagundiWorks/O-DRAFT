@@ -79,6 +79,10 @@ public sealed partial class MainWindow : Window
     private Window? _dimStyleWindow;
     private Window? _linetypeWindow;
     private Window? _parametersWindow;
+    private Window? _revisionsWindow;
+    private Window? _historyWindow;
+    private HistoryWindow.HistoryPanelController? _historyPanel;
+    private RevisionsWindow.RevisionsPanelController? _revisionsPanel;
     private Window? _smartBlockWindow;
     private readonly HashSet<string> _openCatalogs = new(StringComparer.Ordinal);
     private Window? _hatchWindow;
@@ -607,6 +611,16 @@ public sealed partial class MainWindow : Window
         if (id is "ui.dialog.parameters")
         {
             OpenParameters();
+            return;
+        }
+        if (id is "revision.list" or "revision" or "revlist" or "revisions" or "ui.dialog.revisions")
+        {
+            OpenRevisions();
+            return;
+        }
+        if (id is "history.list" or "hlist" or "ui.dialog.history")
+        {
+            OpenHistory();
             return;
         }
         if (id is "smartblock.insert" or "sbinsert" or "smartblock" or "ui.dialog.smartblocks")
@@ -2385,6 +2399,8 @@ public sealed partial class MainWindow : Window
         _dimStyleWindow = null;
         _linetypeWindow = null;
         _parametersWindow = null;
+        _revisionsWindow = null;
+        _historyWindow = null;
         _smartBlockWindow = null;
         _hatchWindow = null;
         _pointStyleWindow = null;
@@ -2407,7 +2423,7 @@ public sealed partial class MainWindow : Window
         {
             _calc, _pomodoro, _toolsWindow, _leftFloat, _pdfWindow, _formWindow,
             _unitsWindow, _textStyleWindow, _pageSetupWindow, _plotStyleWindow, _batchPlotWindow,
-            _dimStyleWindow, _linetypeWindow, _parametersWindow, _smartBlockWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
+            _dimStyleWindow, _linetypeWindow, _parametersWindow, _revisionsWindow, _historyWindow, _smartBlockWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
             _roomSettingsWindow, _draftingWindow, _quickWindow, _quickSelectWindow,
         })
         {
@@ -2548,6 +2564,14 @@ public sealed partial class MainWindow : Window
     {
         RefreshChrome();
         RefreshPanels();
+        if (_sideTab == SideTab.History)
+        {
+            _historyPanel?.Load();
+        }
+        if (_sideTab == SideTab.Revisions)
+        {
+            _revisionsPanel?.Load();
+        }
         RefreshShilpiChip();
         BuildMenus();
         CommandInput.Focus(FocusState.Programmatic);
@@ -3545,6 +3569,56 @@ public sealed partial class MainWindow : Window
             _parametersWindow.Closed += (_, _) => _parametersWindow = null;
         }
         PresentToolWindow(_parametersWindow);
+    }
+
+    private void OpenRevisions()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        ShowSidePanel(SideTab.Revisions);
+    }
+
+    private void OpenHistory()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        ShowSidePanel(SideTab.History);
+    }
+
+    private void EnsureHistoryPanel()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        if (_historyPanel == null)
+        {
+            _historyPanel = HistoryWindow.Mount(HistoryHost, _host, Content?.XamlRoot, AfterCommand);
+        }
+        else
+        {
+            _historyPanel.Load();
+        }
+    }
+
+    private void EnsureRevisionsPanel()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        if (_revisionsPanel == null)
+        {
+            _revisionsPanel = RevisionsWindow.Mount(RevisionsHost, _host, AfterCommand);
+        }
+        else
+        {
+            _revisionsPanel.Load();
+        }
     }
 
     private void OpenSmartBlocks()
@@ -5968,7 +6042,11 @@ public sealed partial class MainWindow : Window
         CommandItem(window, "Blocks", () => ShowSidePanel(SideTab.Blocks));
         CommandItem(window, "Project settings", () => ShowSidePanel(SideTab.Project));
         CommandItem(window, "Graph", () => ShowSidePanel(SideTab.Graph));
+        CommandItem(window, "History", () => ShowSidePanel(SideTab.History));
+        CommandItem(window, "Revisions", () => ShowSidePanel(SideTab.Revisions));
         CommandItem(window, "Parameters Manager", OpenParameters);
+        CommandItem(window, "Revision register", OpenRevisions);
+        CommandItem(window, "Version history", OpenHistory);
         CommandItem(window, "Classic workspace", () => SwitchWorkspace(classic: true));
         CommandItem(window, "Pro workspace", () => SwitchWorkspace(classic: false));
         CommandItem(window, "Reset this workspace", ResetCurrentWorkspace);
@@ -5992,6 +6070,8 @@ public sealed partial class MainWindow : Window
         Blocks,
         Project,
         Graph,
+        History,
+        Revisions,
     }
 
     /// Expands the side column (and floats it back if needed), then selects a panel tab.
@@ -6014,6 +6094,8 @@ public sealed partial class MainWindow : Window
             SideTab.Blocks => BlocksTab,
             SideTab.Project => ProjectTab,
             SideTab.Graph => GraphTab,
+            SideTab.History => HistoryTab,
+            SideTab.Revisions => RevisionsTab,
             _ => PropertiesTab,
         };
         // Only the chosen panel is shown: there are no tabs inside the panel.
@@ -6023,9 +6105,19 @@ public sealed partial class MainWindow : Window
         BlocksTab.Visibility = item == BlocksTab ? Visibility.Visible : Visibility.Collapsed;
         ProjectTab.Visibility = item == ProjectTab ? Visibility.Visible : Visibility.Collapsed;
         GraphTab.Visibility = item == GraphTab ? Visibility.Visible : Visibility.Collapsed;
+        HistoryTab.Visibility = item == HistoryTab ? Visibility.Visible : Visibility.Collapsed;
+        RevisionsTab.Visibility = item == RevisionsTab ? Visibility.Visible : Visibility.Collapsed;
         if (tab == SideTab.Graph)
         {
             EnsureGraphEditorSeeded();
+        }
+        if (tab == SideTab.History)
+        {
+            EnsureHistoryPanel();
+        }
+        if (tab == SideTab.Revisions)
+        {
+            EnsureRevisionsPanel();
         }
         RefreshSideRail();
     }

@@ -14,6 +14,8 @@ workspace = true
 # `cargo test -p aad-vdb` (see docs/architecture/aadt-shilpidb-architecture.md).
 shilpidb = { git = "https://github.com/HolagundiWorks/shilpidb", rev = "0797da6bb10954aff8dce604451c92d73374946e" }
 shilpi-client = { git = "https://github.com/HolagundiWorks/shilpidb", rev = "0797da6bb10954aff8dce604451c92d73374946e" }
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

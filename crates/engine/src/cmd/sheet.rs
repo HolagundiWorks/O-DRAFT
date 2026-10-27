@@ -23,8 +23,9 @@
 //!   number, title, scale and revision read from each title block; `renumber` writes consecutive
 //!   sheet numbers into the title blocks; `draw` places the list as a table on a layout.
 //!
-//! Not implemented: revision tables, and templates that
-//! carry viewports (viewports are added per drawing, since what they show is the drawing's own).
+//! Revision tables are drawn by `revision.table` / `revision.issue` (layer `A-ANNO-REVT`).
+//! Not implemented here: templates that carry viewports (viewports are added per drawing,
+//! since what they show is the drawing's own).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

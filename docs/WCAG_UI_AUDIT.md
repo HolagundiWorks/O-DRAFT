@@ -70,3 +70,19 @@ Same method, plus the dialogs opened through UI Automation (Units, Linetype, Dra
 Passed again: every element in the four dialogs has a name; no focusable target under 24 px other than the clipped one in 8.
 
 Still open: the `command_bar` tests of the egui shell (six) fail because the command bar's Space rule changed (a sentence now needs a leading `/`); the tests were not updated. Narrator, high-contrast themes, 200 % scaling and the dialogs not reachable by a named menu item (Page Setup, Room Label Settings) were not examined.
+
+## Third pass — History and Revisions panels (2026-10-27)
+
+Source review of `HistoryWindow.cs`, `RevisionsWindow.cs`, `LevelBars.cs` and the History/Revisions side-rail entries against WCAG 2.2 AA. No Narrator run and no UIA tree capture for these panels (unlike passes 1–2).
+
+| # | Finding | Criterion | State |
+|---|---|---|---|
+| 11 | History and Revisions list rows were `Border` + `PointerPressed` only | 2.1.1 | **Fixed.** Both panels use `ListView` (single selection, item click); arrows / Enter / Space work through the control |
+| 12 | Rows lacked list-item role / Revisions rows unnamed | 4.1.2 | **Fixed.** `ListViewItem` with accessible names; `AutomationId` on timeline, register, actions and fields |
+| 13 | Selection was colour-only; no focus ring on rows | 2.4.7, 1.4.1 | **Fixed.** ListView focus visuals plus a ✓ selection mark with “Selected” / “Not selected” name |
+| 14 | Issue / milestone fields used placeholder without a visible label | 3.3.2 | **Fixed.** `DialogLayout.Form` / `Labeled` for issue fields and milestone name (panel and dialogs) |
+| 15 | Register column header “Chk” | 3.1.4 | **Fixed.** Header text “Checked” |
+| 16 | Day group labels were plain text | 1.3.1 | **Fixed.** Day headers are non-selectable `ListViewItem`s with `HeadingLevel` 3 |
+| 17 | Status live regions, Level-2 panel titles, named actions, ContentDialogs, menus | 4.1.3, 2.4.6, 2.1.1 | **Pass** (unchanged) |
+
+Still not tested on device: Narrator walkthrough, Windows High Contrast, 200 % scaling.

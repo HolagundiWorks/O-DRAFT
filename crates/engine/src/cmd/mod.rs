@@ -29,7 +29,9 @@ pub(crate) mod groups;
 mod hatch;
 mod hcw;
 mod hcwlayers;
+pub mod history;
 mod inquiry;
+mod revision;
 pub mod layer;
 pub mod layout;
 mod legacytools;
@@ -214,6 +216,8 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(draw2::specs());
         v.extend(annotate::specs());
         v.extend(hatch::specs());
+        v.extend(history::specs());
+        v.extend(revision::specs());
         v.extend(blocks::specs());
         v.extend(bedit::specs());
         v.extend(modify::specs());

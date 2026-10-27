@@ -175,6 +175,12 @@
                                 AutomationProperties.Name="Graph status" />
                         </Grid>
                     </Grid>
+                    <Grid x:Name="HistoryTab" Visibility="Collapsed" AutomationProperties.Name="History">
+                        <Grid x:Name="HistoryHost" Margin="{StaticResource PaddingPanel}" />
+                    </Grid>
+                    <Grid x:Name="RevisionsTab" Visibility="Collapsed" AutomationProperties.Name="Revisions">
+                        <Grid x:Name="RevisionsHost" Margin="{StaticResource PaddingPanel}" />
+                    </Grid>
                 </Grid>
             </Grid>
             <Border

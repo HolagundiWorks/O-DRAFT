@@ -16,10 +16,7 @@ fn connect_without_host_is_a_clear_error() {
     let err = s.execute("companion.connect", &json!({})).unwrap_err();
     let msg = err.to_string();
     // Windows: pipe open fails. Other targets: not available.
-    assert!(
-        msg.contains("cannot open pipe") || msg.contains("only available on Windows") || msg.contains("companion"),
-        "{msg}"
-    );
+    assert!(msg.contains("cannot open pipe") || msg.contains("only available on Windows") || msg.contains("companion"), "{msg}");
     let st = s.execute("companion.status", &json!({})).unwrap();
     assert_eq!(st["connected"], false);
 }
@@ -65,10 +62,7 @@ fn evaluate_without_connect_is_refused() {
     let mut s = metric();
     let err = s.execute("companion.evaluate", &json!({})).unwrap_err();
     let msg = err.to_string();
-    assert!(
-        msg.contains("not connected") || msg.contains("only available on Windows"),
-        "{msg}"
-    );
+    assert!(msg.contains("not connected") || msg.contains("only available on Windows"), "{msg}");
 }
 
 #[test]
@@ -134,12 +128,8 @@ fn hostile_commit_coords_are_refused() {
 #[test]
 fn commit_places_known_block_and_warns_on_missing() {
     let mut s = metric();
-    let h = s.execute("line", &json!({"points": [[0.0, 0.0], [100.0, 0.0]]})).unwrap()["handles"][0]
-        .as_str()
-        .unwrap()
-        .to_string();
-    s.execute("block", &json!({"name": "DOOR-STD", "base": [0, 0], "handles": [h], "keep": "delete"}))
-        .unwrap();
+    let h = s.execute("line", &json!({"points": [[0.0, 0.0], [100.0, 0.0]]})).unwrap()["handles"][0].as_str().unwrap().to_string();
+    s.execute("block", &json!({"name": "DOOR-STD", "base": [0, 0], "handles": [h], "keep": "delete"})).unwrap();
 
     let r = s
         .execute(
