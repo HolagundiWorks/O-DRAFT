@@ -17,12 +17,12 @@ const POINT_SIZE: f32 = 1.5;
 
 /// WGSL for fills and screen-space strokes. `view.a` is offset xy, pixels per world unit,
 /// and a linear-output flag. `view.b` is the canvas centre and size in device pixels.
-/// `view.c.x` is device pixels per point, so a 1-point hairline stays one logical pixel.
+/// `view.c.x` is device pixels per point; `view.c.y` selects true-scale lineweights (world mm).
 pub const CANVAS_SHADER: &str = r#"
 struct View {
     a: vec4<f32>, // offset x, offset y (world), scale (device px per unit), 1 = linear output
     b: vec4<f32>, // canvas centre x, y (device px), screen w, h (device px)
-    c: vec4<f32>, // pixels per point
+    c: vec4<f32>, // pixels per point, 1 = true-scale lineweights (width in world units)
 };
 @group(0) @binding(0) var<uniform> view: View;
 
@@ -81,7 +81,10 @@ fn vs_quad(
     // so it fills one row or column instead of splitting across two.
     // Negative width = butt caps (joined strip edges). Positive = round end extensions.
     let butt = width < 0.0;
-    let px_w = max(abs(width) * view.c.x, 1.0);
+    // Screen: width is points × pixels-per-point. True scale (layouts): width is world mm × scale.
+    // Width ~0 is a hairline sentinel (always screen points) so default strokes stay thin on paper.
+    let w_abs = abs(width);
+    let px_w = max(select(1.5 * view.c.x, w_abs * select(view.c.x, view.a.z, view.c.y > 0.5), w_abs > 1e-6), 1.0);
     let dlt = pb - pa;
     if (px_w <= 3.5 && abs(dlt.y) <= 0.75 && abs(dlt.x) >= abs(dlt.y)) {
         let y = floor((pa.y + pb.y) * 0.5) + 0.5;
@@ -241,21 +244,39 @@ pub fn stroke_polyline(out: &mut Vec<u8>, pts: &[Vec2], origin: Vec2, col: [u8; 
     }
 }
 
-/// Lineweight in screen points for a primitive (as on the CPU path), or `None` for a hairline.
+/// How object lineweights map to stroke width when LWDISPLAY is on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LineweightMode {
+    /// Fixed screen pixels (model space): `lw × 3.78` points, floored at [`HAIRLINE_POINTS`].
+    Screen,
+    /// Paper millimetres (layouts): instance width stays in world units; the shader × scale.
+    TrueScale,
+}
+
+/// Lineweight width for a primitive, or `None` for a hairline.
 ///
-/// When LWDISPLAY is on, millimetre weights map to points (`lw × 3.78`) and are never thinner
-/// than [`HAIRLINE_POINTS`]. That keeps 0.25 / 0.30 / 0.35 mm monotonic: previously 0.25 fell
-/// through to the hairline expander at 1.5 pt while 0.30/0.35 drew as ~1.13/1.32 pt quads.
-pub fn wide_width(lw: f32, lwdisplay: bool) -> Option<f32> {
-    if !lwdisplay || lw <= 0.0 {
+/// Screen mode: millimetres → points (`lw × 3.78`), never thinner than [`HAIRLINE_POINTS`].
+/// True scale: returns `lw` as world millimetres for the shader to scale with the view.
+pub fn wide_width(lw: f32, mode: Option<LineweightMode>) -> Option<f32> {
+    let Some(mode) = mode else {
+        return None;
+    };
+    if lw <= 0.0 {
         return None;
     }
-    let w = (lw * 3.78).clamp(HAIRLINE_POINTS, 12.0);
-    Some(w)
+    match mode {
+        LineweightMode::Screen => Some((lw * 3.78).clamp(HAIRLINE_POINTS, 12.0)),
+        LineweightMode::TrueScale => Some(lw),
+    }
 }
 
 /// Convert a display list into vertex data relative to `origin`, colours resolved against `bg`.
 pub fn build_mesh(list: &DisplayList, origin: Vec2, bg: Rgb, lwdisplay: bool) -> MeshData {
+    build_mesh_mode(list, origin, bg, lwdisplay.then_some(LineweightMode::Screen))
+}
+
+/// Like [`build_mesh`], with an explicit lineweight display mode (screen vs true scale).
+pub fn build_mesh_mode(list: &DisplayList, origin: Vec2, bg: Rgb, lw: Option<LineweightMode>) -> MeshData {
     let mut m = MeshData {
         lines: Vec::with_capacity(list.segment_count().saturating_mul(2 * VERTEX_SIZE)),
         tris: Vec::with_capacity(list.tris.len().saturating_mul(VERTEX_SIZE)),
@@ -268,7 +289,9 @@ pub fn build_mesh(list: &DisplayList, origin: Vec2, bg: Rgb, lwdisplay: bool) ->
         let pts = list.points(prim);
         match prim.kind {
             Kind::Polyline => {
-                let w = wide_width(prim.lw, lwdisplay).unwrap_or(HAIRLINE_POINTS);
+                // True-scale hairlines use width 0 (shader screen sentinel); screen mode keeps points.
+                let hair = if matches!(lw, Some(LineweightMode::TrueScale)) { 0.0 } else { HAIRLINE_POINTS };
+                let w = wide_width(prim.lw, lw).unwrap_or(hair);
                 stroke_polyline(&mut m.quads, pts, origin, col, w);
             }
             Kind::Tris => {
@@ -347,15 +370,21 @@ pub fn expand_hairlines(mesh: &mut MeshData) {
     expand_hairlines_width(mesh, HAIRLINE_POINTS);
 }
 
+/// Like [`expand_hairlines`] for a true-scale lineweight mesh: width `0` is the shader hairline sentinel.
+pub fn expand_hairlines_true_scale(mesh: &mut MeshData) {
+    expand_hairlines_width(mesh, 0.0);
+}
+
 /// Like [`expand_hairlines`], with an explicit stroke width in points.
 ///
 /// Overlay hairlines (crosshair, rubber band) use a half-point width so they stay near one device
 /// pixel on common display scales, matching AutoCAD-style thin crosshairs.
+/// Width `0` is kept (true-scale hairline sentinel for the canvas shader).
 pub fn expand_hairlines_width(mesh: &mut MeshData, width: f32) {
     if mesh.line_vertices() < 2 {
         return;
     }
-    let width = if width.is_finite() && width > 0.0 { width } else { 1.0 };
+    let width = if width.is_finite() && width >= 0.0 { width } else { 1.0 };
     let line_n = mesh.line_vertices();
     let quad_n = mesh.quad_instances();
     let mut quads = Vec::with_capacity(mesh.quads.len() + (line_n / 2) * INSTANCE_SIZE);
@@ -434,11 +463,11 @@ mod tests {
 
     #[test]
     fn displayed_lineweights_are_monotonic_and_at_least_hairline() {
-        assert!(wide_width(0.25, false).is_none());
+        assert!(wide_width(0.25, None).is_none());
         let mut prev = 0.0_f32;
         for &hundredths in &aad_doc::Lineweight::STANDARD {
             let mm = f32::from(hundredths) / 100.0;
-            let Some(w) = wide_width(mm, true) else {
+            let Some(w) = wide_width(mm, Some(LineweightMode::Screen)) else {
                 // 0.00 mm stays a hairline expander path.
                 assert_eq!(hundredths, 0);
                 continue;
@@ -448,6 +477,32 @@ mod tests {
             prev = w;
         }
         assert!(prev > HAIRLINE_POINTS, "heavier standard weights must exceed the hairline floor");
+    }
+
+    #[test]
+    fn true_scale_lineweights_keep_world_millimetres() {
+        assert_eq!(wide_width(0.5, Some(LineweightMode::TrueScale)), Some(0.5));
+        assert_eq!(wide_width(0.25, Some(LineweightMode::TrueScale)), Some(0.25));
+        assert!(wide_width(0.0, Some(LineweightMode::TrueScale)).is_none());
+        let mut list = DisplayList::default();
+        list.prims.push(crate::DPrim {
+            handle: aad_doc::Handle(1),
+            color: Rgb(0, 0, 0),
+            aci7: false,
+            lw: 0.5,
+            kind: Kind::Polyline,
+            start: 0,
+            len: 2,
+        });
+        list.verts.extend([Vec2::ZERO, Vec2::new(10.0, 0.0)]);
+        list.bounds.add(Vec2::ZERO);
+        list.bounds.add(Vec2::new(10.0, 0.0));
+        let screen = build_mesh_mode(&list, Vec2::ZERO, Rgb(255, 255, 255), Some(LineweightMode::Screen));
+        let paper = build_mesh_mode(&list, Vec2::ZERO, Rgb(255, 255, 255), Some(LineweightMode::TrueScale));
+        let sw = instance_width(&screen.quads, 0).abs();
+        let pw = instance_width(&paper.quads, 0).abs();
+        assert!((sw - (0.5_f32 * 3.78).clamp(HAIRLINE_POINTS, 12.0)).abs() < 1e-4);
+        assert!((pw - 0.5).abs() < 1e-4, "true-scale keeps millimetres, got {pw}");
     }
 
     fn instance_width(quads: &[u8], index: usize) -> f32 {

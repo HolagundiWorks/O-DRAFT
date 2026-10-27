@@ -191,12 +191,14 @@ pub struct PendingList {
 fn list_options(app: &CadApp, st: &aad_engine::DocState, band: i32, px: f64) -> aad_render::Options {
     let view = st.view();
     // `px` is already world units per screen pixel.
-    let (text, fill) = aad_render::lod_for_view(px.max(1e-300), 1.0);
+    let lod = aad_render::lod_flags_for_view(px.max(1e-300), 1.0);
     aad_render::Options {
         tolerance: aad_render::tessellation_tolerance(band),
         min_dash: px * 2.0,
-        text,
-        fill,
+        text: lod.text,
+        fill: lod.fill,
+        text_greek: lod.text_greek,
+        fill_tint: lod.fill_tint,
         lineweights: app.session.settings.lwdisplay,
         view_height: view.height,
         view_center: matches!(st.space, aad_doc::Space::Model).then_some(view.center),
@@ -367,19 +369,28 @@ fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay:
 
 /// Draw the display list through the GPU paint callback (uploading it when it changed), plus
 /// the infinite lines, which are clipped to the view on the CPU every frame.
-fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdisplay: bool) {
+fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdisplay: bool, true_scale: bool) {
     let Some(list) = &c.list else { return };
     let origin = crate::gpu::choose_origin(&list.bounds, xf.center, f64::from(xf.rect.height()) / xf.scale.max(1e-300));
+    let lw_mode = lwdisplay.then_some(if true_scale {
+        aad_render::mesh::LineweightMode::TrueScale
+    } else {
+        aad_render::mesh::LineweightMode::Screen
+    });
     let key = {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        (c.key, origin.x.to_bits(), origin.y.to_bits(), bg.0, bg.1, bg.2, lwdisplay).hash(&mut h);
+        (c.key, origin.x.to_bits(), origin.y.to_bits(), bg.0, bg.1, bg.2, lwdisplay, true_scale).hash(&mut h);
         h.finish()
     };
     if c.mesh_key != Some(key) {
         let t0 = crate::now_ms();
-        let mut mesh = crate::gpu::build_mesh(list, origin, bg, lwdisplay);
-        crate::gpu::expand_hairlines(&mut mesh);
+        let mut mesh = aad_render::mesh::build_mesh_mode(list, origin, bg, lw_mode);
+        if true_scale {
+            aad_render::mesh::expand_hairlines_true_scale(&mut mesh);
+        } else {
+            crate::gpu::expand_hairlines(&mut mesh);
+        }
         if let Ok(mut slot) = c.mesh_slot.lock() {
             *slot = Some(mesh);
         }
@@ -397,6 +408,7 @@ fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdis
             offset: [(c.mesh_origin.x - xf.center.x) as f32, (c.mesh_origin.y - xf.center.y) as f32],
             scale: xf.scale as f32,
             center: [center.x, center.y],
+            true_scale,
         },
     ));
     let mut shapes = Vec::new();
@@ -867,8 +879,9 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         }
     };
     let sel = app.session.selection();
+    let true_scale = sheet.is_some() && app.session.settings.lwdisplay;
     if app.canvas.gpu.is_some() {
-        draw_list_gpu(&mut app.canvas, &painter, &xf_paper, bg, app.session.settings.lwdisplay);
+        draw_list_gpu(&mut app.canvas, &painter, &xf_paper, bg, app.session.settings.lwdisplay, true_scale);
     } else if let Some(list) = &app.canvas.list {
         draw_list(&painter, &xf_paper, list, bg, app.session.settings.lwdisplay);
     }

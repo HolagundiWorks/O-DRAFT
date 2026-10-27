@@ -18,7 +18,7 @@
 use std::sync::{Arc, Mutex};
 
 use aad_render::mesh::{CANVAS_SHADER as SHADER, INSTANCE_SIZE, VERTEX_SIZE};
-pub use aad_render::mesh::{MeshData, build_mesh, choose_origin, expand_hairlines, wide_width};
+pub use aad_render::mesh::{LineweightMode, MeshData, build_mesh, build_mesh_mode, choose_origin, expand_hairlines, wide_width};
 use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::util::DeviceExt;
 
@@ -101,6 +101,8 @@ pub struct CanvasCallback {
     pub scale: f32,
     /// Canvas rect centre in points.
     pub center: [f32; 2],
+    /// Paper-space true-scale lineweights (`view.c.y` in the canvas shader).
+    pub true_scale: bool,
 }
 
 struct Batch {
@@ -250,7 +252,7 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
         let [w, h] = screen.size_in_pixels;
         let a = [self.offset[0], self.offset[1], self.scale * ppp, if res.linear_out { 1.0 } else { 0.0 }];
         let b = [self.center[0] * ppp, self.center[1] * ppp, w.max(1) as f32, h.max(1) as f32];
-        let c = [ppp, 0.0, 0.0, 0.0];
+        let c = [ppp, if self.true_scale { 1.0 } else { 0.0 }, 0.0, 0.0];
         let bytes: Vec<u8> = a.iter().chain(&b).chain(&c).flat_map(|v| v.to_le_bytes()).collect();
         queue.write_buffer(&res.uniform, 0, &bytes);
         Vec::new()
@@ -387,8 +389,8 @@ mod tests {
         let m = build_mesh(&l, Vec2::ZERO, Rgb(0, 0, 0), true);
         assert_eq!(m.line_vertices(), 0);
         assert_eq!(m.quad_instances(), 3);
-        assert_eq!(wide_width(0.25, true), None, "thin lineweights stay hairlines");
-        assert_eq!(wide_width(0.7, false), None);
+        assert!(wide_width(0.25, Some(LineweightMode::Screen)).is_some());
+        assert_eq!(wide_width(0.7, None), None);
     }
 
     #[test]

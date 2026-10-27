@@ -2,7 +2,7 @@
 
 use aad_doc::{Circle, Common, Drawing, EntityKind, Hatch, HatchLoop, Space};
 use aad_geom::{PolyVertex, Vec2, Vec3};
-use aad_render::{Options, build, lod_for_view};
+use aad_render::{Options, build, lod_flags_for_view, lod_for_view};
 
 fn hatch_and_circles() -> Drawing {
     let mut d = Drawing::new_metric();
@@ -40,6 +40,29 @@ fn lod_turns_off_text_and_fill_when_zoomed_out() {
     assert!(!text && !fill);
     let (text, fill) = lod_for_view(0.01, 1.0); // zoomed in
     assert!(text && fill);
+}
+
+#[test]
+fn lod_uses_greek_text_and_hatch_tint_in_the_mid_band() {
+    let close = lod_flags_for_view(0.01, 1.0);
+    assert!(close.text && close.fill && !close.text_greek && !close.fill_tint);
+    let tint = lod_flags_for_view(20.0, 1.0);
+    assert!(tint.fill && tint.fill_tint && tint.text && !tint.text_greek);
+    let greek = lod_flags_for_view(40.0, 1.0);
+    assert!(greek.text && greek.text_greek && greek.fill && greek.fill_tint);
+    let fill_off = lod_flags_for_view(60.0, 1.0);
+    assert!(fill_off.text && fill_off.text_greek && !fill_off.fill);
+    let far = lod_flags_for_view(100.0, 1.0);
+    assert!(!far.text && !far.fill && !far.text_greek && !far.fill_tint);
+}
+
+#[test]
+fn fill_tint_replaces_pattern_lines_with_a_solid() {
+    let d = hatch_and_circles();
+    let full = build(&d, &Space::Model, &Options { text: true, fill: true, fill_tint: false, view_height: 40.0, tolerance: 0.01, ..Default::default() });
+    let tint = build(&d, &Space::Model, &Options { text: true, fill: true, fill_tint: true, view_height: 40.0, tolerance: 0.01, ..Default::default() });
+    assert!(tint.prims.len() < full.prims.len(), "tint={} full={}", tint.prims.len(), full.prims.len());
+    assert!(tint.prims.iter().any(|p| matches!(p.kind, aad_render::Kind::Tris)), "tint should keep a solid fill");
 }
 
 #[test]

@@ -155,6 +155,10 @@ pub struct Options {
     pub text: bool,
     /// Filled hatches and solid fills (off when features are sub-pixel on screen).
     pub fill: bool,
+    /// Far-zoom text: grey bars instead of glyphs (avoids pop-in).
+    pub text_greek: bool,
+    /// Far-zoom pattern hatches: solid tint instead of pattern lines (avoids moiré).
+    pub fill_tint: bool,
     pub lineweights: bool,
     /// Height of the visible area in world units of the space being built. Relative point
     /// sizes (`PDSIZE` <= 0) are a percentage of it; 0 = the height of the space's extents.
@@ -175,6 +179,8 @@ impl Default for Options {
             min_dash: 0.0,
             text: true,
             fill: true,
+            text_greek: false,
+            fill_tint: false,
             lineweights: false,
             view_height: 0.0,
             view_center: None,
@@ -191,21 +197,40 @@ pub fn world_per_pixel(view_height: f64, pixel_height: f64) -> f64 {
     view_height / pixel_height
 }
 
-/// LOD flags for interactive display: `(draw_text, draw_fill)`.
-/// When zoomed out (`world_per_pixel` large), skip text then fills so far views stay light.
+/// LOD for interactive display: text on/off, fill on/off, greek text, tinted hatches.
 ///
-/// Thresholds are in world units per pixel. Metric floor plans (mm) sit around 5–20 wpp at a
-/// whole-building view; the old cutoffs of 2 / 1 dropped all dimension and table text there.
-/// Drop text only when a typical ~2.5-unit character is well under a pixel (~50 wpp), and fills
-/// a little sooner.
+/// Instead of hard cut-offs that pop text and patterns in and out, mid-zoom ranges keep a cheap
+/// stand-in (grey text bars; solid hatch tint) so far views stay light without moiré or flicker.
+///
+/// Thresholds are world units per pixel. Metric floor plans sit around 5–20 wpp at a whole-building
+/// view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LodFlags {
+    pub text: bool,
+    pub fill: bool,
+    pub text_greek: bool,
+    pub fill_tint: bool,
+}
+
+/// LOD flags for interactive display: `(draw_text, draw_fill)`.
+/// Prefer [`lod_flags_for_view`] when greek/tint stand-ins are wanted.
 pub fn lod_for_view(view_height: f64, pixel_height: f64) -> (bool, bool) {
+    let l = lod_flags_for_view(view_height, pixel_height);
+    (l.text, l.fill)
+}
+
+/// Full LOD including density stand-ins for text and pattern hatches.
+pub fn lod_flags_for_view(view_height: f64, pixel_height: f64) -> LodFlags {
     let wpp = world_per_pixel(view_height, pixel_height);
     if wpp <= 0.0 {
-        return (true, true);
+        return LodFlags { text: true, fill: true, text_greek: false, fill_tint: false };
     }
-    let text = wpp < 50.0;
-    let fill = wpp < 25.0;
-    (text, fill)
+    // Text: full → greek bars → off. Fill: full patterns → solid tint → off.
+    let text = wpp < 100.0;
+    let text_greek = text && wpp >= 35.0;
+    let fill = wpp < 50.0;
+    let fill_tint = fill && wpp >= 12.0;
+    LodFlags { text, fill, text_greek, fill_tint }
 }
 
 /// World-space half-extent of the mesh origin snap cell ([`mesh::choose_origin`] uses `64 × h`).
@@ -333,7 +358,12 @@ impl Builder<'_> {
     /// TrueType fill follows `TEXTFILL` and whether text is drawn at all — not the hatch/solid
     /// fill LOD (`opts.fill`). AutoCAD keeps TEXTFILL independent of FILLMODE; tying them made
     /// glyphs turn into hollow outlines whenever hatch fill was dropped for zoom performance.
+    /// Far zoom with [`Options::text_greek`] draws a grey bar instead of glyphs.
     fn shaped(&mut self, ctx: &Ctx, color: Ink, lw: f32, sh: &aad_fonts::Shaped) {
+        if self.opts.text_greek {
+            self.greek_text(ctx, sh);
+            return;
+        }
         for s in &sh.strokes {
             self.polyline(ctx, color, lw, s);
         }
@@ -351,6 +381,37 @@ impl Builder<'_> {
                 }
             }
         }
+    }
+    /// Cheap stand-in for far-zoom text: a mid-grey bar over the shaped bounds.
+    fn greek_text(&mut self, ctx: &Ctx, sh: &aad_fonts::Shaped) {
+        let mut bb = Bounds2::default();
+        for s in &sh.strokes {
+            for p in s {
+                bb.add(*p);
+            }
+        }
+        for g in &sh.glyphs {
+            for c in g {
+                for p in c {
+                    bb.add(*p);
+                }
+            }
+        }
+        if bb.is_empty() {
+            if sh.width > 0.0 {
+                bb = Bounds2::new(Vec2::ZERO, Vec2::new(sh.width, 1.0));
+            } else {
+                return;
+            }
+        }
+        let h = bb.height().max(bb.width() * 0.02);
+        let pad = h * 0.2;
+        let y0 = bb.min.y + pad;
+        let y1 = (bb.max.y - pad).max(y0 + h * 0.35);
+        let x0 = bb.min.x;
+        let x1 = bb.max.x.max(x0 + h * 0.5);
+        let grey = Ink { rgb: Rgb(168, 168, 168), aci7: false, aci: 0 };
+        self.tris(ctx, grey, &[Vec2::new(x0, y0), Vec2::new(x1, y0), Vec2::new(x1, y1), Vec2::new(x0, y0), Vec2::new(x1, y1), Vec2::new(x0, y1)]);
     }
     fn point(&mut self, ctx: &Ctx, color: Ink, p: Vec2) {
         let (color, _) = self.styled(color, 0.0);
@@ -656,6 +717,8 @@ fn model_tess_key(
     opts.min_dash.to_bits().hash(&mut h);
     opts.text.hash(&mut h);
     opts.fill.hash(&mut h);
+    opts.text_greek.hash(&mut h);
+    opts.fill_tint.hash(&mut h);
     opts.lineweights.hash(&mut h);
     lt_factor.to_bits().hash(&mut h);
     view_height_bits.hash(&mut h);

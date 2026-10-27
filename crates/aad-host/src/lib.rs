@@ -34,9 +34,13 @@ use aad_render::DisplayList;
 use aad_render::mesh::{self, MeshData};
 use serde_json::Value;
 
-/// (document uid, revision, tessellation band, lwdisplay, space fingerprint, draw text, draw fill).
-/// uid, revision, tessellation band, lwdisplay, space, text LOD, fill LOD, packed model pan cell.
-type ListKey = (u64, u64, i32, bool, u64, bool, bool, i64);
+/// uid, revision, tessellation band, lwdisplay, space, packed LOD bits, packed model pan cell.
+/// LOD bits: text | fill<<1 | text_greek<<2 | fill_tint<<3.
+type ListKey = (u64, u64, i32, bool, u64, u8, i64);
+
+fn lod_pack(l: aad_render::LodFlags) -> u8 {
+    u8::from(l.text) | (u8::from(l.fill) << 1) | (u8::from(l.text_greek) << 2) | (u8::from(l.fill_tint) << 3)
+}
 
 /// Display list being rebuilt on a worker for a new zoom / LOD band.
 struct PendingList {
@@ -106,7 +110,7 @@ struct PaintStamp {
 impl Default for FrameCache {
     fn default() -> Self {
         FrameCache {
-            list_key: (0, 0, 0, false, 0, true, true, 0),
+            list_key: (0, 0, 0, false, 0, 0b11, 0),
             list: None,
             list_doc: None,
             mesh_key: None,
@@ -1884,12 +1888,15 @@ impl Host {
         let view = state.view();
         let px = view.height / f64::from(self.height.max(1));
         let band = aad_render::tessellation_band(px);
-        let (text, fill) = aad_render::lod_for_view(px.max(1e-300), 1.0);
+        let lod = aad_render::lod_flags_for_view(px.max(1e-300), 1.0);
+        let on_paper = matches!(state.space, Space::Paper(_));
         let opts = aad_render::Options {
             tolerance: aad_render::tessellation_tolerance(band),
             min_dash: px * 2.0,
-            text,
-            fill,
+            text: lod.text,
+            fill: lod.fill,
+            text_greek: lod.text_greek,
+            fill_tint: lod.fill_tint,
             lineweights: lw,
             view_height: view.height,
             view_center: matches!(state.space, Space::Model).then_some(view.center),
@@ -1901,13 +1908,14 @@ impl Host {
         } else {
             0
         };
-        let list_key: ListKey = (state.uid, state.revision, band, lw, space_fp(&state.space), text, fill, pan_cell);
+        let lod_bits = lod_pack(lod);
+        let list_key: ListKey = (state.uid, state.revision, band, lw, space_fp(&state.space), lod_bits, pan_cell);
         // Take a finished background band rebuild first.
         if let Some(p) = &self.frame.pending {
             match p.rx.try_recv() {
                 Ok(list) => {
                     if let Some(p) = self.frame.pending.take()
-                        && (p.key.0, p.key.1, p.key.3, p.key.4, p.key.7) == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.7)
+                        && (p.key.0, p.key.1, p.key.3, p.key.4, p.key.6) == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.6)
                     {
                         self.frame.list = Some(list);
                         self.frame.list_key = p.key;
@@ -1922,8 +1930,8 @@ impl Host {
         }
         if self.frame.list_key != list_key || self.frame.list.is_none() {
             let same_drawing = self.frame.list.is_some()
-                && (self.frame.list_key.0, self.frame.list_key.1, self.frame.list_key.3, self.frame.list_key.4, self.frame.list_key.7)
-                    == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.7);
+                && (self.frame.list_key.0, self.frame.list_key.1, self.frame.list_key.3, self.frame.list_key.4, self.frame.list_key.6)
+                    == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.6);
             // Zoom / LOD band only: keep the last list on screen and rebuild on a worker.
             if same_drawing && self.frame.pending.is_none() {
                 let (tx, rx) = std::sync::mpsc::channel();
@@ -1947,8 +1955,7 @@ impl Host {
                             && self.frame.list_key.2 == list_key.2
                             && self.frame.list_key.3 == list_key.3
                             && self.frame.list_key.5 == list_key.5
-                            && self.frame.list_key.6 == list_key.6
-                            && self.frame.list_key.7 == list_key.7 =>
+                            && self.frame.list_key.6 == list_key.6 =>
                     {
                         aad_render::rebuild(old, old_doc, &state.doc, &opts)
                     }
@@ -1974,14 +1981,25 @@ impl Host {
         let origin = mesh::choose_origin(&list.bounds, view.center, view.height);
         let paper = self.paper();
         let tint = u64::from(paper.0) << 16 | u64::from(paper.1) << 8 | u64::from(paper.2);
+        let lw_mode = lw.then_some(if on_paper { mesh::LineweightMode::TrueScale } else { mesh::LineweightMode::Screen });
+        let true_scale = matches!(lw_mode, Some(mesh::LineweightMode::TrueScale));
         // Origin is snapped to a coarse grid while panning, so the mesh key stays stable across
         // fine pans and the GPU keeps the last upload (uniform carries the view offset).
-        let mesh_key = state.revision ^ origin.x.to_bits() ^ origin.y.to_bits().rotate_left(1) ^ tint.rotate_left(21) ^ (band as u64).rotate_left(40);
+        let mesh_key = state.revision
+            ^ origin.x.to_bits()
+            ^ origin.y.to_bits().rotate_left(1)
+            ^ tint.rotate_left(21)
+            ^ (band as u64).rotate_left(40)
+            ^ u64::from(true_scale).rotate_left(48);
         if self.frame.mesh_key != Some(mesh_key) || self.frame.mesh.is_none() {
-            let mut built = mesh::build_mesh(list, origin, paper, lw);
+            let mut built = mesh::build_mesh_mode(list, origin, paper, lw_mode);
             let world_width = view.height * f64::from(self.width.max(1)) / f64::from(self.height.max(1));
             mesh::append_infinite(&mut built, list, origin, view.center, world_width, view.height, paper);
-            mesh::expand_hairlines(&mut built);
+            if true_scale {
+                mesh::expand_hairlines_true_scale(&mut built);
+            } else {
+                mesh::expand_hairlines(&mut built);
+            }
             self.frame.mesh = Some(built);
             self.frame.mesh_key = Some(mesh_key);
             self.frame.mesh_origin = origin;
@@ -1998,7 +2016,7 @@ impl Host {
             f64::from(self.width.max(1)) as f32,
             f64::from(self.height.max(1)) as f32,
             self.pixels_per_point,
-            0.0,
+            if true_scale { 1.0 } else { 0.0 },
             0.0,
             0.0,
         ];

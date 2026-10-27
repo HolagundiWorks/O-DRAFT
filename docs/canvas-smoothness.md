@@ -1,7 +1,7 @@
 # O-Draft canvas rendering: review and roadmap
 
 Source plan: *ODraft canvas rendering review and plan* (Oct 26, 2026).  
-Branch work: `fix/canvas-phase1-smoothness`.
+Branch work: `fix/canvas-phase2-strokes` (Phase 1 landed earlier).
 
 The canvas already runs on the GPU (wgpu on Direct3D 12) with analytic anti-aliased strokes. It does **not** need a new engine. The rough look comes from specific gaps listed below. Phase 1 is small changes inside the existing renderer; Phase 2 reworks strokes, text and hatches; Phase 3 moves curves onto the GPU.
 
@@ -57,8 +57,8 @@ Every frame goes through one shared path (WinUI host and optional egui shell). T
 | --- | --- | --- | --- | --- |
 | 7 | Joined stroke strips (butt edges + round join/cap discs; negative instance width = butt) | #4 | ~1 w | **Done** (`stroke_polyline` in `mesh.rs`) |
 | 8 | Flatten glyphs by zoom tolerance; cache per glyph × octave | #5 | 2–3 d | **Done** (`with_world_chord_tol` + flatten band in glyph cache) |
-| 9 | Density fade for hatches/text instead of hard LOD cut-offs | #7 | 3 d | Planned |
-| 10 | Lineweight modes: screen (model) + true scale (layouts) | presentation | 2 d | Planned |
+| 9 | Density fade for hatches/text instead of hard LOD cut-offs | #7 | 3 d | **Done** (`LodFlags` greek bars + hatch `fill_tint`; host/egui wire `lod_flags_for_view`) |
+| 10 | Lineweight modes: screen (model) + true scale (layouts) | presentation | 2 d | **Done** (`LineweightMode` + shader `view.c.y`; paper + LWDISPLAY → true scale) |
 
 ### Phase 3 — GPU curves / optional Vello
 
@@ -91,4 +91,11 @@ cargo test -p aad-render --test lod_and_frustum
 cargo test -p aad-host present_mode_defaults_to_vsync
 cargo test -p aad-host sample_line_and_wheel_zoom
 cargo test -p aad-host fine_pan_keeps_the_cached_mesh
+```
+
+### Phase 2 (#9–#10) test commands
+
+```text
+cargo test -p aad-render --lib mesh::tests
+cargo test -p aad-render --test lod_and_frustum
 ```
