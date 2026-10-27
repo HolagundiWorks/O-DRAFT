@@ -33,7 +33,7 @@ Evaluate / evaluation `result` includes `arcs` (radians, CCW from +X), `inserts`
 | `companion.status` | `{ connected, subscribed, pipe, preview, available }` |
 | `companion.evaluate` | One-shot evaluate; stores `preview` |
 | `companion.subscribe` / `unsubscribe` | Background reader for live pushes into `preview` |
-| `companion.preview` | Last stored preview |
+| `companion.preview` | Last stored preview; optional `{ result }` stashes (or `null` clears) for the canvas ghost |
 | `companion.commit` | Write `result` (or last preview): geometry/inserts onto named levels; texts/dimensions onto sheet-set annotation; title fields onto the title block; creates missing levels; unknown blocks/sheet sets become warnings; one undo step |
 
 Menus: Architecture > Companion. WinUI invokes these through `app.run` (no separate bridge class).
@@ -54,14 +54,17 @@ Non-Windows / wasm: pipe methods return a clear error (`status.available` is fal
 ## Verified
 
 - O-Dynamo: `dotnet test` on `ODraft.Graph.Tests` (15 passed), including annotation nodes.
-- O-Draft: `cargo test -p aad-engine --test companion` (11 passed): level commit, inserts, title fields, Electrical annotation on Ground.
+- O-Draft: `cargo test -p aad-engine --test companion` (12 passed): level commit, inserts, title fields, Electrical annotation, preview stash → ghost entities.
+- Host: `cargo test -p aad-host overlay::` includes companion ghost overlay strokes.
 
-## WinUI Graph panel (Phase 6 partial)
+## Canvas ghost
 
-Side rail **Graph** tab edits JSON, Evaluate (in-process `GraphEngine` when built with sibling
-O-Dynamo / `ODRAFT_GRAPH`, else `companion.evaluate`), Commit via `companion.commit`.
+`companion.preview` / evaluate / subscribe store a result on the session. The WinUI host overlay
+draws lines/circles/arcs from that result in faded cyan (`_COMPANION`, Handle 0, not selectable).
+Evaluate from the Graph panel stashes the preview so the ghost appears before Commit.
 
-## Not done
+## WinUI Graph panel (Phase 6)
 
-- GPU / overlay ghost of the preview on the canvas (preview is stored on the session only).
-- Visual node-graph canvas (JSON editor only for now).
+Side rail **Graph** tab: node canvas (drag, add wall/door/number, double-click edit) and JSON
+mode. Evaluate uses in-process `GraphEngine` when built with sibling O-Dynamo (`ODRAFT_GRAPH`),
+else `companion.evaluate`. Commit via `companion.commit`.

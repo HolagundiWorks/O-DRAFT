@@ -1021,6 +1021,11 @@ impl Session {
         r.machine.preview(self, cursor).into_iter().map(|k| Entity { handle: Handle(0), common: common.clone(), kind: k }).collect()
     }
 
+    /// Companion graph preview for the canvas ghost overlay (not selectable).
+    pub fn companion_ghost(&self) -> Vec<Entity> {
+        cmd::companion::preview_entities(&self.companion)
+    }
+
     /// Process one line typed at the command line (Enter pressed).
     pub fn cmdline(&mut self, text: &str) -> Result<()> {
         let t = text.trim_end_matches(['\r', '\n']);

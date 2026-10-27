@@ -5,9 +5,10 @@
 //! circles and arcs. `companion.subscribe` keeps a background reader that stores
 //! pushed `evaluation` messages into [`crate::Session::companion`] for preview.
 //!
-//! `companion.commit` writes evaluate output onto named levels (Phase 3) and
-//! places block inserts / title-block fields (Phase 4). Ghost overlay rendering
-//! is still deferred. Non-Windows builds return a clear "not available" error
+//! `companion.commit` writes evaluate output onto named levels (Phase 3),
+//! places block inserts / title-block fields (Phase 4), and sheet-set annotation
+//! (Phase 5). Preview geometry is exposed for the canvas ghost overlay via
+//! [`preview_entities`]. Non-Windows builds return a clear "not available" error
 //! for pipe methods (wasm stays green); commit from a supplied `result` works
 //! on every target.
 
@@ -98,7 +99,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{} → {subscribed: false}")
             .noundo(),
         CommandSpec::new("companion.preview", "Companion Preview", run_preview)
-            .params("{} → {preview}")
+            .params("{result?: evaluate result to stash (null clears)} → {preview}")
             .noundo(),
         CommandSpec::new("companion.commit", "Commit Companion Graph", run_commit)
             .menu(&["Architecture", "Companion", "Commit"])
@@ -232,9 +233,94 @@ fn run_unsubscribe(s: &mut Session, _p: &Value) -> Result<Value> {
     Ok(json!({ "subscribed": false }))
 }
 
-fn run_preview(s: &mut Session, _p: &Value) -> Result<Value> {
+fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
     s.companion.pull_slot();
+    if let Some(v) = p.get("result") {
+        if v.is_null() {
+            s.companion.preview = None;
+        } else if v.is_object() {
+            s.companion.preview = Some(v.clone());
+        } else {
+            return Err(bad("companion.preview", "`result` must be an object or null"));
+        }
+    }
     Ok(json!({ "preview": s.companion.preview }))
+}
+
+/// Faded overlay entities from the last evaluate / subscribe result (lines, circles, arcs only).
+/// Not selectable; capped so a hostile preview cannot stall the GPU path.
+pub fn preview_entities(c: &CompanionState) -> Vec<aad_doc::Entity> {
+    let Some(result) = c.preview.as_ref() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let common = aad_doc::Common {
+        layer: "_COMPANION".into(),
+        ..Default::default()
+    };
+    const MAX_GHOST: usize = 4_000;
+    if let Some(arr) = result.get("lines").and_then(Value::as_array) {
+        for v in arr.iter().take(MAX_GHOST.saturating_sub(out.len())) {
+            let (Ok(x0), Ok(y0), Ok(x1), Ok(y1)) = (
+                ghost_num(v, "x0"),
+                ghost_num(v, "y0"),
+                ghost_num(v, "x1"),
+                ghost_num(v, "y1"),
+            ) else {
+                continue;
+            };
+            out.push(aad_doc::Entity {
+                handle: aad_doc::Handle(0),
+                common: common.clone(),
+                kind: line(Vec2::new(x0, y0), Vec2::new(x1, y1)),
+            });
+        }
+    }
+    if let Some(arr) = result.get("circles").and_then(Value::as_array) {
+        for v in arr.iter().take(MAX_GHOST.saturating_sub(out.len())) {
+            let (Ok(cx), Ok(cy), Ok(r)) = (ghost_num(v, "cx"), ghost_num(v, "cy"), ghost_num(v, "r")) else {
+                continue;
+            };
+            if !(r > 0.0) {
+                continue;
+            }
+            out.push(aad_doc::Entity {
+                handle: aad_doc::Handle(0),
+                common: common.clone(),
+                kind: circle(Vec2::new(cx, cy), r),
+            });
+        }
+    }
+    if let Some(arr) = result.get("arcs").and_then(Value::as_array) {
+        for v in arr.iter().take(MAX_GHOST.saturating_sub(out.len())) {
+            let (Ok(cx), Ok(cy), Ok(r), Ok(start), Ok(end)) = (
+                ghost_num(v, "cx"),
+                ghost_num(v, "cy"),
+                ghost_num(v, "r"),
+                ghost_num(v, "startAngle"),
+                ghost_num(v, "endAngle"),
+            ) else {
+                continue;
+            };
+            if !(r > 0.0) {
+                continue;
+            }
+            let geom = GeomArc::new(Vec2::new(cx, cy), r, start, end);
+            out.push(aad_doc::Entity {
+                handle: aad_doc::Handle(0),
+                common: common.clone(),
+                kind: arc(&geom),
+            });
+        }
+    }
+    out
+}
+
+fn ghost_num(v: &Value, key: &str) -> Result<f64> {
+    v.get(key)
+        .and_then(Value::as_f64)
+        .filter(|n| n.is_finite())
+        .ok_or_else(|| bad("companion.preview", "non-finite"))
 }
 
 fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {

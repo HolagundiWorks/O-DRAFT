@@ -1,9 +1,8 @@
 # Dynamo companion enhancement plan
 
-**Status: in progress.** Phases 1–5 are implemented and verified (O-Dynamo `dotnet test`: 15
-passed; O-Draft `cargo test -p aad-engine --test companion`: 11 passed). Phase 2 canvas ghost
-overlay is deferred. Phase 6 has a JSON Graph side panel (visual node canvas still open).
-Capability matrix: [status.md](status.md).
+**Status: complete for Phases 1–6 scope in this plan.** Verified: O-Dynamo `dotnet test` 15;
+`cargo test -p aad-engine --test companion` 12; `aad-host` overlay ghost test. Phase 2 ghost
+overlay and Phase 6 visual node canvas are implemented. Capability matrix: [status.md](status.md).
 
 ## Goal
 
@@ -68,7 +67,7 @@ Phase 3.
 
 ---
 
-### Phase 2 — Pipe protocol v2: context and subscription (both repos) — **done** (ghost overlay deferred)
+### Phase 2 — Pipe protocol v2: context and subscription (both repos) — **done**
 
 **Goal:** O-Draft sends drawing context (levels, project details) to the companion; the
 companion can push live results without polling.
@@ -128,8 +127,8 @@ are engine commands, not UI code. The WinUI shell invokes them through `app.run`
 
 **Verified:** Context nodes and pipe methods work; `companion.connect` without a host errors
 clearly; subscribe stores pushed evaluations into `Session.companion` / `companion.preview`.
-
-**Deferred:** Drawing the preview as a faded non-selectable canvas overlay (no GPU hook yet).
+Ghost overlay: `companion.preview { result }` / evaluate stash feeds `Session::companion_ghost`
+drawn faded on the host overlay (`_COMPANION`, not selectable); `aad-host` overlay unit test.
 
 ---
 
@@ -227,12 +226,13 @@ Ground, and switching to Design mode does not show it.
 
 ---
 
-### Phase 6 — WinUI graph editor (O-Draft only, optional) — **partial**
+### Phase 6 — WinUI graph editor (O-Draft only, optional) — **done** (visual + JSON)
 
-**Shipped:** Side rail **Graph** tab with JSON editor, Evaluate and Commit. When the sibling
-`O-Dynamo` repo is present at build time (`ODRAFT_GRAPH`), Evaluate uses in-process
-`GraphEngine`; Commit always uses `companion.commit`. Visual node canvas and full pipe removal
-remain open.
+**Shipped:** Side rail **Graph** tab with node canvas (drag cards, add wall/door/number,
+double-click to edit JSON fields), JSON mode, Evaluate and Commit. When the sibling `O-Dynamo`
+repo is present (`ODRAFT_GRAPH`), Evaluate uses in-process `GraphEngine` and stashes
+`companion.preview` for the canvas ghost; Commit uses `companion.commit`. The separate WPF
+host remains available.
 
 **Goal:** Replace the WPF JSON editor with a node-graph panel inside the WinUI shell, removing
 the separate process and the pipe.
@@ -254,6 +254,9 @@ or use it without O-Draft.
 
 **Done when:** A wall + door graph can be built entirely in the side panel, committed to the
 drawing, and undone. The WPF host still works independently.
+
+**Verified:** WinUI builds with `ODraft.Graph.dll` when O-Dynamo is a sibling; Graph rail ships
+Nodes + JSON modes.
 
 ---
 

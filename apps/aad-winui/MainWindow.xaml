@@ -126,31 +126,49 @@
                         <Grid x:Name="GraphHost" Margin="{StaticResource PaddingPanel}" RowSpacing="{StaticResource SpaceXs}">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <TextBlock
-                                Grid.Row="0"
-                                Text="Companion graph (JSON)"
-                                FontSize="{StaticResource FontSizeCaption}"
-                                Foreground="{ThemeResource TextSecondaryBrush}" />
-                            <TextBox
-                                x:Name="GraphEditor"
-                                Grid.Row="1"
-                                AcceptsReturn="True"
-                                TextWrapping="Wrap"
-                                FontFamily="{StaticResource FontFamilyMono}"
-                                FontSize="{StaticResource FontSizeCaption}"
-                                ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                AutomationProperties.Name="Graph JSON" />
-                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                                <Button x:Name="GraphModeNodes" Content="Nodes" Click="OnGraphModeNodes" Style="{StaticResource CompactButtonStyle}" />
+                                <Button x:Name="GraphModeJson" Content="JSON" Click="OnGraphModeJson" Style="{StaticResource CompactButtonStyle}" />
+                            </StackPanel>
+                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                                    <Button Content="+ Wall" Click="OnGraphAddWall" Style="{StaticResource CompactButtonStyle}" />
+                                    <Button Content="+ Door" Click="OnGraphAddDoor" Style="{StaticResource CompactButtonStyle}" />
+                                    <Button Content="+ Number" Click="OnGraphAddNumber" Style="{StaticResource CompactButtonStyle}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                            <Grid Grid.Row="2">
+                                <ScrollViewer x:Name="GraphCanvasScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                    <Canvas
+                                        x:Name="GraphCanvas"
+                                        Width="720"
+                                        Height="520"
+                                        Background="{ThemeResource SurfaceSecondaryBrush}"
+                                        AutomationProperties.Name="Graph nodes" />
+                                </ScrollViewer>
+                                <TextBox
+                                    x:Name="GraphEditor"
+                                    Visibility="Collapsed"
+                                    AcceptsReturn="True"
+                                    TextWrapping="Wrap"
+                                    FontFamily="{StaticResource FontFamilyMono}"
+                                    FontSize="{StaticResource FontSizeCaption}"
+                                    ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                    LostFocus="OnGraphJsonLostFocus"
+                                    AutomationProperties.Name="Graph JSON" />
+                            </Grid>
+                            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
                                 <Button x:Name="GraphEvaluateButton" Content="Evaluate" Click="OnGraphEvaluate" Style="{StaticResource CompactButtonStyle}" />
                                 <Button x:Name="GraphCommitButton" Content="Commit" Click="OnGraphCommit" Style="{StaticResource CompactButtonStyle}" />
                             </StackPanel>
                             <TextBlock
                                 x:Name="GraphStatus"
-                                Grid.Row="3"
+                                Grid.Row="4"
                                 TextWrapping="Wrap"
                                 FontSize="{StaticResource FontSizeCaption}"
                                 Foreground="{ThemeResource TextSecondaryBrush}"

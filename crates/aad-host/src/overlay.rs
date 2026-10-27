@@ -19,6 +19,8 @@ const SELECTION_INK: Rgb = Rgb(0x4a, 0x8f, 0xff);
 const HOVER_INK: Rgb = Rgb(0x9c, 0xc6, 0xff);
 /// Rubber-band / command preview: cyan so the active geometry stands out from committed entities.
 const ACTIVE_INK: Rgb = Rgb(0x00, 0xe6, 0xff);
+/// Companion graph ghost (faded cyan; not selectable).
+const COMPANION_INK: Rgb = Rgb(0x5a, 0xb8, 0xd4);
 /// Object-snap and tracking ink (matches egui `Tokens::snap`).
 const SNAP_INK: Rgb = Rgb(0x2f, 0xd0, 0x62);
 /// Overlay hairline width in points: near one device pixel on typical DPI (AutoCAD-thin).
@@ -127,6 +129,25 @@ pub fn mesh(
                 tint(&mut list, ACTIVE_INK);
             }
         }
+        // Companion evaluate/subscribe preview: faded, never selectable (Handle 0).
+        let ghost = session.companion_ghost();
+        if !ghost.is_empty() {
+            let mut ghost_list = aad_render::build_entities(
+                &state.doc,
+                ghost.iter(),
+                &aad_render::Options {
+                    tolerance: 0.2 / scale,
+                    min_dash: 2.0 / scale,
+                    text: false,
+                    fill: false,
+                    lineweights: false,
+                    view_height: view.height,
+                    ..Default::default()
+                },
+            );
+            tint(&mut ghost_list, COMPANION_INK);
+            append_display(&mut list, ghost_list);
+        }
         if cursor.hot.is_none() {
             if let Some(hover) = cursor.hover.filter(|h| !session.selection().iter().any(|s| s == h)) {
                 add_entity_outline(&mut list, &state.doc, &[hover], scale, view.height, HOVER_INK, false);
@@ -215,6 +236,24 @@ fn tint(list: &mut DisplayList, color: Rgb) {
     for prim in &mut list.prims {
         prim.color = color;
         prim.aci7 = false;
+    }
+}
+
+fn append_display(dst: &mut DisplayList, src: DisplayList) {
+    let v0 = u32::try_from(dst.verts.len()).unwrap_or(u32::MAX);
+    let t0 = u32::try_from(dst.tris.len()).unwrap_or(u32::MAX);
+    if v0 == u32::MAX || t0 == u32::MAX {
+        return;
+    }
+    dst.verts.extend_from_slice(&src.verts);
+    dst.tris.extend_from_slice(&src.tris);
+    for mut prim in src.prims {
+        let base = match prim.kind {
+            Kind::Tris | Kind::Mask => t0,
+            _ => v0,
+        };
+        prim.start = prim.start.saturating_add(base);
+        dst.prims.push(prim);
     }
 }
 
@@ -620,5 +659,40 @@ mod tests {
         };
         let built = mesh(&session, Some(&cursor), Rgb(0, 0, 0), 600, Vec2::ZERO, Some("Endpoint"), 800, false, 24.0);
         assert!(built.line_vertices() > 0 || built.quad_instances() > 0 || built.tri_vertices() > 0, "crosshair and snap marker must emit geometry");
+    }
+
+    #[test]
+    fn companion_ghost_adds_overlay_geometry() {
+        let mut session = Session::new();
+        session
+            .execute(
+                "companion.preview",
+                &serde_json::json!({
+                    "result": {
+                        "lines": [{"x0": 0.0, "y0": 0.0, "x1": 100.0, "y1": 0.0, "layer": "A-WALL"}],
+                        "circles": [],
+                        "arcs": []
+                    }
+                }),
+            )
+            .unwrap();
+        assert_eq!(session.companion_ghost().len(), 1);
+        let cursor = Cursor {
+            aim: Vec2::ZERO,
+            raw: Some(Vec2::ZERO),
+            snap: None,
+            track: None,
+            hot: None,
+            hover: None,
+            warm_grip: None,
+        };
+        let with_ghost = mesh(&session, Some(&cursor), Rgb(0, 0, 0), 600, Vec2::ZERO, None, 800, false, 24.0);
+        session.execute("companion.preview", &serde_json::json!({ "result": null })).unwrap();
+        let without = mesh(&session, Some(&cursor), Rgb(0, 0, 0), 600, Vec2::ZERO, None, 800, false, 24.0);
+        assert!(
+            with_ghost.line_vertices() + with_ghost.quad_instances() + with_ghost.tri_vertices()
+                > without.line_vertices() + without.quad_instances() + without.tri_vertices(),
+            "ghost preview must add overlay strokes"
+        );
     }
 }

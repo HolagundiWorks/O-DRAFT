@@ -33,6 +33,25 @@ fn disconnect_and_preview_never_panic() {
 }
 
 #[test]
+fn preview_stash_feeds_companion_ghost() {
+    let mut s = metric();
+    s.execute(
+        "companion.preview",
+        &json!({
+            "result": {
+                "lines": [{"x0": 0.0, "y0": 0.0, "x1": 10.0, "y1": 0.0}],
+                "circles": [{"cx": 1.0, "cy": 1.0, "r": 2.0}],
+                "arcs": [{"cx": 0.0, "cy": 0.0, "r": 5.0, "startAngle": 0.0, "endAngle": 1.0}]
+            }
+        }),
+    )
+    .unwrap();
+    assert_eq!(s.companion_ghost().len(), 3);
+    s.execute("companion.preview", &json!({ "result": null })).unwrap();
+    assert!(s.companion_ghost().is_empty());
+}
+
+#[test]
 fn hostile_pipe_name_is_rejected() {
     let mut s = metric();
     let err = s.execute("companion.connect", &json!({ "pipe": r"..\evil" })).unwrap_err();

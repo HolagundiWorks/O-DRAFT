@@ -111,7 +111,8 @@ take-off.
 
 ## Not done
 
-- WinUI (or egui) node-graph editor.
+- WinUI (or egui) node-graph editor for `param.*` walls (companion Graph rail is separate; see
+  [architecture/DYNAMO_INTEGRATION.md](architecture/DYNAMO_INTEGRATION.md)).
 - Async C ABI for long evaluations.
 - ShilpiDB-hosted component library (schemas are in code).
 - An O-CoreOp `measure(component, rule, revision)` API (the published contract is measured-fact rows
@@ -119,4 +120,3 @@ take-off.
 - Columns, beams, slabs and other component types beyond `osas.wall` in `aad-param` (companion
   has draft geometry, block-insert and sheet-set annotation nodes).
 - Agent tools for `param.*` (engine commands exist; the agent registry does not expose them yet).
-- Companion canvas ghost overlay.
