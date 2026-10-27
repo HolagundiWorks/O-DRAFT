@@ -27,6 +27,8 @@ solid shell chrome as the main window via `ShellChrome` / `ShellIcon.Apply`: no 
 backdrop, opaque page fill, and matching title-bar colours. Theme toggles re-apply chrome to open
 tool windows. Content-based sizing and close-with-shell behaviour: [WINDOW_SIZING.md](WINDOW_SIZING.md).
 Shared colours, type, spacing and control sizes: [UI_TOKENS.md](UI_TOKENS.md) (`Themes/*.xaml`, `Density`).
+Window templates, shared components and the hierarchy rules every window follows:
+[UI_STANDARDS.md](UI_STANDARDS.md) (`Standard.cs`; enforced by `cargo xtask ui`).
 WinUI visual direction: Fluent graphite + Windows blue accent; solid overlays (no glass on the
 drawing child); AI vs CAD channels distinguished by accent/green edges without changing routing.
 

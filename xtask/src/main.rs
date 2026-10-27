@@ -10,6 +10,7 @@ mod licenses;
 mod logo;
 mod parity;
 mod stats;
+mod ui;
 mod version;
 
 use std::path::{Path, PathBuf};
@@ -23,8 +24,10 @@ commands:
   layers          enforce the crate dependency layering (docs/ARCHITECTURE.md)
   licenses [--check]
                   list every dependency licence in THIRD_PARTY_LICENSES.md; fails on a licence not on the allow list (--check: also fails when the file is out of date)
+  ui [--counts]   WinUI shell design-system rules: window templates, no new hard-coded dimensions
+                  (--counts: print each file's hard-coded dimension count, to lower the ratchet)
   wasm            cargo check --target wasm32-unknown-unknown for the wasm-safe crates
-  ci              fmt --check, clippy -D warnings, test, assets, layers, licenses, wasm (stops at first failure)
+  ci              fmt --check, clippy -D warnings, test, assets, layers, licenses, ui, wasm (stops at first failure)
   corpus [--download]
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)
@@ -41,6 +44,7 @@ fn main() -> ExitCode {
         Some("assets") => assets::run(&root()),
         Some("layers") => cmd_layers(),
         Some("licenses") => licenses::run(&root(), rest.contains(&"--check")),
+        Some("ui") => ui::run(&root(), rest.contains(&"--counts")),
         Some("wasm") => cmd_wasm(),
         Some("ci") => cmd_ci(),
         Some("corpus") => cmd_corpus(rest.contains(&"--download")),
@@ -187,6 +191,7 @@ fn cmd_ci() -> Result<(), String> {
         ("assets", Box::new(|| assets::run(&root()))),
         ("layers", Box::new(cmd_layers)),
         ("licenses", Box::new(|| licenses::run(&root(), true))),
+        ("ui", Box::new(|| ui::run(&root(), false))),
         ("wasm", Box::new(cmd_wasm)),
     ];
     let mut done = Vec::new();

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -216,7 +215,7 @@ internal static class PlotStyleWindow
             desc.Text = detail?.Description ?? "";
             if (!state.InDrawing)
             {
-                desc.Text = (desc.Text.Length == 0 ? "" : desc.Text + " ? ") + "Built-in table: editing keeps a copy in the drawing.";
+                desc.Text = (desc.Text.Length == 0 ? "" : desc.Text + " — ") + "Built-in table: editing keeps a copy in the drawing.";
             }
             delete.IsEnabled = state.InDrawing;
             state.Styles = detail?.Styles ?? new List<StyleRow>();
@@ -445,12 +444,7 @@ internal static class PlotStyleWindow
                 Content = new Grid { RequestedTheme = theme, Children = { root } },
             },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 560, minHeightDip: 400, maxWidthDip: 960, maxHeightDip: 800, persistKey: "plotstyle");
+        StandardWindow.Present(window, owner, WindowTemplate.Manager, "plotstyle");
         Reload(null, null);
         return window;
     }

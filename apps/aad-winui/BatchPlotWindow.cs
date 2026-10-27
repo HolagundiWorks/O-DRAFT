@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -29,7 +28,7 @@ internal static class BatchPlotWindow
         Density.Name(list, "Sheets");
         var folder = new TextBox { MinHeight = Density.ControlHeight, PlaceholderText = "Exports beside the drawing (or temp)" };
         Density.Name(folder, "Output folder");
-        var browse = ActionButton("Browse?");
+        var browse = ActionButton("Browse…");
         var includeHidden = new CheckBox
         {
             Content = "Also plot hidden, frozen and unmarked project items that are ticked",
@@ -174,12 +173,7 @@ internal static class BatchPlotWindow
                 Content = new Grid { RequestedTheme = theme, Children = { root } },
             },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 440, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 720, persistKey: "batchplot");
+        StandardWindow.Present(window, owner, WindowTemplate.PropertyDialog, "batchplot");
         LoadSheets();
         return window;
     }

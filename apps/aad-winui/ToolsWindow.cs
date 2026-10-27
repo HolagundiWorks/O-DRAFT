@@ -58,8 +58,7 @@ internal sealed class ToolsWindow : Window
         root.RequestedTheme = theme;
         Content = new ScrollViewer { Content = root };
         Density.Apply(root);
-        ShellIcon.Apply(this, theme);
-        ShellFit.UserResizable(this, minWidthDip: 260, minHeightDip: 320, maxWidthDip: 400, maxHeightDip: 640, persistKey: "tools");
+        StandardWindow.Present(this, owner, WindowTemplate.Floating, "tools");
     }
 
     public static readonly (string Id, string Label)[] Fonts =

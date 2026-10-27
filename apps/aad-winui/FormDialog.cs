@@ -36,14 +36,17 @@ internal static class FormDialog
                 picks = true;
                 continue;
             }
-            stack.Children.Add(Density.Secondary(label, TextWrapping.Wrap));
+            // Label sits directly above its field (Space1); fields are separated by Space2.
+            var group = new StackPanel { Spacing = Density.Space1 };
+            group.Children.Add(Density.Secondary(label, TextWrapping.Wrap));
+            stack.Children.Add(group);
             switch (kind)
             {
                 case "bool":
                     var box = new CheckBox { IsChecked = BoolOf(field) };
                     Density.Name(box, label);
                     checks[key] = box;
-                    stack.Children.Add(box);
+                    group.Children.Add(box);
                     break;
                 case "choice":
                 case "room":
@@ -67,7 +70,7 @@ internal static class FormDialog
                     }
                     Select(combo, StringOf(field));
                     choices[key] = combo;
-                    stack.Children.Add(combo);
+                    group.Children.Add(combo);
                     break;
                 case "table":
                     var columns = field.GetProperty("columns");
@@ -94,13 +97,13 @@ internal static class FormDialog
                         }
                     };
                     tables[key] = (columns.Clone(), rows);
-                    stack.Children.Add(rows);
-                    stack.Children.Add(add);
+                    group.Children.Add(rows);
+                    group.Children.Add(add);
                     break;
                 default:
                     var input = Density.DialogField(StringOf(field), label);
                     scalars[key] = input;
-                    stack.Children.Add(input);
+                    group.Children.Add(input);
                     break;
             }
         }
@@ -108,23 +111,18 @@ internal static class FormDialog
         {
             stack.Children.Add(Density.Secondary("Points are picked on the drawing after OK.", TextWrapping.Wrap));
         }
-        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = Density.FontBody };
+        var error = Ui.Status("Form error");
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Assertive);
-        Density.Name(error, "Form error");
-        var ok = Density.DialogAction("OK", primary: true);
-        var cancel = Density.DialogAction("Cancel");
-        var buttons = DialogLayout.ActionRow(ok, cancel);
-        stack.Children.Add(error);
-        stack.Children.Add(buttons);
+        var ok = Ui.Action("OK", ActionKind.Primary);
+        var cancel = Ui.Action("Cancel");
 
         Density.Apply(stack);
-        var page = new Grid { Padding = Density.DialogMargin, Children = { new ScrollViewer { Content = stack } } };
-        var theme = ShellChrome.ThemeOf(owner);
-        page.RequestedTheme = theme;
+        // Fields scroll; the footer with the validation line and actions stays pinned.
+        var page = Ui.DialogPage(stack, Ui.Footer(error, ok, cancel));
+        page.RequestedTheme = ShellChrome.ThemeOf(owner);
         var window = new Window { Title = title, Content = page };
-        ShellIcon.Apply(window, theme);
-        // UserResizable avoids Adaptive SizeChanged↔Resize flicker; scroll covers tall forms.
-        ShellFit.UserResizable(window, minWidthDip: 400, minHeightDip: 320, maxWidthDip: 720, maxHeightDip: 800, persistKey: "form");
+        // PropertyDialog (user-resizable) avoids Adaptive SizeChanged↔Resize flicker.
+        StandardWindow.Present(window, owner, WindowTemplate.PropertyDialog, "form");
         ok.Click += (_, _) =>
         {
             var preset = Collect(scalars, checks, choices, tables);
@@ -208,7 +206,7 @@ internal static class FormDialog
             }
             var label = column.GetProperty("label").GetString() ?? "Cell";
             var box = Density.DialogField(text, label);
-            box.Width = 88;
+            box.Width = Density.TableCellWidth;
             box.PlaceholderText = label;
             line.Children.Add(box);
             i++;

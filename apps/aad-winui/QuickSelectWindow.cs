@@ -51,8 +51,7 @@ internal sealed class QuickSelectWindow : Window
         var theme = ShellChrome.Resolve(themeSource?.RequestedTheme ?? Density.Theme);
         Content = new ScrollViewer { Content = new Grid { RequestedTheme = theme, Children = { stack } } };
         Title = "Quick Select";
-        ShellIcon.Apply(this, theme);
-        ShellFit.ToContent(this, minWidthDip: 320, minHeightDip: 320, maxWidthDip: 480, maxHeightDip: 560);
+        StandardWindow.Present(this, null, WindowTemplate.Dialog);
         _apply.Items.Add(Item("Drawing", "drawing"));
         _apply.Items.Add(Item("Current selection", "selection"));
         _apply.SelectedIndex = 0;

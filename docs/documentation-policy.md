@@ -17,6 +17,7 @@ Related canonical pages:
 | Generated command/menu parity | [parity-checklist.md](parity-checklist.md) (`cargo xtask parity`; do not edit by hand) |
 | WinUI secondary window sizing / exit | [WINDOW_SIZING.md](WINDOW_SIZING.md) |
 | WinUI design tokens / density | [UI_TOKENS.md](UI_TOKENS.md) |
+| WinUI window templates / components / layout rules | [UI_STANDARDS.md](UI_STANDARDS.md) |
 
 ---
 

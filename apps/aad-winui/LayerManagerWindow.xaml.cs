@@ -36,7 +36,7 @@ public sealed partial class LayerManagerWindow : Window
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _linetypes = new();
     private readonly List<string> _states = new();
-    private readonly Button _nameSort = new() { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(4, 0, 4, 0) };
+    private readonly Button _nameSort = new() { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Left, Padding = Density.CellPadding };
     private string _pivot = "";
     private ulong _uid;
     private ulong _revision;
@@ -71,8 +71,8 @@ public sealed partial class LayerManagerWindow : Window
         LoadPrefs();
         _reloading = false;
         Closed += (_, _) => SavePrefs();
-        ShellIcon.Apply(this, themeSource?.RequestedTheme ?? Density.Theme);
-        ShellFit.UserResizable(this, minWidthDip: 720, minHeightDip: 420, maxWidthDip: 1400, maxHeightDip: 1000, persistKey: "layers");
+        // The layer table needs 720 DIP before columns scroll; otherwise the Manager defaults.
+        StandardWindow.Present(this, null, WindowTemplate.Manager, "layers", new WindowBounds(720, 420, 1400, 1000));
     }
 
     public void ApplyTheme(ElementTheme theme)
@@ -713,7 +713,7 @@ public sealed partial class LayerManagerWindow : Window
             {
                 Text = Columns[i].Title,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(4, 0, 4, 0),
+                Margin = Density.CellPadding,
                 FontSize = Density.FontBody,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             };
@@ -740,7 +740,7 @@ public sealed partial class LayerManagerWindow : Window
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Columns[i].Width) });
             }
             Add(grid, 0, IconButton(row.StatusKind, row.CurrentAccess, OnMakeCurrent));
-            var name = new TextBlock { Text = row.Name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0) };
+            var name = new TextBlock { Text = row.Name, VerticalAlignment = VerticalAlignment.Center, Margin = Density.CellPadding };
             AutomationProperties.SetName(name, row.NameAccess);
             name.DoubleTapped += OnNameDoubleTapped;
             Add(grid, 1, name);
@@ -754,13 +754,13 @@ public sealed partial class LayerManagerWindow : Window
                 BorderThickness = new Thickness(0),
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 MinHeight = Density.ControlHeight,
-                Padding = new Thickness(4, 0, 4, 0),
+                Padding = Density.CellPadding,
             };
             color.Content = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = Density.SpaceSm,
-                Children = { new Border { Width = 14, Height = 14, Background = row.Swatch, VerticalAlignment = VerticalAlignment.Center }, new TextBlock { Text = row.ColorName, VerticalAlignment = VerticalAlignment.Center } },
+                Children = { new Border { Width = Density.SwatchSize, Height = Density.SwatchSize, Background = row.Swatch, VerticalAlignment = VerticalAlignment.Center }, new TextBlock { Text = row.ColorName, VerticalAlignment = VerticalAlignment.Center } },
             };
             AutomationProperties.SetName(color, row.ColorAccess);
             color.Click += OnColor;
@@ -775,7 +775,7 @@ public sealed partial class LayerManagerWindow : Window
                 Background = Transparent(),
                 BorderThickness = new Thickness(0),
                 MinHeight = Density.ControlHeight,
-                Padding = new Thickness(4, 0, 4, 0),
+                Padding = Density.CellPadding,
                 VerticalAlignment = VerticalAlignment.Center,
             };
             AutomationProperties.SetName(description, row.DescriptionAccess);
@@ -967,7 +967,7 @@ public sealed partial class LayerManagerWindow : Window
             HorizontalContentAlignment = HorizontalAlignment.Left,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             MinHeight = Density.ControlHeight,
-            Padding = new Thickness(4, 0, 4, 0),
+            Padding = Density.CellPadding,
         };
         AutomationProperties.SetName(button, access);
         button.Click += click;

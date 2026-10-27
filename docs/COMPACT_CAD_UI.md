@@ -1,5 +1,8 @@
 # Compact CAD UI (AutoCAD 2007–inspired density)
 
+> Density background and the original sizing pass. The current rules for windows, layout and
+> components are in [UI_STANDARDS.md](UI_STANDARDS.md); where the two differ, that page wins.
+
 Sizing and styling pass for O-Draft WinUI 3 chrome. **No CAD engine, workflow, or command changes.** Density targets classic AutoCAD 2007 compactness without copying proprietary assets or claiming pixel parity.
 
 ## Design targets (effective pixels / DIP)

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -9,7 +8,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Aad.WinUi;
 
-/// <summary>File &gt; Page Setup Manager… — edit a layout's page setup via <c>pagesetup</c>.</summary>
+/// <summary>File &gt; Page Setup Managerâ€¦ â€” edit a layout's page setup via <c>pagesetup</c>.</summary>
 internal static class PageSetupWindow
 {
     private static readonly string[] PlotAreas = ["layout", "extents", "display", "limits"];
@@ -132,7 +131,7 @@ internal static class PageSetupWindow
                     scale.Text = layout.Fit.Nearest;
                     nearest.Text = string.IsNullOrEmpty(layout.Fit.Label) || layout.Fit.Label == layout.Fit.Nearest
                         ? "Nearest scale that fits: " + layout.Fit.Nearest
-                        : "Fits at " + layout.Fit.Label + " · nearest: " + layout.Fit.Nearest;
+                        : "Fits at " + layout.Fit.Label + " Â· nearest: " + layout.Fit.Nearest;
                 }
                 else
                 {
@@ -145,7 +144,7 @@ internal static class PageSetupWindow
                 lineweights.IsChecked = page.Lineweights;
                 var w = page.Landscape ? page.HeightMm : page.WidthMm;
                 var h = page.Landscape ? page.WidthMm : page.HeightMm;
-                sizeLabel.Text = w.ToString("0.#", CultureInfo.InvariantCulture) + " × " + h.ToString("0.#", CultureInfo.InvariantCulture) + " mm";
+                sizeLabel.Text = w.ToString("0.#", CultureInfo.InvariantCulture) + " Ã— " + h.ToString("0.#", CultureInfo.InvariantCulture) + " mm";
             }
             finally
             {
@@ -303,12 +302,7 @@ internal static class PageSetupWindow
                 Content = new Grid { RequestedTheme = theme, Children = { root } },
             },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 480, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640, persistKey: "pagesetup");
+        StandardWindow.Present(window, owner, WindowTemplate.Manager, "pagesetup");
         Reload(null);
         return window;
     }

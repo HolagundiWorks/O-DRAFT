@@ -196,8 +196,7 @@ internal static class ParametersWindow
         window.Content = new ScrollViewer { Content = root };
         root.RequestedTheme = theme;
         Density.Apply(root);
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 380, minHeightDip: 420, maxWidthDip: 560, maxHeightDip: 720, persistKey: "parameters");
+        StandardWindow.Present(window, owner, WindowTemplate.PropertyDialog, "parameters");
         Load();
         window.Activate();
         Native.ShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(window), 8);
