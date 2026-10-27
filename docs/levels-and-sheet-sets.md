@@ -478,6 +478,16 @@ carried `levels`, `sheetSets` and `designMode`):
   are also what a typed `level.new`, `level.set`, `level.trace` or `level.delete` starts. To take what
   a dialog sends, `level.trace` accepts a whole-number float for `fade` and a comma-separated text
   (or `*`) for `layers`, besides the JSON forms it took before.
+- **Right-hand panels and the layer selector**: the top tool bar starts with the current-layer
+  selector (Color and Linetype stay removed). While a sheet-set tab is active its list holds only the
+  layers that tab maps (`layer.scope all` lists every layer). The right edge has a rail of four
+  vertical titles, Properties, Layers, Blocks and Project, that is always visible, open or
+  collapsed. Clicking a title opens that panel and only that panel (the tab strip inside the panel is
+  gone; the panel's own title, such as `Layer . Outline`, sits above it with the Pin and Float
+  buttons); clicking the title of the open panel collapses the dock to the rail. Hovering no longer
+  opens a collapsed dock; an unpinned open panel still collapses 1.5 s after the pointer leaves.
+  Float puts the panels in their own window, and the rail then switches the panel shown there.
+  Not tried by hand: Float with the new rail, and the pinned/unpinned auto-collapse.
 - **Move selection to a level**: select objects, right-click the canvas (no command running), and
   the shortcut menu has *Move to Level* with every other level listed; a click runs `level.moveto`
   with that level, so the objects keep their coordinates and leave the active level (one undo

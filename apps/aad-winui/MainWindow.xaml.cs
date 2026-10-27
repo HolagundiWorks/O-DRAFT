@@ -217,6 +217,7 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetLiveSetting(Status, AutomationLiveSetting.Polite);
         AutomationProperties.SetLandmarkType(Bar, AutomationLandmarkType.Navigation);
         AutomationProperties.SetLandmarkType(ToolStripHost, AutomationLandmarkType.Navigation);
+        BuildSideRail();
         AutomationProperties.SetLandmarkType(LeftColumn, AutomationLandmarkType.Form);
         AutomationProperties.SetLocalizedLandmarkType(LeftColumn, "complementary");
         AutomationProperties.SetLandmarkType(CanvasHost, AutomationLandmarkType.Main);
@@ -515,7 +516,7 @@ public sealed partial class MainWindow : Window
     private bool CloseOpenComboBoxes()
     {
         var closed = false;
-        foreach (var box in new ComboBox?[] { UnitsBox, PaperBox, OrientBox })
+        foreach (var box in new ComboBox?[] { LayerBox, UnitsBox, PaperBox, OrientBox })
         {
             if (box is { IsDropDownOpen: true })
             {
@@ -2204,7 +2205,7 @@ public sealed partial class MainWindow : Window
     private void SetSideWidth(double width)
     {
         _leftWidth = Math.Clamp(width, 180, 640);
-        PropertiesColumn.Width = new GridLength(_leftWidth);
+        PropertiesColumn.Width = new GridLength(_leftWidth + SideRailWidth);
         AutomationProperties.SetName(LeftSplitter, "Resize side panel, width " + (int)_leftWidth);
     }
 
@@ -3054,7 +3055,7 @@ public sealed partial class MainWindow : Window
                 propTitle = "Hover · " + hover;
             }
         }
-        PropertiesTab.Header = propTitle;
+        _sideTitles[SideTab.Properties] = propTitle;
         AutomationProperties.SetName(PropertiesTab, propTitle);
 
         var layerName = snapshot.FocusLayer;
@@ -3063,12 +3064,13 @@ public sealed partial class MainWindow : Window
             layerName = snapshot.Layers.FirstOrDefault(l => l.Current)?.Name;
         }
         var layerTitle = string.IsNullOrEmpty(layerName) ? "Layer" : "Layer · " + layerName;
-        LayersTab.Header = layerTitle;
+        _sideTitles[SideTab.Layers] = layerTitle;
         AutomationProperties.SetName(LayersTab, layerTitle);
 
         var blockTitle = string.IsNullOrEmpty(snapshot.FocusBlock) ? "Blocks" : "Blocks · " + snapshot.FocusBlock;
-        BlocksTab.Header = blockTitle;
+        _sideTitles[SideTab.Blocks] = blockTitle;
         AutomationProperties.SetName(BlocksTab, blockTitle);
+        RefreshSideRail();
     }
 
     private static string? QuickTitle(string json)
@@ -5108,6 +5110,8 @@ public sealed partial class MainWindow : Window
         _filling = true;
         try
         {
+            var currentLayer = snapshot.Layers.FirstOrDefault(layer => layer.Current)?.Name;
+            FillCombo(LayerBox, snapshot.Layers.Select(layer => (layer.Name, layer.Name)), currentLayer);
             SyncPaperSize();
         }
         finally
@@ -5155,6 +5159,23 @@ public sealed partial class MainWindow : Window
         {
             box.SelectedIndex = want;
         }
+    }
+
+    private void OnLayerPicked(object sender, SelectionChangedEventArgs e) => PickContext(LayerBox, "layer.current", "name");
+
+    private void PickContext(ComboBox box, string command, string key)
+    {
+        if (_filling || box.SelectedItem is not ComboBoxItem item || item.Tag is not string value || _host == IntPtr.Zero)
+        {
+            return;
+        }
+        var json = JsonSerializer.Serialize(new Dictionary<string, object> { [key] = value });
+        if (Native.Execute(_host, command, json) != 0)
+        {
+            History.Text = Native.LastError(_host);
+        }
+        _panelKey = "";
+        AfterCommand();
     }
 
     private void ChoosePopup(string id, string run)
@@ -5606,53 +5627,6 @@ public sealed partial class MainWindow : Window
         ApplyColumns();
     }
 
-    private string SelectedSideTabLabel() =>
-        SideTabs.SelectedItem switch
-        {
-            var t when ReferenceEquals(t, LayersTab) => "Layer",
-            var t when ReferenceEquals(t, BlocksTab) => "Blocks",
-            var t when ReferenceEquals(t, ProjectTab) => "Project",
-            _ => "Properties",
-        };
-
-    /// <summary>Collapsed rail: rotated label of the selected panel only.</summary>
-    private void ApplySideRailLabel()
-    {
-        const double railW = 28;
-        var label = SelectedSideTabLabel();
-        SideRailLabel.Text = label;
-        SideRailLabel.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-        var textW = Math.Max(1, SideRailLabel.DesiredSize.Width);
-        var textH = Math.Max(1, SideRailLabel.DesiredSize.Height);
-        SideRailLabel.RenderTransformOrigin = new Windows.Foundation.Point(0, 0);
-        SideRailLabel.RenderTransform = new TransformGroup
-        {
-            Children =
-            {
-                new RotateTransform { Angle = 90 },
-                new TranslateTransform { X = (railW + textH) / 2, Y = 8 },
-            },
-        };
-        Canvas.SetLeft(SideRailLabel, 0);
-        Canvas.SetTop(SideRailLabel, 0);
-        SideRailCanvas.Height = textW + 24;
-        ToolTipService.SetToolTip(SideRail, label + ". Move the pointer here to open the side panel.");
-        AutomationProperties.SetName(SideRail, label + ". Move the pointer here to open the side panel.");
-    }
-
-    private void OnSideRailTapped(object sender, TappedRoutedEventArgs e)
-    {
-        var tab = SideTabs.SelectedItem switch
-        {
-            var t when ReferenceEquals(t, LayersTab) => SideTab.Layers,
-            var t when ReferenceEquals(t, BlocksTab) => SideTab.Blocks,
-            var t when ReferenceEquals(t, ProjectTab) => SideTab.Project,
-            _ => SideTab.Properties,
-        };
-        ShowSidePanel(tab);
-        e.Handled = true;
-    }
-
     private void ApplyColumns()
     {
         // Pro hides the tool strip; Classic honours the per-mode toolbar switch.
@@ -5669,17 +5643,14 @@ public sealed partial class MainWindow : Window
             ArchToolsDivider.Visibility = tools && ArchBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         ArchBar.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
-        var leftOpen = _leftFloat != null || _pinLeft || _hoverLeft || !_leftCollapsed;
-        // Floated panels leave only the context/pin strip in the dock.
-        // Unpinned panels collapse to a narrow rail labelled with the selected panel.
+        // A panel is open until its title is clicked again (or, unpinned, until the pointer has been
+        // away for 1.5 s). The rail of titles is always there, so a collapsed dock is just the rail.
+        var leftOpen = _leftFloat != null || !_leftCollapsed;
         var dockWidth = _leftFloat != null ? Math.Min(_leftWidth, 200) : _leftWidth;
-        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth : 28);
-        SideRail.Visibility = leftOpen ? Visibility.Collapsed : Visibility.Visible;
+        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth + SideRailWidth : SideRailWidth);
+        SideRail.Visibility = Visibility.Visible;
         LeftColumn.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
-        if (!leftOpen)
-        {
-            ApplySideRailLabel();
-        }
+        RefreshSideRail();
         LeftSplitterColumn.Width = leftOpen && _leftFloat == null ? new GridLength(8) : new GridLength(0);
         LeftSplitter.Visibility = leftOpen && _leftFloat == null ? Visibility.Visible : Visibility.Collapsed;
         SideTabs.Visibility = leftOpen && _leftFloat == null ? Visibility.Visible : Visibility.Collapsed;
@@ -5823,11 +5794,13 @@ public sealed partial class MainWindow : Window
             SideTab.Project => ProjectTab,
             _ => PropertiesTab,
         };
-        PropertiesTab.Visibility = Visibility.Visible;
-        LayersTab.Visibility = Visibility.Visible;
-        BlocksTab.Visibility = Visibility.Visible;
-        ProjectTab.Visibility = Visibility.Visible;
-        SideTabs.SelectedItem = item;
+        // Only the chosen panel is shown: there are no tabs inside the panel.
+        _sideTab = tab;
+        PropertiesTab.Visibility = item == PropertiesTab ? Visibility.Visible : Visibility.Collapsed;
+        LayersTab.Visibility = item == LayersTab ? Visibility.Visible : Visibility.Collapsed;
+        BlocksTab.Visibility = item == BlocksTab ? Visibility.Visible : Visibility.Collapsed;
+        ProjectTab.Visibility = item == ProjectTab ? Visibility.Visible : Visibility.Collapsed;
+        RefreshSideRail();
     }
 
     private void CheckItem(MenuBarItem menu, string label, Func<bool> read, Action<bool> write)
@@ -5928,8 +5901,9 @@ public sealed partial class MainWindow : Window
 
     private void OnColumnEntered(object sender, PointerRoutedEventArgs e)
     {
+        // Hovering keeps an open panel from auto-collapsing; it no longer opens a collapsed one:
+        // a panel opens when its title on the rail is clicked.
         _hoverLeft = true;
-        _leftCollapsed = false;
         _leftIdleSince = DateTime.UtcNow;
         ApplyColumns();
     }

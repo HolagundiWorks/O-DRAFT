@@ -23,6 +23,19 @@
         <Border x:Name="ToolStripHost" Grid.Row="1" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,0,1" AutomationProperties.Name="Drawing and architecture tools" AutomationProperties.LandmarkType="Navigation">
             <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" Margin="{StaticResource PaddingSm}">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" AutomationProperties.Name="Layer">
+                        <TextBlock Text="Layer" FontSize="{StaticResource FontSizeCaption}" Foreground="{ThemeResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                        <ComboBox
+                            x:Name="LayerBox"
+                            MinWidth="130"
+                            MaxWidth="200"
+                            MinHeight="{StaticResource ControlHeight}"
+                            VerticalAlignment="Center"
+                            SelectionChanged="OnLayerPicked"
+                            AutomationProperties.Name="Current layer"
+                            ToolTipService.ToolTip="Current layer (while a sheet-set tab is active, the layers of that tab)" />
+                    </StackPanel>
+                    <Border Style="{StaticResource ArchBarDividerStyle}" Margin="4,0,4,0" />
                     <StackPanel x:Name="ToolStrip" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" />
                     <Border x:Name="ArchToolsDivider" Style="{StaticResource ArchBarDividerStyle}" Margin="4,0,4,0" Visibility="Collapsed" />
                     <StackPanel x:Name="ArchBar" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center" Height="{StaticResource IconButtonSize}" />
@@ -47,7 +60,12 @@
             <Border x:Name="CanvasHost" Grid.Column="2" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
             <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="3" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
             <Border x:Name="SideHost" Grid.Column="4" Style="{StaticResource SidePanelChromeStyle}" BorderThickness="1,0,0,0" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited">
+            <!-- The open panel, then a rail of panel titles that is always visible (open or collapsed). -->
             <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="28" />
+            </Grid.ColumnDefinitions>
             <Grid x:Name="LeftColumn" Tag="right" AutomationProperties.Name="Side panel">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -58,6 +76,14 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="SidePanelTitle"
+                        Text="Properties"
+                        FontSize="{StaticResource FontSizeBody}"
+                        FontWeight="SemiBold"
+                        TextTrimming="CharacterEllipsis"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Panel title" />
                     <StackPanel
                         Grid.Column="1"
                         Orientation="Horizontal"
@@ -72,51 +98,43 @@
                         </Button>
                     </StackPanel>
                 </Grid>
-                <TabView x:Name="SideTabs" Grid.Row="1" IsAddTabButtonVisible="False" CanDragTabs="False" CanReorderTabs="False" TabWidthMode="Equal">
-                    <TabViewItem x:Name="PropertiesTab" Header="Properties" IsClosable="False" AutomationProperties.Name="Properties">
+                <!-- One panel at a time; the rail chooses which. -->
+                <Grid x:Name="SideTabs" Grid.Row="1">
+                    <Grid x:Name="PropertiesTab" AutomationProperties.Name="Properties">
                         <ScrollViewer x:Name="PropertiesHost">
                             <StackPanel x:Name="PropertiesPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
                         </ScrollViewer>
-                    </TabViewItem>
-                    <TabViewItem x:Name="LayersTab" Header="Layer" IsClosable="False" AutomationProperties.Name="Layer">
+                    </Grid>
+                    <Grid x:Name="LayersTab" Visibility="Collapsed" AutomationProperties.Name="Layers">
                         <Grid x:Name="LayersSlot">
                             <ScrollViewer x:Name="LayersHost">
                                 <StackPanel x:Name="LayersPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
                             </ScrollViewer>
                         </Grid>
-                    </TabViewItem>
-                    <TabViewItem x:Name="BlocksTab" Header="Blocks" IsClosable="False" AutomationProperties.Name="Blocks">
+                    </Grid>
+                    <Grid x:Name="BlocksTab" Visibility="Collapsed" AutomationProperties.Name="Blocks">
                         <ScrollViewer x:Name="BlocksHost">
                             <StackPanel x:Name="BlocksPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
                         </ScrollViewer>
-                    </TabViewItem>
-                    <TabViewItem x:Name="ProjectTab" Header="Project" IsClosable="False" AutomationProperties.Name="Project settings">
+                    </Grid>
+                    <Grid x:Name="ProjectTab" Visibility="Collapsed" AutomationProperties.Name="Project settings">
                         <ScrollViewer x:Name="ProjectHost">
                             <StackPanel x:Name="ProjectPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
                         </ScrollViewer>
-                    </TabViewItem>
-                </TabView>
+                    </Grid>
+                </Grid>
             </Grid>
             <Border
                 x:Name="SideRail"
-                Visibility="Collapsed"
+                Grid.Column="1"
                 Width="28"
                 Background="{ThemeResource SurfaceSecondaryBrush}"
                 BorderBrush="{ThemeResource BorderSubtleBrush}"
                 BorderThickness="1,0,0,0"
-                ToolTipService.ToolTip="Side panel. Move the pointer here to open it."
-                AutomationProperties.Name="Side panel"
-                Tapped="OnSideRailTapped">
-                <!-- Collapsed rail: label of the selected panel only. -->
-                <Canvas x:Name="SideRailCanvas" Width="28" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                    <TextBlock
-                        x:Name="SideRailLabel"
-                        Text="Properties"
-                        FontSize="{StaticResource FontSizeBody}"
-                        Foreground="{ThemeResource TextSecondaryBrush}"
-                        TextWrapping="NoWrap"
-                        IsHitTestVisible="False" />
-                </Canvas>
+                AutomationProperties.Name="Panel titles">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="SideRailTabs" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="1,4,1,4" />
+                </ScrollViewer>
             </Border>
             </Grid>
             </Border>
