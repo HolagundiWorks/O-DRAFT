@@ -388,8 +388,9 @@ carried `levels`, `sheetSets` and `designMode`):
   command line). In a sheet view the bar says which set is being annotated.
 - **The project's active floor follows the level**: `level.activate` (and so the tabs, Ctrl+PageUp
   and Ctrl+PageDown, `level.next` and `level.prev`) sets the active floor when the level has the
-  name of a listed floor. The Floor selector is no longer in the context bar (the level tabs
-  replace it); `floor.current` still sets the floor for a drawing without levels.
+  name of a listed floor. There is no Floor selector (or any context bar) in the WinUI shell
+  any more: the level tabs replace it, and `floor.current` still sets the floor for a drawing
+  without levels.
 - Also fixed on the way: the canvas panicked at start-up on a real GPU ("cad_lines" pipeline) because
   the view uniform was bound to the vertex stage only while the ring shader reads it in the
   fragment stage; both GPU files now bind it to both stages.

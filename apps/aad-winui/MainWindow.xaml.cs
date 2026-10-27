@@ -515,7 +515,7 @@ public sealed partial class MainWindow : Window
     private bool CloseOpenComboBoxes()
     {
         var closed = false;
-        foreach (var box in new ComboBox?[] { LayerBox, ColorBox, LinetypeBox, UnitsBox, PaperBox, OrientBox })
+        foreach (var box in new ComboBox?[] { UnitsBox, PaperBox, OrientBox })
         {
             if (box is { IsDropDownOpen: true })
             {
@@ -5108,105 +5108,11 @@ public sealed partial class MainWindow : Window
         _filling = true;
         try
         {
-            var current = snapshot.Layers.FirstOrDefault(layer => layer.Current)?.Name;
-            FillCombo(LayerBox, snapshot.Layers.Select(layer => (layer.Name, layer.Name)), current);
-            FillColorBox(snapshot);
-            FillLinetypeBox(snapshot);
             SyncPaperSize();
         }
         finally
         {
             _filling = false;
-        }
-    }
-
-    private static readonly (string Tag, string Label, byte R, byte G, byte B)[] StandardColors =
-    [
-        ("ByLayer", "ByLayer", 160, 160, 160),
-        ("ByBlock", "ByBlock", 120, 120, 120),
-        ("Red", "Red", 255, 0, 0),
-        ("Yellow", "Yellow", 255, 255, 0),
-        ("Green", "Green", 0, 255, 0),
-        ("Cyan", "Cyan", 0, 255, 255),
-        ("Blue", "Blue", 0, 0, 255),
-        ("Magenta", "Magenta", 255, 0, 255),
-        ("White", "White", 255, 255, 255),
-    ];
-
-    private void FillColorBox(PanelSnapshot snapshot)
-    {
-        var current = string.IsNullOrEmpty(snapshot.Cecolor) ? "ByLayer" : snapshot.Cecolor;
-        var list = StandardColors.Select(c => (c.Tag, c.Label, c.R, c.G, c.B)).ToList();
-        if (!list.Any(c => c.Tag.Equals(current, StringComparison.OrdinalIgnoreCase)))
-        {
-            list.Add((current, current, 180, 180, 180));
-        }
-        FillColorCombo(ColorBox, list, current);
-    }
-
-    private void FillLinetypeBox(PanelSnapshot snapshot)
-    {
-        var current = string.IsNullOrEmpty(snapshot.Celtype) ? "ByLayer" : snapshot.Celtype;
-        var items = new List<(string, string)> { ("ByLayer", "ByLayer"), ("ByBlock", "ByBlock"), ("Continuous", "Continuous") };
-        if (!items.Any(c => c.Item1.Equals(current, StringComparison.OrdinalIgnoreCase)))
-        {
-            items.Add((current, current));
-        }
-        FillCombo(LinetypeBox, items, current);
-    }
-
-    private static void FillColorCombo(ComboBox box, List<(string Tag, string Label, byte R, byte G, byte B)> list, string? selected)
-    {
-        var sameItems = box.Items.Count == list.Count;
-        if (sameItems)
-        {
-            for (var i = 0; i < list.Count; i++)
-            {
-                if (box.Items[i] is not ComboBoxItem existing || existing.Tag as string != list[i].Tag)
-                {
-                    sameItems = false;
-                    break;
-                }
-            }
-        }
-        if (!sameItems)
-        {
-            box.Items.Clear();
-            foreach (var (tag, label, r, g, b) in list)
-            {
-                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-                row.Children.Add(new Border
-                {
-                    Width = 14,
-                    Height = 14,
-                    CornerRadius = new CornerRadius(2),
-                    BorderThickness = new Thickness(1),
-                    BorderBrush = Density.ThemeBrush("ControlStrokeColorDefaultBrush")
-                        ?? new SolidColorBrush(Microsoft.UI.Colors.Gray),
-                    Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b)),
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
-                row.Children.Add(new TextBlock
-                {
-                    Text = label,
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
-                box.Items.Add(new ComboBoxItem { Content = row, Tag = tag });
-            }
-        }
-        box.IsEnabled = box.Items.Count > 0;
-        var want = -1;
-        for (var i = 0; i < box.Items.Count; i++)
-        {
-            if (box.Items[i] is ComboBoxItem item && item.Tag is string tag && tag.Equals(selected, StringComparison.OrdinalIgnoreCase))
-            {
-                want = i;
-                break;
-            }
-        }
-        if (box.SelectedIndex != want)
-        {
-            box.SelectedIndex = want;
         }
     }
 
@@ -5249,27 +5155,6 @@ public sealed partial class MainWindow : Window
         {
             box.SelectedIndex = want;
         }
-    }
-
-    private void OnLayerPicked(object sender, SelectionChangedEventArgs e) => PickContext(LayerBox, "layer.current", "name");
-
-    private void OnColorPicked(object sender, SelectionChangedEventArgs e) => PickContext(ColorBox, "color", "color");
-
-    private void OnLinetypePicked(object sender, SelectionChangedEventArgs e) => PickContext(LinetypeBox, "linetype", "current");
-
-    private void PickContext(ComboBox box, string command, string key)
-    {
-        if (_filling || box.SelectedItem is not ComboBoxItem item || item.Tag is not string value || _host == IntPtr.Zero)
-        {
-            return;
-        }
-        var json = JsonSerializer.Serialize(new Dictionary<string, object> { [key] = value });
-        if (Native.Execute(_host, command, json) != 0)
-        {
-            History.Text = Native.LastError(_host);
-        }
-        _panelKey = "";
-        AfterCommand();
     }
 
     private void ChoosePopup(string id, string run)
@@ -5769,8 +5654,7 @@ public sealed partial class MainWindow : Window
         {
             RebuildArchitectureBar();
         }
-        // Layer / Floor always sit on the strip under the menu; tool icons only in Classic.
-        ArchBarHost.Visibility = Visibility.Visible;
+        // The tool strip (drawing and architecture tools) is Classic only.
         if (ArchToolsDivider != null)
         {
             ArchToolsDivider.Visibility = tools && ArchBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;

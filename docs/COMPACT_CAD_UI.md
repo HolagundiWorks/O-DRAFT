@@ -30,7 +30,7 @@ Implemented values live in `Density.cs` and `Themes/*Tokens.xaml` (keep in sync)
 |---|---|
 | Menu bar / menus | `MainWindow.xaml`, menu build in `MainWindow.xaml.cs`, `ShellMenuBarStyle` / flyout styles |
 | File tabs | `MainWindow.xaml` (`FileTabs`, `FileTabHeight`) |
-| Architecture toolbar | `ArchBar` / `ArchBarHost` |
+| Tool bar (drawing tools, a divider, architecture tools; one line) | `ToolStrip`, `ArchBar` in `ToolStripHost` |
 | Vertical tool strip | `ToolStrip` / `ToolStripHost`, `MakeToolButton`, `ToolIcons` |
 | Side panel (Properties / Layers / Blocks) | `SideHost`, `PropertiesPanel`, `LayersPanel`, `BlocksPanel` |
 | Side rail (collapsed) | Side-rail label transform in `MainWindow.xaml.cs` |

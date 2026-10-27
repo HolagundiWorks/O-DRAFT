@@ -8,7 +8,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -20,123 +19,17 @@
             Background="{ThemeResource SurfaceBrush}"
             FontSize="{StaticResource FontSizeBody}"
             AutomationProperties.Name="Menu" />
-        <!-- Context strip under the menu: Layer | Color | Linetype, then architecture tools. -->
-        <Border
-            x:Name="ArchBarHost"
-            Grid.Row="1"
-            Height="{StaticResource ArchBarHeight}"
-            MaxHeight="{StaticResource ArchBarHeight}"
-            Background="{ThemeResource SurfaceSecondaryBrush}"
-            BorderBrush="{ThemeResource BorderSubtleBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="6,0,4,0"
-            AutomationProperties.Name="Layer, color, linetype and architecture toolbar"
-            AutomationProperties.LandmarkType="Navigation">
-            <Grid VerticalAlignment="Center" ColumnSpacing="0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel
-                    Orientation="Horizontal"
-                    Spacing="6"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="Layer">
-                    <TextBlock
-                        Text="Layer"
-                        FontSize="{StaticResource FontSizeCaption}"
-                        Foreground="{ThemeResource TextSecondaryBrush}"
-                        VerticalAlignment="Center" />
-                    <ComboBox
-                        x:Name="LayerBox"
-                        MinWidth="120"
-                        MaxWidth="180"
-                        MinHeight="{StaticResource ControlHeight}"
-                        VerticalAlignment="Center"
-                        SelectionChanged="OnLayerPicked"
-                        AutomationProperties.Name="Current layer"
-                        ToolTipService.ToolTip="Current layer" />
-                </StackPanel>
-                <Border Grid.Column="1" Style="{StaticResource ArchBarDividerStyle}" Margin="8,0,8,0" />
-                <StackPanel
-                    Grid.Column="2"
-                    Orientation="Horizontal"
-                    Spacing="6"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="Color">
-                    <TextBlock
-                        Text="Color"
-                        FontSize="{StaticResource FontSizeCaption}"
-                        Foreground="{ThemeResource TextSecondaryBrush}"
-                        VerticalAlignment="Center" />
-                    <ComboBox
-                        x:Name="ColorBox"
-                        MinWidth="110"
-                        MaxWidth="160"
-                        MinHeight="{StaticResource ControlHeight}"
-                        VerticalAlignment="Center"
-                        SelectionChanged="OnColorPicked"
-                        AutomationProperties.Name="Current color"
-                        ToolTipService.ToolTip="Color for new objects (CECOLOR)" />
-                </StackPanel>
-                <Border Grid.Column="3" Style="{StaticResource ArchBarDividerStyle}" Margin="8,0,8,0" />
-                <StackPanel
-                    Grid.Column="4"
-                    Orientation="Horizontal"
-                    Spacing="6"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="Linetype">
-                    <TextBlock
-                        Text="Linetype"
-                        FontSize="{StaticResource FontSizeCaption}"
-                        Foreground="{ThemeResource TextSecondaryBrush}"
-                        VerticalAlignment="Center" />
-                    <ComboBox
-                        x:Name="LinetypeBox"
-                        MinWidth="110"
-                        MaxWidth="160"
-                        MinHeight="{StaticResource ControlHeight}"
-                        VerticalAlignment="Center"
-                        SelectionChanged="OnLinetypePicked"
-                        AutomationProperties.Name="Current linetype"
-                        ToolTipService.ToolTip="Linetype for new objects (CELTYPE)" />
-                </StackPanel>
-                <Border
-                    x:Name="ArchToolsDivider"
-                    Grid.Column="7"
-                    Style="{StaticResource ArchBarDividerStyle}"
-                    Margin="8,0,8,0"
-                    Visibility="Collapsed" />
-                <ScrollViewer
-                    Grid.Column="8"
-                    HorizontalScrollBarVisibility="Auto"
-                    VerticalScrollBarVisibility="Disabled"
-                    VerticalAlignment="Center"
-                    Padding="0"
-                    Margin="0">
-                    <StackPanel
-                        x:Name="ArchBar"
-                        Orientation="Horizontal"
-                        Spacing="0"
-                        VerticalAlignment="Center"
-                        Height="{StaticResource IconButtonSize}" />
-                </ScrollViewer>
-            </Grid>
-        </Border>
-        <!-- Drawing tools, in a horizontal strip under the context bar. -->
-        <Border x:Name="ToolStripHost" Grid.Row="2" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,0,1" AutomationProperties.Name="Tool strip">
+        <!-- All tools on one line under the menu: drawing tools, a divider, architecture tools. -->
+        <Border x:Name="ToolStripHost" Grid.Row="1" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,0,1" AutomationProperties.Name="Drawing and architecture tools" AutomationProperties.LandmarkType="Navigation">
             <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
-                <StackPanel x:Name="ToolStrip" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" Margin="{StaticResource PaddingSm}" />
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" Margin="{StaticResource PaddingSm}">
+                    <StackPanel x:Name="ToolStrip" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" />
+                    <Border x:Name="ArchToolsDivider" Style="{StaticResource ArchBarDividerStyle}" Margin="4,0,4,0" Visibility="Collapsed" />
+                    <StackPanel x:Name="ArchBar" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center" Height="{StaticResource IconButtonSize}" />
+                </StackPanel>
             </ScrollViewer>
         </Border>
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="2">
             <!-- Sheet-set rail | (unused tool column) | canvas | splitter | properties (right). -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="RailColumn" Width="Auto" />
@@ -348,7 +241,7 @@
             </StackPanel>
         </Border>
         <!-- Level tabs under the drawing; the bar is a row of its own because the canvas is a native child window. -->
-        <Border x:Name="LevelBarHost" Grid.Row="4" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}" AutomationProperties.Name="Levels">
+        <Border x:Name="LevelBarHost" Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}" AutomationProperties.Name="Levels">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
                     <StackPanel x:Name="LevelTabs" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" AutomationProperties.Name="Level tabs" />
@@ -359,7 +252,7 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
-        <Border Grid.Row="5" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}">
+        <Border Grid.Row="4" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}">
         <Grid x:Name="StatusRow" Style="{StaticResource StatusBarStyle}" ColumnSpacing="{StaticResource SpaceSm}" AutomationProperties.Name="Status">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -468,7 +361,7 @@
         </Grid>
         </Border>
         <!-- In-window splash (avoids a second top-level window fighting the command chrome). -->
-        <Grid x:Name="SplashOverlay" Grid.RowSpan="6" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
+        <Grid x:Name="SplashOverlay" Grid.RowSpan="5" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">
                 <Image x:Name="SplashLogo" Width="96" Height="96" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
                 <TextBlock Text="O-Draft" FontSize="{StaticResource FontSizeSplashTitle}" FontWeight="SemiBold" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
