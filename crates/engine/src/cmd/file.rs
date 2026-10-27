@@ -113,16 +113,19 @@ pub struct Prepared {
     original: std::sync::Arc<Drawing>,
     report: crate::flatten::FlattenReport,
     units_unset: bool,
+    /// Set by the file reader when level data was damaged or incomplete.
+    levels_note: Option<String>,
 }
 
 /// Flatten `d` to 2D. The flattening is applied to a working copy; the drawing as read stays the
 /// "saved" state and one undo step, so the import can be reverted and the file on disk is only
 /// replaced by an explicit save.
 pub fn prepare(mut d: Drawing) -> Prepared {
+    let levels_note = d.project.remove(aad_doc::LEVELS_NOTE_KEY);
     let original = std::sync::Arc::new(d.clone());
     let report = crate::flatten::flatten_drawing(&mut d);
     let units_unset = crate::annot::drawing_unit(&d).is_none();
-    Prepared { drawing: d, original, report, units_unset }
+    Prepared { drawing: d, original, report, units_unset, levels_note }
 }
 
 /// Read, parse and flatten a drawing file without a session.
@@ -144,7 +147,10 @@ pub(crate) fn import_drawing(s: &mut Session, d: Drawing, name: &str, path: Opti
 }
 
 fn finish_import(s: &mut Session, p: Prepared, name: &str, path: Option<String>) -> Result<usize> {
-    let Prepared { drawing, original, report, units_unset } = p;
+    let Prepared { drawing, original, report, units_unset, levels_note } = p;
+    if let Some(note) = levels_note {
+        s.echo(note);
+    }
     if units_unset {
         s.echo(
             "The drawing's units are not set or not a length unit AAD knows. Choose them in the Units popup (status bar); nothing was assumed."

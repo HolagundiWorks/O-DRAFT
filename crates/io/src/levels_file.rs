@@ -10,7 +10,8 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 use aad_doc::{
-    Common, Drawing, Entity, EntityKind, EntityStore, Insert, Level, LevelId, MAX_LEVELS, MAX_TRACES, Trace, TraceColour, TraceOrder, level_name_ok,
+    Common, Drawing, Entity, EntityKind, EntityStore, Insert, LEVELS_NOTE_KEY, Level, LevelId, MAX_LEVELS, MAX_TRACES, Trace, TraceColour,
+    TraceOrder, level_name_ok,
 };
 use aad_geom::Vec2;
 use serde::{Deserialize, Serialize};
@@ -141,10 +142,16 @@ fn valid(meta: &Meta) -> bool {
 pub(crate) fn from_file(mut d: Drawing) -> Drawing {
     let Some(text) = d.project.get(KEY).cloned() else { return d };
     d.project.remove(KEY);
-    let Ok(meta) = serde_json::from_str::<Meta>(&text) else { return d };
+    let damaged = "This file has level data that could not be read, so it opened as a single level; the other levels stay in the file as blocks named ODRAFT$LVL$.";
+    let Ok(meta) = serde_json::from_str::<Meta>(&text) else {
+        d.project.insert(LEVELS_NOTE_KEY.into(), damaged.into());
+        return d;
+    };
     if !valid(&meta) {
+        d.project.insert(LEVELS_NOTE_KEY.into(), damaged.into());
         return d;
     }
+    let mut missing = Vec::new();
     // The keep-alive INSERTs and their layer are file plumbing, not drawing content.
     let names: HashSet<String> = meta.levels.iter().skip(1).map(|l| block_name(LevelId(l.id))).collect();
     let keep: Vec<_> = d
@@ -166,7 +173,13 @@ pub(crate) fn from_file(mut d: Drawing) -> Drawing {
             first_store.clone()
         } else {
             // A missing block gives an empty level.
-            d.blocks.remove(&block_name(LevelId(m.id))).map(|b| b.entities.clone()).unwrap_or_default()
+            match d.blocks.remove(&block_name(LevelId(m.id))) {
+                Some(b) => b.entities.clone(),
+                None => {
+                    missing.push(m.name.trim().to_string());
+                    EntityStore::new()
+                }
+            }
         };
         levels.push(Level {
             id: LevelId(m.id),
@@ -197,6 +210,10 @@ pub(crate) fn from_file(mut d: Drawing) -> Drawing {
     d.levels = levels;
     d.level_seed = meta.seed;
     let _ = d.switch_level(LevelId(meta.active));
+    if !missing.is_empty() {
+        let note = format!("The file has no objects for level {}; the level opened empty.", missing.join(", "));
+        d.project.insert(LEVELS_NOTE_KEY.into(), note);
+    }
     d
 }
 
@@ -300,6 +317,7 @@ mod tests {
             let r = from_file(w);
             assert!(r.levels.is_empty(), "case {i} loads as a single level");
             assert!(r.block("ODRAFT$LVL$2").is_some(), "case {i}: the blocks stay ordinary blocks");
+            assert!(r.project.contains_key(LEVELS_NOTE_KEY), "case {i}: the user is told");
         }
     }
 
@@ -311,6 +329,7 @@ mod tests {
         let r = from_file(w);
         assert_eq!(r.levels.len(), 3);
         assert_eq!(r.level_store(r.level_by_name("First").unwrap().id).unwrap().len(), 0);
+        assert!(r.project[LEVELS_NOTE_KEY].contains("First"), "the note names the level");
     }
 
     #[test]

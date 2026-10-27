@@ -17,6 +17,9 @@ pub const MAX_LEVELS: usize = 64;
 pub const MAX_TRACES: usize = 8;
 /// Longest level name, in characters.
 pub const MAX_LEVEL_NAME: usize = 64;
+/// Project-data key a file reader sets when level data in a file was damaged or incomplete; the
+/// open command reports its text on the command line and removes it.
+pub const LEVELS_NOTE_KEY: &str = "levelsNote";
 
 /// Stable level identity: never reused, names may change.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

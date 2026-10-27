@@ -296,3 +296,47 @@ fn audit_finds_and_repairs_errors_on_a_level_that_is_not_being_edited() {
     assert!(s.doc().unwrap().layer("Ghost").is_some(), "and repaired");
     assert_eq!(s.execute("audit", &json!({})).unwrap()["errors"], 0);
 }
+
+fn install_io() {
+    use aad_engine::cmd::file::{IoHooks, set_io};
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        set_io(IoHooks {
+            read: |b, name| aad_io::read(b, name).map_err(|e| e.to_string()),
+            write: |d, name| aad_io::write(d, name).map_err(|e| e.to_string()),
+            plot: None,
+        });
+    });
+}
+
+#[test]
+fn opening_a_file_with_damaged_level_data_tells_the_user_and_still_opens() {
+    use aad_engine::cmd::file::base64_encode;
+    install_io();
+    let mut src = Session::new();
+    line(&mut src, 0.0);
+    // Level metadata that is not valid JSON, as a damaged or hand-edited file might carry.
+    src.doc_mut().unwrap().project.insert("levels2".into(), "{ not json".into());
+    let bytes = aad_io::write(src.doc().unwrap(), "damaged.dxf").unwrap();
+
+    let mut s = Session::new();
+    s.execute("open", &json!({"data": base64_encode(&bytes), "name": "damaged.dxf"})).unwrap();
+    assert_eq!(s.doc().unwrap().entity_count(), 1, "the drawing opens");
+    assert!(!s.doc().unwrap().has_levels(), "as one level");
+    assert!(s.log.iter().any(|m| m.contains("level data that could not be read")), "{:?}", s.log);
+    assert!(!s.doc().unwrap().project.contains_key("levelsNote"), "the note is not kept in the drawing");
+}
+
+#[test]
+fn a_healthy_multi_level_file_opens_without_a_warning() {
+    use aad_engine::cmd::file::base64_encode;
+    install_io();
+    let mut src = Session::new();
+    line(&mut src, 0.0);
+    src.execute("level.new", &json!({"name": "First"})).unwrap();
+    let bytes = aad_io::write(src.doc().unwrap(), "ok.dxf").unwrap();
+    let mut s = Session::new();
+    s.execute("open", &json!({"data": base64_encode(&bytes), "name": "ok.dxf"})).unwrap();
+    assert_eq!(s.doc().unwrap().levels.len(), 2);
+    assert!(!s.log.iter().any(|m| m.contains("level")), "{:?}", s.log);
+}

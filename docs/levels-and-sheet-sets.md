@@ -174,7 +174,7 @@ Implemented and tested (`crates/engine/tests/levels.rs`, unit tests in `crates/i
   project data. Reading restores levels, traces, the active level and handles, and hides the
   plumbing. Damaged metadata (bad version, duplicate or zero ids, duplicate or empty names, an
   unknown active id, bad traces, more than 64 levels, negative height) opens the file as one level
-  and never fails; a missing level block gives an empty level. One level or none writes the same
+  and never fails with a note on the command line; a missing level block gives an empty level and a note. One level or none writes the same
   bytes as before.
 - Drawing-wide readers and writers cover every level: `PURGE` blocks, layer in-use check, layer
   rename and merge, `AUDIT` (finds and repairs errors on any level), data-extraction and compare
@@ -188,8 +188,9 @@ permit title-block tools (`bplt`), legends, the door and window schedule block c
 mapping (`layermap`, which keeps a source layer that another level still uses), the WinUI Blocks panel reference list, and the finite-value check. A later
 phase may widen the schedule and legend to the whole building.
 
-Known limits: a warning for damaged level data is not shown (the file just opens as one level);
-the viewer shows the active level only (no tabs, traces or sheet sets yet, Phases 2 and 3); in
+Damaged or incomplete level data opens the file as one level (or a level empty) and the command line says so (`levelsNote`, set by the reader and reported by `open`).
+
+Known limits: the viewer shows the active level only (no tabs, traces or sheet sets yet, Phases 2 and 3); in
 another CAD program a level other than the first is a block definition.
 
 ## Risks
