@@ -437,13 +437,32 @@ fn dwg_worker() -> Option<std::path::PathBuf> {
     None
 }
 
+/// The demo drawing that `--sample` opens instead of the built-in one: the file named by
+/// `AAD_SAMPLE_FILE`, or `sample/DEMO.dwg` (then `.dxf`) beside the program. Not part of the
+/// repository: a drawing made with other software is not committed here.
+fn local_sample_path() -> Option<String> {
+    let exists = |p: std::path::PathBuf| p.is_file().then(|| p.to_string_lossy().into_owned());
+    if let Some(v) = std::env::var_os("AAD_SAMPLE_FILE").filter(|v| !v.is_empty()) {
+        return exists(std::path::PathBuf::from(v));
+    }
+    let dir = std::env::current_exe().ok()?.parent()?.join("sample");
+    exists(dir.join("DEMO.dwg")).or_else(|| exists(dir.join("DEMO.dxf")))
+}
+
 impl Host {
     /// `sample` opens the built-in sample drawing. Otherwise the session starts empty.
     pub fn create(sample: bool) -> Self {
         install_formats();
         let mut session = Session::empty();
         if sample {
-            session.open_drawing(aad_engine::sample::default_sample(), "Sample", None);
+            // A drawing the user keeps for demos replaces the built-in sample; it is opened as a copy.
+            let local = local_sample_path().and_then(|path| {
+                let prepared = aad_engine::cmd::file::read_drawing_file(&path).ok()?;
+                aad_engine::cmd::file::finish_open_copy(&mut session, prepared, &path).ok()
+            });
+            if local.is_none() {
+                session.open_drawing(aad_engine::sample::default_sample(), "Sample", None);
+            }
         } else {
             session.new_drawing(false);
         }

@@ -108,3 +108,7 @@ crash or hang is an error message, and the open drawings survive. The first thin
 `aad` and `aad-cli` is call `run_worker_if_requested()` and `enable()`. Anything else that
 links `aad-dwg` reads in-process unless it does the same. The worker has a 180 s limit and its
 memory is not capped. See BUG-001 in [BUG_BACKLOG.md](BUG_BACKLOG.md).
+
+## Local demo drawing
+
+`--sample` opens the built-in sample. If a file named by `AAD_SAMPLE_FILE`, or `sample/DEMO.dwg` / `sample/DEMO.dxf` beside the program (for the WinUI shell: `target/aad-winui/sample/`), exists, it is opened instead, as an unsaved copy: saving asks for a name and never overwrites it. The file is not in the repository (drawings made with other software are not committed). Checked by opening a copy of the OSAS demo DWG in the shell; there is no automated test for it.

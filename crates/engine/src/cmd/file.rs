@@ -146,6 +146,12 @@ pub(crate) fn import_drawing(s: &mut Session, d: Drawing, name: &str, path: Opti
     finish_import(s, prepare(d), name, path)
 }
 
+/// Make a drawing read by [`read_drawing_file`] the active document without tying it to the file, so
+/// saving asks for a name and never overwrites the file it came from.
+pub fn finish_open_copy(s: &mut Session, p: Prepared, name: &str) -> Result<usize> {
+    finish_import(s, p, name, None)
+}
+
 fn finish_import(s: &mut Session, p: Prepared, name: &str, path: Option<String>) -> Result<usize> {
     let Prepared { drawing, original, report, units_unset, levels_note } = p;
     if let Some(note) = levels_note {
