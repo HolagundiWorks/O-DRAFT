@@ -674,3 +674,18 @@ fn probe_twenty_levels_of_25000_objects() {
     );
     assert_eq!(back.entity_count(), 500_000);
 }
+
+#[test]
+fn activating_a_level_moves_the_floor_selector_to_the_same_floor() {
+    let mut s = Session::new();
+    s.execute("level.setup", &json!({"floors": ["Ground", "First", "Roof"], "sheetSets": false})).unwrap();
+    let floor = |s: &mut Session| aad_engine::cmd::context::resolve(s, "floor").unwrap()["current"].clone();
+    s.execute("level.activate", &json!({"level": "First"})).unwrap();
+    assert_eq!(floor(&mut s), json!("First"));
+    s.execute("level.next", &json!({})).unwrap();
+    assert_eq!(floor(&mut s), json!("Roof"));
+    // A level that is not a listed floor leaves the selector where it was.
+    s.execute("level.new", &json!({"name": "Plant room"})).unwrap();
+    s.execute("level.activate", &json!({"level": "Plant room"})).unwrap();
+    assert_eq!(floor(&mut s), json!("Roof"));
+}

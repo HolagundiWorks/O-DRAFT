@@ -1,9 +1,10 @@
 # Levels and sheet sets
 
-**Status: the engine side of all five phases is done; the shell UI (level tabs, Trace flyout, sheet-set
-rail, annotation tool strip, a viewport Level / Sheet set / Traces editor, a Show-for dropdown in the
-Layer manager, menu items for the new commands) is not built, nor are the take-off level ids and the
-egui tabs.** Only what the "Phase N status" sections list is implemented and tested.
+**Status: the engine side of all five phases is done. The WinUI shell has level tabs and a sheet-set
+rail (see "WinUI shell status"); the Trace settings flyout, annotation tool strip, a viewport Level /
+Sheet set / Traces editor, a Show-for dropdown in the Layer manager, the new-drawing option, the
+take-off level ids and the egui tabs are not built.** Only what the "Phase N status" sections list is
+implemented and tested.
 
 Summary: keep one drawing file, but split its single model space into named **levels** (each its own
 entity store at a shared origin) and add **sheet sets** (discipline annotation spaces that reference
@@ -221,9 +222,9 @@ Implemented and tested:
 
 Not built yet (so the Phase 2 done-when is only partly met):
 
-- **WinUI level tabs and the Trace flyout.** The shell does not draw a layout-tab strip today
-  (`layouts` is parsed into `ChromeState` and never shown), so a level strip must be built, not
-  extended. The data and every command it needs exist.
+- **The Trace settings flyout** (fade, colour, order, snap, layers). The level tabs exist (see
+  "WinUI shell status") and their menu only switches a trace on or off with the default settings;
+  the settings are reachable through `level.trace`.
 - The egui canvas does not draw traces.
 - No per-store display-list or mesh cache: every rebuild re-tessellates every trace, and switching
   level tabs rebuilds everything. The plan's budget that a tab switch rebuilds no unchanged mesh
@@ -269,8 +270,8 @@ Implemented and tested (`crates/engine/tests/sheetsets.rs`, `level_trace_snap.rs
 
 Not built yet:
 
-- **The WinUI left rail, the annotation tool strip and hiding the Architecture bar in a sheet
-  view.** The data and every command they need exist.
+- **The annotation tool strip and hiding the Architecture bar in a sheet view.** The sheet-set rail
+  exists (see "WinUI shell status"); the data and every command the strip needs exist.
 - A new drawing does not create the five presets on its own (decision 3 asks for it in the UI).
 - A sheet set's `space`, `dimStyle` and `textStyle` are stored, saved and shown, but not applied on
   entering the set (no layer visibility from a drawing space, no current styles yet).
@@ -355,11 +356,47 @@ Not built, and why:
   32) | n`, [takeoff-shilpidb.md](takeoff-shilpidb.md)) is a contract with O-CoreOp; giving each level
   its own slot or header changes what that program reads, so it needs agreement there first.
   Take-off acts on the store being edited, so a recording covers one level at a time.
-- The shell: the Layer manager dropdown, the menu items, the new-drawing dialog's "Levels in this
-  drawing" option, level tabs and the rest of the Phase 2 to 4 controls.
+- The shell: the Layer manager dropdown, the new-drawing dialog's "Levels in this drawing" option
+  and the viewport editor. The level tabs and the sheet-set rail are built (see "WinUI shell status").
 - egui tabs (the egui shell is the optional one).
 - `project.merge` merges into a new or ordinary drawing; there is no reverse (levels back out into a
   floor project), only `level.export` per level and `exchange.export`.
+
+## WinUI shell status: level tabs and sheet-set rail
+
+Built (`apps/aad-winui/LevelBars.cs`, `MainWindow.xaml`; the chrome JSON from `aad-host` already
+carried `levels`, `sheetSets` and `designMode`):
+
+- **Level tabs** in a bar under the drawing (a row of its own, because the canvas is a native child
+  window that XAML cannot overlay). One tab per level, the active one selected, a half-filled circle
+  on a level traced under the active one, the elevation in the tooltip. A click runs
+  `level.activate`. The bar is always present; with one implicit level it shows only the add button.
+- **Tab menu** (right-click, opens upward): *Rename, elevation and height...* (the engine form
+  `level.set`, prefilled with the level), *Trace over the current level* (a tick that runs
+  `level.trace` add or remove with the default settings), *Delete level...* (the engine form
+  `level.delete`, with a "delete although objects or traces are on it" option). The add button
+  opens the engine form `level.new`. These three forms live in `crates/engine/src/forms.rs` and
+  are also what a typed `level.new`, `level.set` or `level.delete` starts.
+- **Sheet-set rail** left of the tool strip: Design, then one entry per sheet set, the active one
+  selected; a click runs `sheetset.activate`. The rail is hidden while the drawing has no sheet
+  sets (create them with `level.setup` or `sheetset.new`, from the Architecture menu or the
+  command line). In a sheet view the bar says which set is being annotated.
+- **The Floor selector follows the level**: `level.activate` (and so the tabs, Ctrl+PageUp and
+  Ctrl+PageDown, `level.next` and `level.prev`) sets the project's active floor when the level has
+  the name of a listed floor.
+- Also fixed on the way: the canvas panicked at start-up on a real GPU ("cad_lines" pipeline) because
+  the view uniform was bound to the vertex stage only while the ring shader reads it in the
+  fragment stage; both GPU files now bind it to both stages.
+
+Verified: the engine forms and the floor follow are covered by tests (`forms.rs`, `levels.rs`);
+the shell itself was built and driven by hand in the running app (tab and rail clicks, the tab
+menu, the Level Settings form opened and cancelled, a screenshot of each). There is no automated
+UI test for the tabs or the rail. Not tried by hand: submitting the forms with OK, the add button,
+Delete level, the Trace tick, and a drawing with many levels (the tab strip scrolls).
+
+Known limits: the floating Ask pill covers the middle of the bar, so with many levels the later
+tabs are expected to sit under it until the strip is scrolled (not tried with more than four); tabs cannot be reordered by
+dragging (`level.set order` exists); the rail cannot create or rename sheet sets.
 
 ## Risks
 

@@ -126,3 +126,22 @@ fn project_and_floors_forms_round_trip_through_their_commands() {
     let rows = forms::prefill(&s, forms::get("takeoff.rates").unwrap());
     assert_eq!(rows["rates"][0]["takeoff"], "Bricks");
 }
+
+#[test]
+fn level_forms_round_trip_through_their_commands() {
+    let mut s = session();
+    let names = |s: &mut Session| -> Vec<String> {
+        s.execute("level.list", &json!({})).unwrap()["levels"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap().to_string()).collect()
+    };
+    let new = forms::get("level.new").unwrap();
+    s.execute("level.new", &forms::parse_input(new, &json!({"name": "Roof", "elevation": "6000", "height": ""})).unwrap()).unwrap();
+    assert_eq!(names(&mut s).len(), 2, "the implicit level and Roof");
+    let set = forms::get("level.set").unwrap();
+    s.execute("level.set", &forms::parse_input(set, &json!({"level": "Roof", "name": "Terrace", "elevation": "6200"})).unwrap()).unwrap();
+    let list = s.execute("level.list", &json!({})).unwrap();
+    let terrace = list["levels"].as_array().unwrap().iter().find(|l| l["name"] == "Terrace").unwrap().clone();
+    assert_eq!(terrace["elevation"], 6200.0);
+    let del = forms::get("level.delete").unwrap();
+    s.execute("level.delete", &forms::parse_input(del, &json!({"level": "Terrace", "force": true})).unwrap()).unwrap();
+    assert_eq!(names(&mut s).len(), 1);
+}

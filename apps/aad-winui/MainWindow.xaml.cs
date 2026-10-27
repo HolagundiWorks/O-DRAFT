@@ -2983,6 +2983,7 @@ public sealed partial class MainWindow : Window
             _literalSpace = state.LiteralSpace;
             SyncDraftingUnits(state.Units);
             ShowDrawingTabs(state);
+            ShowLevelBars(state);
             _draftingWindow?.Reload(state.Polar, state.Osnap, state.Dynmode, state.Ortho, state.Osmode, state.Polarang, state.DynpiCartesian, state.DynpiAbsolute);
             UpdateQuick();
             PlaceCommandBar();
@@ -6549,6 +6550,9 @@ public sealed partial class MainWindow : Window
         public int ControlPort { get; set; }
         public bool Quit { get; set; }
         public List<DocTab> Documents { get; set; } = new();
+        public List<LevelTab> Levels { get; set; } = new();
+        public List<SheetSetTab> SheetSets { get; set; } = new();
+        public bool DesignMode { get; set; } = true;
     }
 
     private sealed class DocTab

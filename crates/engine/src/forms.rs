@@ -162,6 +162,33 @@ pub static FORMS: &[Form] = &[
     },
     Form { id: "floors", title: "Floors", wrap: None, fields: &[field("floors", "Floor names", Kind::Table(FLOOR_COLS)).req()] },
     Form {
+        id: "level.new",
+        title: "New Level",
+        wrap: None,
+        fields: &[
+            field("name", "Level name", Kind::Text).req(),
+            field("elevation", "Elevation (drawing units)", Kind::Number),
+            field("height", "Floor to floor height (drawing units)", Kind::Number),
+        ],
+    },
+    Form {
+        id: "level.set",
+        title: "Level Settings",
+        wrap: None,
+        fields: &[
+            field("level", "Level (name)", Kind::Text).req(),
+            field("name", "New name (blank: keep)", Kind::Text),
+            field("elevation", "Elevation (drawing units; blank: keep)", Kind::Number),
+            field("height", "Floor to floor height (drawing units; blank: keep)", Kind::Number),
+        ],
+    },
+    Form {
+        id: "level.delete",
+        title: "Delete Level",
+        wrap: None,
+        fields: &[field("level", "Level (name)", Kind::Text).req(), field("force", "Delete although objects or traces are on it", Kind::Bool)],
+    },
+    Form {
         id: "beams",
         title: "Beam Depth List",
         wrap: None,
@@ -891,6 +918,20 @@ mod tests {
         assert!(parse_input(g, &json!({"size": "1,inf"})).is_err());
         let p = get("project").unwrap();
         assert_eq!(parse_input(p, &json!({"title": " House ", "owner": ""})).unwrap(), json!({"title": "House"}), "project settings are flat");
+    }
+
+    #[test]
+    fn level_forms_type_their_values() {
+        let f = get("level.set").unwrap();
+        let p = parse_input(f, &json!({"level": " Ground ", "name": "", "elevation": "3000", "height": ""})).unwrap();
+        assert_eq!(p, json!({"level": "Ground", "elevation": 3000.0}));
+        assert!(parse_input(f, &json!({"name": "X"})).is_err(), "the level is required");
+        assert!(parse_input(f, &json!({"level": "G", "elevation": "high"})).is_err());
+        let n = get("level.new").unwrap();
+        assert_eq!(parse_input(n, &json!({"name": "Roof"})).unwrap(), json!({"name": "Roof"}));
+        assert!(parse_input(n, &json!({"name": ""})).is_err());
+        let d = get("level.delete").unwrap();
+        assert_eq!(parse_input(d, &json!({"level": "Roof", "force": true})).unwrap(), json!({"level": "Roof", "force": true}));
     }
 
     #[test]

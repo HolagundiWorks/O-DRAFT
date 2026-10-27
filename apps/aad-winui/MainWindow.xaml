@@ -10,6 +10,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock x:Name="PromptLive" Width="0" Height="0" Opacity="0" IsHitTestVisible="False" AutomationProperties.Name="Command prompt" />
         <MenuBar
@@ -153,19 +154,26 @@
         <Grid Grid.Row="2">
             <!-- Tools | canvas | splitter | properties (right). -->
             <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="RailColumn" Width="Auto" />
                 <ColumnDefinition x:Name="ToolColumn" Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="120" />
                 <ColumnDefinition x:Name="LeftSplitterColumn" Width="Auto" />
                 <ColumnDefinition x:Name="PropertiesColumn" Width="240" MinWidth="0" />
             </Grid.ColumnDefinitions>
-            <Border x:Name="ToolStripHost" Style="{StaticResource ToolStripChromeStyle}" AutomationProperties.Name="Tool strip">
+            <!-- Sheet sets: Design, then one entry per discipline. Shown only when the drawing has sheet sets. -->
+            <Border x:Name="SheetRailHost" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,0,1,0" AutomationProperties.Name="Sheet sets">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="SheetRail" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="{StaticResource PaddingSm}" />
+                </ScrollViewer>
+            </Border>
+            <Border x:Name="ToolStripHost" Grid.Column="1" Style="{StaticResource ToolStripChromeStyle}" AutomationProperties.Name="Tool strip">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel x:Name="ToolStrip" Orientation="Vertical" Spacing="{StaticResource SpaceSm}" Margin="{StaticResource PaddingSm}" />
                 </ScrollViewer>
             </Border>
-            <Border x:Name="CanvasHost" Grid.Column="1" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
-            <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="2" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
-            <Border x:Name="SideHost" Grid.Column="3" Style="{StaticResource SidePanelChromeStyle}" BorderThickness="1,0,0,0" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited">
+            <Border x:Name="CanvasHost" Grid.Column="2" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
+            <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="3" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
+            <Border x:Name="SideHost" Grid.Column="4" Style="{StaticResource SidePanelChromeStyle}" BorderThickness="1,0,0,0" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited">
             <Grid>
             <Grid x:Name="LeftColumn" Tag="right" AutomationProperties.Name="Side panel">
                 <Grid.RowDefinitions>
@@ -359,7 +367,19 @@
                 <FontIcon x:Name="HistoryGlyph" Visibility="Collapsed" Glyph="&#xE70D;" />
             </StackPanel>
         </Border>
-        <Border Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}">
+        <!-- Level tabs under the drawing; the bar is a row of its own because the canvas is a native child window. -->
+        <Border x:Name="LevelBarHost" Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}" AutomationProperties.Name="Levels">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                    <StackPanel x:Name="LevelTabs" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" AutomationProperties.Name="Level tabs" />
+                    <Button x:Name="AddLevelButton" Click="OnAddLevel" AutomationProperties.Name="Add level" ToolTipService.ToolTip="Add a level" Style="{StaticResource IconButtonStyle}">
+                        <local:DrawnIcon Kind="plus" />
+                    </Button>
+                    <TextBlock x:Name="LevelHint" VerticalAlignment="Center" Margin="6,0,0,0" FontSize="{StaticResource FontSizeCaption}" Opacity="0.7" AutomationProperties.Name="Level mode" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+        <Border Grid.Row="4" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}">
         <Grid x:Name="StatusRow" Style="{StaticResource StatusBarStyle}" ColumnSpacing="{StaticResource SpaceSm}" AutomationProperties.Name="Status">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -468,7 +488,7 @@
         </Grid>
         </Border>
         <!-- In-window splash (avoids a second top-level window fighting the command chrome). -->
-        <Grid x:Name="SplashOverlay" Grid.RowSpan="4" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
+        <Grid x:Name="SplashOverlay" Grid.RowSpan="5" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">
                 <Image x:Name="SplashLogo" Width="96" Height="96" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
                 <TextBlock Text="O-Draft" FontSize="{StaticResource FontSizeSplashTitle}" FontWeight="SemiBold" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />

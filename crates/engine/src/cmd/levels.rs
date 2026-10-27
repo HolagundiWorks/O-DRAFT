@@ -229,6 +229,14 @@ fn run_activate(s: &mut Session, p: &Value) -> Result<Value> {
     if s.doc()?.active_level != Some(id) {
         s.doc_mut()?.switch_level(id)?;
         s.set_selection(Vec::new());
+        // The floor selector follows the level when the level is one of the project's floors.
+        let name = s.doc()?.level(id).map(|l| l.name.clone());
+        if let Some(name) = name {
+            let d = s.doc_mut()?;
+            if crate::cmd::project_floors(d).iter().any(|f| f["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(&name))) {
+                project::set(d, "activeFloor", &json!(name));
+            }
+        }
     }
     let d = s.doc()?;
     Ok(json!({ "active": d.active_level_ref().map(|l| l.name.clone()), "objects": d.model.len() }))
