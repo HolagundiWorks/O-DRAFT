@@ -101,9 +101,10 @@ cycle and hostile params change nothing; graph survives DXF round-trip and evalu
 ## O-Dynamo companion (separate process)
 
 A Windows named-pipe companion evaluates a small 2D drafting graph (doors, windows, columns,
-stairs, grid, `levelSelect` / `projectField`, `blockInsert`, `titleField`). Engine commands:
-`companion.connect`, `disconnect`, `status`, `evaluate`, `subscribe`, `unsubscribe`, `preview`,
-`commit` (geometry on levels, block inserts, title-block fields). Protocol and status:
+stairs, grid, `levelSelect` / `projectField`, `blockInsert`, `titleField`, `textNote`,
+`dimLinear`). Engine commands: `companion.connect`, `disconnect`, `status`, `evaluate`,
+`subscribe`, `unsubscribe`, `preview`, `commit` (geometry on levels, inserts, title fields,
+sheet-set annotation). Protocol and status:
 [architecture/DYNAMO_INTEGRATION.md](architecture/DYNAMO_INTEGRATION.md). Roadmap:
 [dynamo-enhancement-plan.md](dynamo-enhancement-plan.md). This does not replace `param.*` wall
 take-off.
@@ -116,6 +117,6 @@ take-off.
 - An O-CoreOp `measure(component, rule, revision)` API (the published contract is measured-fact rows
   through the bridge / `takeoff.record`; derived finishes must not be sent from O-Draft).
 - Columns, beams, slabs and other component types beyond `osas.wall` in `aad-param` (companion
-  has draft geometry and block-insert nodes; sheet-set annotation is Phase 5).
+  has draft geometry, block-insert and sheet-set annotation nodes).
 - Agent tools for `param.*` (engine commands exist; the agent registry does not expose them yet).
 - Companion canvas ghost overlay.

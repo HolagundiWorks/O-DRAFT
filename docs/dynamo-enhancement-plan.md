@@ -1,8 +1,8 @@
 # Dynamo companion enhancement plan
 
-**Status: in progress.** Phases 1–4 are implemented and verified (O-Dynamo `dotnet test`: 14
-passed; O-Draft `cargo test -p aad-engine --test companion`: 10 passed). Phase 2 canvas ghost
-overlay is deferred. Phases 5–6 remain planned. Capability matrix: [status.md](status.md).
+**Status: in progress.** Phases 1–5 are implemented and verified (O-Dynamo `dotnet test`: 15
+passed; O-Draft `cargo test -p aad-engine --test companion`: 11 passed). Phase 2 canvas ghost
+overlay is deferred. Phase 6 remains planned. Capability matrix: [status.md](status.md).
 
 ## Goal
 
@@ -21,7 +21,7 @@ versionable.
 |---|---|
 | `ODraft.Geometry` | `Vec2`, `Line2`, `Circle2`, `Box2`, `Draft2D` (Rectangle, WallOutline, OffsetOpen, PolygonArea, Bounds) |
 | `ODraft.Units` | `Lengths` (mm ↔ m/cm/in/ft) |
-| `ODraft.Graph` | `GraphEngine.Evaluate` with drafting + context + `blockInsert`/`titleField` nodes, `GraphContext`, topological sort, diagnostics, `lines`/`circles`/`arcs`/`inserts`/`titleFields` |
+| `ODraft.Graph` | `GraphEngine.Evaluate` with drafting + context + insert/title/annotation nodes, `GraphContext`, topological sort, diagnostics, geometry + `inserts`/`titleFields`/`texts`/`dimensions` |
 | `ODynamo.Host` | WPF window (JSON editor + Run), pipe v2 (`evaluate`, `ping`, `context.*`, `subscribe`), named pipe `ODraft.Dynamo` |
 
 ### O-Draft engine commands that generate the same geometry
@@ -198,7 +198,11 @@ both appear in the drawing after commit.
 
 ---
 
-### Phase 5 — Sheet-set annotation output (both repos)
+### Phase 5 — Sheet-set annotation output (both repos) — **done**
+
+**Verified:** `textNote` / `dimLinear` on Electrical for Ground land in the annotation store;
+design store stays empty; design mode restored after commit (`cargo test --test companion`: 11
+passed; `dotnet test`: 15 passed).
 
 **Goal:** Text, dimensions and leaders from the graph go into a sheet-set annotation store, not
 the design geometry.

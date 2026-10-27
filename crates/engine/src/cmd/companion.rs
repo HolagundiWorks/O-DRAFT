@@ -16,11 +16,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use aad_geom::{Arc as GeomArc, Vec2};
+use aad_doc::{DimKind, Dimension, EditTarget, EntityKind, HAlign, VAlign};
+use aad_geom::{Arc as GeomArc, Vec2, Vec3};
 use serde_json::{Value, json};
 
+use super::draw::make_text;
 use super::hcw::{add_on, ensure_layer};
-use super::helpers::{arc, circle, line};
+use super::helpers::{arc, circle, line, v3};
 use super::project;
 use super::*;
 use crate::{Result, Session};
@@ -100,7 +102,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .noundo(),
         CommandSpec::new("companion.commit", "Commit Companion Graph", run_commit)
             .menu(&["Architecture", "Companion", "Commit"])
-            .params("{result?: evaluate result (else last preview)} → {committed, levels, lines, circles, arcs, inserts, titleFields, warnings} (one undo step; creates missing levels; unknown blocks are skipped)"),
+            .params("{result?: evaluate result (else last preview)} → {committed, levels, lines, circles, arcs, inserts, titleFields, texts, dimensions, warnings} (one undo step; creates missing levels; unknown blocks/sheet sets are skipped)"),
     ]
 }
 
@@ -248,14 +250,15 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
     if !result.is_object() {
         return Err(bad(
             "companion.commit",
-            "`result` must be an object with lines, circles, arcs, inserts and/or titleFields",
+            "`result` must be an object with lines, circles, arcs, inserts, titleFields, texts and/or dimensions",
         ));
     }
 
     let active_name = s.doc()?.active_level_ref().map(|l| l.name.clone());
     let groups = group_by_level(&result, active_name.as_deref())?;
     let title_fields = parse_title_fields(&result)?;
-    if groups.is_empty() && title_fields.is_empty() {
+    let annotations = group_annotations(&result, active_name.as_deref())?;
+    if groups.is_empty() && title_fields.is_empty() && annotations.is_empty() {
         return Ok(json!({
             "committed": false,
             "levels": [],
@@ -264,15 +267,20 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
             "arcs": 0,
             "inserts": 0,
             "titleFields": 0,
+            "texts": 0,
+            "dimensions": 0,
             "warnings": [],
         }));
     }
 
-    let restore = s.doc()?.active_level;
+    let restore_level = s.doc()?.active_level;
+    let restore_sheet = s.doc()?.active_sheet;
     let mut total_lines = 0usize;
     let mut total_circles = 0usize;
     let mut total_arcs = 0usize;
     let mut total_inserts = 0usize;
+    let mut total_texts = 0usize;
+    let mut total_dims = 0usize;
     let mut level_names = Vec::new();
     let mut warnings = Vec::new();
 
@@ -339,13 +347,60 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
 
-    if let Some(id) = restore {
-        if s.doc()?.active_level != Some(id) {
-            let _ = s.doc_mut()?.switch_level(id);
+    for ((set_name, level_name), items) in annotations {
+        ensure_named_level(s, &level_name)?;
+        let Some(set) = s.doc()?.sheet_set_by_name(&set_name).map(|x| x.id) else {
+            warnings.push(format!("sheet set `{set_name}` is not in the drawing; annotation skipped"));
+            continue;
+        };
+        let level = s
+            .doc()?
+            .level_by_name(&level_name)
+            .map(|l| l.id)
+            .ok_or_else(|| bad("companion.commit", format!("level `{level_name}` could not be created")))?;
+        if s.doc()?.target() != Some(EditTarget::Sheet(set, level)) {
+            s.doc_mut()?
+                .switch_target(EditTarget::Sheet(set, level))
+                .map_err(|e| bad("companion.commit", e.to_string()))?;
+            s.set_selection(Vec::new());
+        }
+        if !level_names.iter().any(|n| n == &level_name) {
+            level_names.push(level_name.clone());
+        }
+        let prefix = s.doc()?.sheet_set(set).map(|x| x.layer_prefix.clone()).unwrap_or_default();
+        for item in items {
+            match item {
+                AnnoItem::Text { text, at, height, rotation_deg, layer } => {
+                    let layer = anno_layer(&layer, &prefix, "TEXT");
+                    ensure_layer(s.doc_mut()?, &layer, 7, "Continuous", 25, "Companion annotation");
+                    let rot = rotation_deg.to_radians();
+                    if !rot.is_finite() || !(height > 0.0) {
+                        warnings.push("text note has invalid height or rotation; skipped".into());
+                        continue;
+                    }
+                    let kind = make_text(s, at, &text, height, rot, (HAlign::Left, VAlign::Baseline));
+                    add_on(s, &layer, kind)?;
+                    total_texts += 1;
+                }
+                AnnoItem::Dim { a, b, offset, layer } => {
+                    let layer = anno_layer(&layer, &prefix, "DIM");
+                    ensure_layer(s.doc_mut()?, &layer, 7, "Continuous", 25, "Companion annotation");
+                    let Some(at) = dim_at(a, b, offset) else {
+                        warnings.push("dimension endpoints are coincident; skipped".into());
+                        continue;
+                    };
+                    let kind = linear_dim_entity(s, a, b, at);
+                    add_on(s, &layer, kind)?;
+                    total_dims += 1;
+                }
+            }
         }
     }
 
-    let committed = total_lines + total_circles + total_arcs + total_inserts + title_written > 0;
+    restore_edit_target(s, restore_level, restore_sheet);
+
+    let committed =
+        total_lines + total_circles + total_arcs + total_inserts + title_written + total_texts + total_dims > 0;
     Ok(json!({
         "committed": committed,
         "levels": level_names,
@@ -354,6 +409,8 @@ fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
         "arcs": total_arcs,
         "inserts": total_inserts,
         "titleFields": title_written,
+        "texts": total_texts,
+        "dimensions": total_dims,
         "warnings": warnings,
     }))
 }
@@ -368,6 +425,180 @@ enum CommitItem {
         rotation_deg: f64,
         attribs: serde_json::Map<String, Value>,
     },
+}
+
+enum AnnoItem {
+    Text {
+        text: String,
+        at: Vec2,
+        height: f64,
+        rotation_deg: f64,
+        layer: String,
+    },
+    Dim {
+        a: Vec2,
+        b: Vec2,
+        offset: f64,
+        layer: String,
+    },
+}
+
+fn anno_layer(requested: &str, prefix: &str, kind: &str) -> String {
+    let trimmed = requested.trim();
+    if !trimmed.is_empty() && trimmed.len() <= 255 {
+        return trimmed.to_string();
+    }
+    if prefix.is_empty() {
+        format!("A-{kind}")
+    } else {
+        format!("{prefix}{kind}")
+    }
+}
+
+fn dim_at(a: Vec2, b: Vec2, offset: f64) -> Option<Vec2> {
+    let d = b - a;
+    let len = d.len();
+    if !(len > 1e-12) || !offset.is_finite() {
+        return None;
+    }
+    let perp = Vec2::new(-d.y / len, d.x / len) * offset;
+    Some((a + b) * 0.5 + perp)
+}
+
+fn linear_dim_entity(s: &Session, a: Vec2, b: Vec2, at: Vec2) -> EntityKind {
+    let rotation = {
+        let (x0, x1) = (a.x.min(b.x), a.x.max(b.x));
+        let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
+        let outside_y = at.y < y0 || at.y > y1;
+        let outside_x = at.x < x0 || at.x > x1;
+        if outside_x && !outside_y {
+            std::f64::consts::FRAC_PI_2
+        } else {
+            0.0
+        }
+    };
+    let style = s.doc().map(|d| d.header.str("DIMSTYLE", "Standard")).unwrap_or_else(|_| "Standard".into());
+    let overrides = s.doc().map(|d| d.dim_overrides()).unwrap_or_default();
+    EntityKind::Dimension(Dimension {
+        kind: DimKind::Linear { rotation },
+        defpt: v3(at),
+        text_mid: Vec3::ZERO,
+        p13: v3(a),
+        p14: v3(b),
+        p15: Vec3::ZERO,
+        p16: Vec3::ZERO,
+        text: String::new(),
+        style,
+        measurement: 0.0,
+        text_rotation: 0.0,
+        user_text_pos: false,
+        block: None,
+        overrides,
+        assoc: Vec::new(),
+    })
+}
+
+fn restore_edit_target(s: &mut Session, level: Option<aad_doc::LevelId>, sheet: Option<aad_doc::SheetSetId>) {
+    let Some(level) = level else {
+        return;
+    };
+    let target = match sheet {
+        Some(set) => EditTarget::Sheet(set, level),
+        None => EditTarget::Level(level),
+    };
+    if s.doc().ok().and_then(|d| d.target()) == Some(target) {
+        return;
+    }
+    let _ = s.doc_mut().map(|d| d.switch_target(target));
+}
+
+fn group_annotations(
+    result: &Value,
+    active: Option<&str>,
+) -> Result<BTreeMap<(String, String), Vec<AnnoItem>>> {
+    let mut out: BTreeMap<(String, String), Vec<AnnoItem>> = BTreeMap::new();
+    let mut count = 0usize;
+    let default_level = active.unwrap_or("Level 1").to_string();
+
+    let push = |out: &mut BTreeMap<(String, String), Vec<AnnoItem>>,
+                key: (String, String),
+                item: AnnoItem,
+                count: &mut usize|
+     -> Result<()> {
+        *count = count.saturating_add(1);
+        if *count > MAX_COMMIT_ITEMS {
+            return Err(bad("companion.commit", format!("at most {MAX_COMMIT_ITEMS} entities per commit")));
+        }
+        out.entry(key).or_default().push(item);
+        Ok(())
+    };
+
+    if let Some(arr) = result.get("texts").and_then(Value::as_array) {
+        for (i, v) in arr.iter().enumerate() {
+            let Some(set) = sheet_set_of(v)? else {
+                continue;
+            };
+            let level = level_of(v, &default_level)?;
+            let text = v
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && s.len() <= 1024)
+                .ok_or_else(|| bad("companion.commit", format!("text {i}: `text` is required")))?
+                .to_string();
+            let x = num_field(v, "x", i, "text")?;
+            let y = num_field(v, "y", i, "text")?;
+            let height = v.get("height").and_then(Value::as_f64).filter(|n| n.is_finite() && *n > 0.0).unwrap_or(250.0);
+            let rotation_deg = v.get("rotation").and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(0.0);
+            let layer = layer_of(v, "");
+            push(
+                &mut out,
+                (set, level),
+                AnnoItem::Text {
+                    text,
+                    at: Vec2::new(x, y),
+                    height,
+                    rotation_deg,
+                    layer,
+                },
+                &mut count,
+            )?;
+        }
+    }
+    if let Some(arr) = result.get("dimensions").and_then(Value::as_array) {
+        for (i, v) in arr.iter().enumerate() {
+            let Some(set) = sheet_set_of(v)? else {
+                continue;
+            };
+            let level = level_of(v, &default_level)?;
+            let x0 = num_field(v, "x0", i, "dimension")?;
+            let y0 = num_field(v, "y0", i, "dimension")?;
+            let x1 = num_field(v, "x1", i, "dimension")?;
+            let y1 = num_field(v, "y1", i, "dimension")?;
+            let offset = v.get("offset").and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(500.0);
+            let layer = layer_of(v, "");
+            push(
+                &mut out,
+                (set, level),
+                AnnoItem::Dim {
+                    a: Vec2::new(x0, y0),
+                    b: Vec2::new(x1, y1),
+                    offset,
+                    layer,
+                },
+                &mut count,
+            )?;
+        }
+    }
+    Ok(out)
+}
+
+fn sheet_set_of(v: &Value) -> Result<Option<String>> {
+    match v.get("sheetSet").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+        Some(name) if name.len() <= 64 && aad_doc::level_name_ok(name) => Ok(Some(name.to_string())),
+        Some(_) => Err(bad("companion.commit", "a sheet set name is 1 to 64 characters without control characters")),
+        None => Ok(None),
+    }
 }
 
 fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<String, Vec<CommitItem>>> {

@@ -157,6 +157,41 @@ fn commit_places_known_block_and_warns_on_missing() {
 }
 
 #[test]
+fn commit_puts_annotation_on_sheet_set_not_design() {
+    let mut s = metric();
+    s.execute("level.new", &json!({"name": "Ground"})).unwrap();
+    s.execute("sheetset.new", &json!({"name": "Electrical", "layerPrefix": "E-"})).unwrap();
+
+    let r = s
+        .execute(
+            "companion.commit",
+            &json!({
+                "result": {
+                    "lines": [],
+                    "circles": [],
+                    "arcs": [],
+                    "texts": [{"text": "DB-1", "x": 100.0, "y": 200.0, "height": 250.0, "level": "Ground", "sheetSet": "Electrical"}],
+                    "dimensions": [{"x0": 0.0, "y0": 0.0, "x1": 4000.0, "y1": 0.0, "offset": 500.0, "level": "Ground", "sheetSet": "Electrical"}]
+                }
+            }),
+        )
+        .unwrap();
+    assert_eq!(r["committed"], true);
+    assert_eq!(r["texts"], 1);
+    assert_eq!(r["dimensions"], 1);
+
+    let d = s.doc().unwrap();
+    assert!(d.active_sheet.is_none(), "commit restores design mode");
+    let set = d.sheet_set_by_name("Electrical").expect("Electrical");
+    let ground = d.level_by_name("Ground").expect("Ground");
+    let ann = d.annotation_store(set.id, ground.id).expect("annotation store");
+    assert_eq!(ann.len(), 2);
+    assert!(ann.iter().any(|e| matches!(&e.kind, EntityKind::Text(t) if t.value == "DB-1")));
+    assert!(ann.iter().any(|e| matches!(&e.kind, EntityKind::Dimension(_))));
+    assert_eq!(d.level_store(ground.id).map(|st| st.len()), Some(0), "design store stays empty");
+}
+
+#[test]
 fn commit_writes_title_fields_on_title_block() {
     let mut s = metric();
     s.execute("layout.set", &json!({"name": "Layout1"})).unwrap();
