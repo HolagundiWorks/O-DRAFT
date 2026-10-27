@@ -473,6 +473,23 @@ pub static FORMS: &[Form] = &[
             field("write", "Write the file beside the drawing", Kind::Bool).def("true"),
         ],
     },
+    Form {
+        id: "smartblock.insert",
+        title: "Insert Smart Block",
+        wrap: None,
+        fields: &[
+            field("id", "Smart block", Kind::Choice(crate::cmd::smartblock::IDS)).req(),
+            field("params", "Parameters (name=value, ...; blank: defaults; see smartblock.list)", Kind::Text),
+            field("rotation", "Rotation (degrees)", Kind::Number),
+            field("at", "Insertion point", Kind::Point).req(),
+        ],
+    },
+    Form {
+        id: "smartblock.edit",
+        title: "Edit Smart Block",
+        wrap: None,
+        fields: &[field("params", "New parameters for the selected smart blocks (name=value, ...)", Kind::Text).req()],
+    },
 ];
 
 pub fn get(id: &str) -> Option<&'static Form> {

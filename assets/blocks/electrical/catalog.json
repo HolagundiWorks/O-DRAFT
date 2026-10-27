@@ -1,0 +1,25 @@
+{
+  "id": "electrical",
+  "name": "Electrical and lighting symbols",
+  "units": "mm",
+  "licence": "CC0 1.0",
+  "attribution": "Innerscene Drawing Library (original models, public domain / CC0). Geometry is 1:1 millimetres; verify against the product, the design and local codes before construction.",
+  "source": "https://www.innerscene.com/tools/library/drawings",
+  "items": [
+    {"id": "double-pole-switch-cad-block", "title": "Double pole switch", "file": "ELEC-DoublePoleSwitch.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/double-pole-switch-cad-block-8a06bfb7"},
+    {"id": "electric-meter-cad-block", "title": "Electric meter", "file": "ELEC-ElectricMeter.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/electric-meter-cad-block-6ba2fec9"},
+    {"id": "electrical-devices-a3-sheet-cad-collection", "title": "Electrical devices A3 sheet", "file": "ELEC-ElectricalDevicesA3Sheet.dxf", "category": "sheet", "source": "https://www.innerscene.com/tools/library/drawings/electrical-devices-a3-sheet-cad-collection-0f8d0e08"},
+    {"id": "exterior-floodlight-cad-block", "title": "Exterior floodlight", "file": "ELEC-ExteriorFloodlight.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/exterior-floodlight-cad-block-ef5fbc84"},
+    {"id": "exterior-pole-light-cad-block", "title": "Exterior pole light", "file": "ELEC-ExteriorPoleLight.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/exterior-pole-light-cad-block-a5208d9b"},
+    {"id": "intermediate-switch-cad-block", "title": "Intermediate switch", "file": "ELEC-IntermediateSwitch.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/intermediate-switch-cad-block-bad8d139"},
+    {"id": "lighting-control-panel-cad-block", "title": "Lighting control panel", "file": "ELEC-LightingControlPanel.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/lighting-control-panel-cad-block-d59c82dc"},
+    {"id": "lighting-plan-legend-a3-sheet-cad-collection", "title": "Lighting plan legend A3 sheet", "file": "ELEC-LightingLegendA3Sheet.dxf", "category": "sheet", "source": "https://www.innerscene.com/tools/library/drawings/lighting-plan-legend-a3-sheet-cad-collection-708fca44"},
+    {"id": "push-button-switch-cad-block", "title": "Push button switch", "file": "ELEC-PushButtonSwitch.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/push-button-switch-cad-block-4f8be007"},
+    {"id": "recessed-round-downlight-cad-block", "title": "Recessed round downlight", "file": "ELEC-RecessedRoundDownlight.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/recessed-round-downlight-cad-block-a17469b5"},
+    {"id": "recessed-square-downlight-cad-block", "title": "Recessed square downlight", "file": "ELEC-RecessedSquareDownlight.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/recessed-square-downlight-cad-block-c158b82e"},
+    {"id": "single-pole-switch-cad-block", "title": "Single pole switch", "file": "ELEC-SinglePoleSwitch.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/single-pole-switch-cad-block-a6b4e3e3"},
+    {"id": "switched-receptacle-cad-block", "title": "Switched receptacle", "file": "ELEC-SwitchedReceptacle.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/switched-receptacle-cad-block-ceabd2a6"},
+    {"id": "track-spotlight-cad-block", "title": "Track spotlight", "file": "ELEC-TrackSpotlight.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/track-spotlight-cad-block-681c84e1"},
+    {"id": "two-way-switch-cad-block", "title": "Two way switch", "file": "ELEC-TwoWaySwitch.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/two-way-switch-cad-block-18fec663"}
+  ]
+}

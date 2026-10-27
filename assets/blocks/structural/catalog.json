@@ -1,0 +1,27 @@
+{
+  "id": "structural",
+  "name": "Structural and RCC details",
+  "units": "mm",
+  "licence": "CC0 1.0",
+  "attribution": "Innerscene Drawing Library (original models, public domain / CC0). Geometry is 1:1 millimetres; verify against the product, the design and local codes before construction.",
+  "source": "https://www.innerscene.com/tools/library/drawings",
+  "items": [
+    {"id": "beam-and-column-formwork-details", "title": "Beam and column formwork details", "file": "STRC-BeamAndColumnFormworkDetails.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/beam-and-column-formwork-details-e2eaf8a0"},
+    {"id": "beam-to-column-bolted-end-plate-detail", "title": "Beam to column bolted end plate detail", "file": "STRC-BeamToColumnBoltedEndPlateDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/beam-to-column-bolted-end-plate-detail-f83cd6a3"},
+    {"id": "column-base-plate-with-anchor-bolts-detail", "title": "Column base plate with anchor bolts detail", "file": "STRC-ColumnBasePlateWithAnchorBoltsDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/column-base-plate-with-anchor-bolts-detail-d93f07ca"},
+    {"id": "concrete-block-wall-foundation-to-roof-section", "title": "Concrete block wall: foundation-to-roof section", "file": "STRC-ConcreteBlockWallFoundationToRoofSection.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/concrete-block-wall-foundation-to-roof-section-911618be"},
+    {"id": "dog-leg-reinforced-concrete-stair-structural-detail", "title": "Dog-leg reinforced concrete stair structural detail", "file": "STRC-DogLegReinforcedConcreteStairStructuralDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/dog-leg-reinforced-concrete-stair-structural-detail-9c71f6c3"},
+    {"id": "pad-footing-construction-detail", "title": "Pad footing construction detail", "file": "STRC-PadFootingConstructionDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/pad-footing-construction-detail-66313ec0"},
+    {"id": "pile-cap-construction-detail", "title": "Pile cap construction detail", "file": "STRC-PileCapConstructionDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/pile-cap-construction-detail-6e3a6507"},
+    {"id": "raft-slab-edge-construction-detail", "title": "Raft slab edge construction detail", "file": "STRC-RaftSlabEdgeConstructionDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/raft-slab-edge-construction-detail-496195fb"},
+    {"id": "retaining-wall-footing-detail", "title": "Retaining wall footing detail", "file": "STRC-RetainingWallFootingDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/retaining-wall-footing-detail-5d918f96"},
+    {"id": "slab-on-grade-with-thickening-detail", "title": "Slab on grade with thickening detail", "file": "STRC-SlabOnGradeWithThickeningDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/slab-on-grade-with-thickening-detail-b4d14775"},
+    {"id": "stair-landing-reinforcement-detail", "title": "Stair landing reinforcement detail", "file": "STRC-StairLandingReinforcementDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/stair-landing-reinforcement-detail-9a2ea5fe"},
+    {"id": "stair-section-170-mm-riser-and-280-mm-going", "title": "Stair section - 170 mm riser and 280 mm going", "file": "STRC-StairSection170MmRiserAnd280MmGoing.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/stair-section-170-mm-riser-and-280-mm-going-2293f20f"},
+    {"id": "steel-beam-splice-detail", "title": "Steel beam splice detail", "file": "STRC-SteelBeamSpliceDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/steel-beam-splice-detail-0afd0106"},
+    {"id": "steel-to-concrete-anchor-plate-detail", "title": "Steel to concrete anchor plate detail", "file": "STRC-SteelToConcreteAnchorPlateDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/steel-to-concrete-anchor-plate-detail-2e25fd72"},
+    {"id": "straight-reinforced-concrete-stair-structural-detail", "title": "Straight reinforced concrete stair structural detail", "file": "STRC-StraightReinforcedConcreteStairStructuralDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/straight-reinforced-concrete-stair-structural-detail-ec583bcd"},
+    {"id": "strip-footing-construction-detail", "title": "Strip footing construction detail", "file": "STRC-StripFootingConstructionDetail.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/strip-footing-construction-detail-773c5c44"},
+    {"id": "two-bay-slab-formwork-plan-plan-de-coffrage", "title": "Two-bay slab formwork plan", "file": "STRC-TwoBaySlabFormwork.dxf", "category": "detail", "source": "https://www.innerscene.com/tools/library/drawings/two-bay-slab-formwork-plan-plan-de-coffrage-43c5de93"}
+  ]
+}

@@ -1,0 +1,241 @@
+{
+  "format": "osas-smartblocks",
+  "version": 1,
+  "discipline": "rcc",
+  "note": "Reinforced concrete sections and plans. Geometry in millimetres about the insertion point. Drafting aids only: sizes, cover and reinforcement come from the structural design.",
+  "blocks": [
+    {
+      "id": "rcc.column.rect",
+      "title": "RCC rectangular column (section with bars and tie)",
+      "layer": "S-RCC", "color": 1, "lineweight": 35,
+      "params": [
+        { "name": "width", "label": "Width", "unit": "mm", "default": 230, "min": 150, "max": 2000 },
+        { "name": "depth", "label": "Depth", "unit": "mm", "default": 450, "min": 150, "max": 2000 },
+        { "name": "cover", "label": "Clear cover", "unit": "mm", "default": 40, "min": 20, "max": 75 },
+        { "name": "nx", "label": "Bars on width face (with corners)", "default": 2, "min": 2, "max": 12, "integer": true },
+        { "name": "ny", "label": "Bars on depth face (with corners)", "default": 3, "min": 2, "max": 12, "integer": true },
+        { "name": "bar", "label": "Bar diameter", "unit": "mm", "default": 16, "choices": [
+          { "label": "10", "value": 10 }, { "label": "12", "value": 12 }, { "label": "16", "value": 16 },
+          { "label": "20", "value": 20 }, { "label": "25", "value": 25 }, { "label": "32", "value": 32 } ] },
+        { "name": "tie", "label": "Tie diameter", "unit": "mm", "default": 8, "choices": [
+          { "label": "6", "value": 6 }, { "label": "8", "value": 8 }, { "label": "10", "value": 10 }, { "label": "12", "value": 12 } ] },
+        { "name": "hatch", "label": "Concrete hatch", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 40, "min": 10, "max": 500 }
+      ],
+      "vars": [
+        { "name": "x0", "expr": "-width/2" },
+        { "name": "y0", "expr": "-depth/2" },
+        { "name": "ci", "expr": "cover + tie + bar/2" },
+        { "name": "sx", "expr": "(width - 2*ci)/(nx - 1)" },
+        { "name": "sy", "expr": "(depth - 2*ci)/(ny - 1)" },
+        { "name": "nbars", "expr": "2*nx + 2*(ny - 2)" }
+      ],
+      "items": [
+        { "crect": [0, 0, "width", "depth"] },
+        { "when": "hatch", "hatch": { "pts": [["x0", "y0"], ["-x0", "y0"], ["-x0", "-y0"], ["x0", "-y0"]], "pattern": "AR-CONC", "scale": 80 } },
+        { "crect": [0, 0, "width - 2*cover - tie", "depth - 2*cover - tie"] },
+        { "repeat": { "var": "i", "count": "nx", "items": [
+          { "dot": ["x0 + ci + i*sx", "y0 + ci", "bar/2"] },
+          { "dot": ["x0 + ci + i*sx", "-y0 - ci", "bar/2"] } ] } },
+        { "repeat": { "var": "j", "count": "ny - 2", "items": [
+          { "dot": ["x0 + ci", "y0 + ci + (j + 1)*sy", "bar/2"] },
+          { "dot": ["-x0 - ci", "y0 + ci + (j + 1)*sy", "bar/2"] } ] } },
+        { "when": "label", "text": { "at": [0, "y0 - 1.8*txt"], "height": "txt", "value": "{width} x {depth}", "align": "c" } },
+        { "when": "label", "text": { "at": [0, "y0 - 3.4*txt"], "height": "txt", "value": "{nbars} bars {bar} dia, {tie} dia ties", "align": "c" } }
+      ]
+    },
+    {
+      "id": "rcc.column.circular",
+      "title": "RCC circular column (section with bars and tie)",
+      "layer": "S-RCC", "color": 1, "lineweight": 35,
+      "params": [
+        { "name": "dia", "label": "Diameter", "unit": "mm", "default": 450, "min": 200, "max": 2500 },
+        { "name": "cover", "label": "Clear cover", "unit": "mm", "default": 40, "min": 20, "max": 75 },
+        { "name": "bars", "label": "Number of bars", "default": 6, "min": 4, "max": 40, "integer": true },
+        { "name": "bar", "label": "Bar diameter", "unit": "mm", "default": 16, "choices": [
+          { "label": "12", "value": 12 }, { "label": "16", "value": 16 }, { "label": "20", "value": 20 },
+          { "label": "25", "value": 25 }, { "label": "32", "value": 32 } ] },
+        { "name": "tie", "label": "Tie / spiral diameter", "unit": "mm", "default": 8, "choices": [
+          { "label": "6", "value": 6 }, { "label": "8", "value": 8 }, { "label": "10", "value": 10 } ] },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 40, "min": 10, "max": 500 }
+      ],
+      "items": [
+        { "circle": [0, 0, "dia/2"] },
+        { "circle": [0, 0, "dia/2 - cover - tie/2"] },
+        { "ring": { "c": [0, 0], "r": "dia/2 - cover - tie - bar/2", "count": "bars", "dot": "bar/2" } },
+        { "when": "label", "text": { "at": [0, "-dia/2 - 1.8*txt"], "height": "txt", "value": "{dia} dia, {bars} bars {bar} dia", "align": "c" } }
+      ]
+    },
+    {
+      "id": "rcc.beam.section",
+      "title": "RCC beam cross-section (bars, stirrup, optional slab)",
+      "layer": "S-RCC", "color": 1, "lineweight": 35,
+      "params": [
+        { "name": "width", "label": "Width", "unit": "mm", "default": 230, "min": 150, "max": 1500 },
+        { "name": "depth", "label": "Overall depth", "unit": "mm", "default": 450, "min": 200, "max": 2500 },
+        { "name": "cover", "label": "Clear cover", "unit": "mm", "default": 25, "min": 20, "max": 75 },
+        { "name": "ntop", "label": "Top bars", "default": 2, "min": 2, "max": 10, "integer": true },
+        { "name": "nbot", "label": "Bottom bars", "default": 3, "min": 2, "max": 10, "integer": true },
+        { "name": "bartop", "label": "Top bar diameter", "unit": "mm", "default": 12, "choices": [
+          { "label": "10", "value": 10 }, { "label": "12", "value": 12 }, { "label": "16", "value": 16 }, { "label": "20", "value": 20 }, { "label": "25", "value": 25 } ] },
+        { "name": "barbot", "label": "Bottom bar diameter", "unit": "mm", "default": 16, "choices": [
+          { "label": "10", "value": 10 }, { "label": "12", "value": 12 }, { "label": "16", "value": 16 }, { "label": "20", "value": 20 }, { "label": "25", "value": 25 }, { "label": "32", "value": 32 } ] },
+        { "name": "stir", "label": "Stirrup diameter", "unit": "mm", "default": 8, "choices": [
+          { "label": "6", "value": 6 }, { "label": "8", "value": 8 }, { "label": "10", "value": 10 }, { "label": "12", "value": 12 } ] },
+        { "name": "slab", "label": "Slab thickness (0: none)", "unit": "mm", "default": 0, "min": 0, "max": 300 },
+        { "name": "hatch", "label": "Concrete hatch", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 40, "min": 10, "max": 500 }
+      ],
+      "vars": [
+        { "name": "x0", "expr": "-width/2" },
+        { "name": "y0", "expr": "-depth/2" },
+        { "name": "ct", "expr": "cover + stir + bartop/2" },
+        { "name": "cb", "expr": "cover + stir + barbot/2" },
+        { "name": "st", "expr": "(width - 2*ct)/(ntop - 1)" },
+        { "name": "sb", "expr": "(width - 2*cb)/(nbot - 1)" },
+        { "name": "wing", "expr": "3*slab" }
+      ],
+      "items": [
+        { "crect": [0, 0, "width", "depth"] },
+        { "when": "hatch", "hatch": { "pts": [["x0", "y0"], ["-x0", "y0"], ["-x0", "-y0"], ["x0", "-y0"]], "pattern": "AR-CONC", "scale": 80 } },
+        { "crect": [0, 0, "width - 2*cover - stir", "depth - 2*cover - stir"] },
+        { "repeat": { "var": "i", "count": "ntop", "items": [ { "dot": ["x0 + ct + i*st", "-y0 - ct", "bartop/2"] } ] } },
+        { "repeat": { "var": "i", "count": "nbot", "items": [ { "dot": ["x0 + cb + i*sb", "y0 + cb", "barbot/2"] } ] } },
+        { "when": "slab", "poly": { "pts": [["x0", "-y0 - slab"], ["x0 - wing", "-y0 - slab"], ["x0 - wing", "-y0"], ["x0", "-y0"]] } },
+        { "when": "slab", "poly": { "pts": [["-x0", "-y0 - slab"], ["-x0 + wing", "-y0 - slab"], ["-x0 + wing", "-y0"], ["-x0", "-y0"]] } },
+        { "when": "label", "text": { "at": [0, "y0 - 1.8*txt"], "height": "txt", "value": "{width} x {depth}", "align": "c" } },
+        { "when": "label", "text": { "at": [0, "y0 - 3.4*txt"], "height": "txt", "value": "{ntop}-{bartop} top, {nbot}-{barbot} bottom, {stir} dia stirrups", "align": "c" } }
+      ]
+    },
+    {
+      "id": "rcc.footing.plan",
+      "title": "RCC isolated footing (plan)",
+      "layer": "S-RCC", "color": 1, "lineweight": 35,
+      "params": [
+        { "name": "length", "label": "Footing length", "unit": "mm", "default": 1500, "min": 600, "max": 6000 },
+        { "name": "breadth", "label": "Footing breadth", "unit": "mm", "default": 1500, "min": 600, "max": 6000 },
+        { "name": "colw", "label": "Column width", "unit": "mm", "default": 230, "min": 150, "max": 2000 },
+        { "name": "cold", "label": "Column depth", "unit": "mm", "default": 450, "min": 150, "max": 2000 },
+        { "name": "sloped", "label": "Sloped top", "default": 1, "choices": [ { "label": "Sloped", "value": 1 }, { "label": "Flat", "value": 0 } ] },
+        { "name": "offset", "label": "Pedestal offset", "unit": "mm", "default": 75, "min": 0, "max": 300 },
+        { "name": "pcc", "label": "PCC projection (0: none)", "unit": "mm", "default": 100, "min": 0, "max": 300 },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 60, "min": 10, "max": 500 }
+      ],
+      "vars": [
+        { "name": "pw", "expr": "colw + 2*offset" },
+        { "name": "pd", "expr": "cold + 2*offset" }
+      ],
+      "items": [
+        { "crect": [0, 0, "length", "breadth"] },
+        { "when": "pcc", "linetype": "HIDDEN", "crect": [0, 0, "length + 2*pcc", "breadth + 2*pcc"] },
+        { "crect": [0, 0, "colw", "cold"] },
+        { "hatch": { "pts": [["-colw/2", "-cold/2"], ["colw/2", "-cold/2"], ["colw/2", "cold/2"], ["-colw/2", "cold/2"]], "pattern": "SOLID" } },
+        { "when": "sloped", "crect": [0, 0, "pw", "pd"] },
+        { "when": "sloped", "line": ["-length/2", "-breadth/2", "-pw/2", "-pd/2"] },
+        { "when": "sloped", "line": ["length/2", "-breadth/2", "pw/2", "-pd/2"] },
+        { "when": "sloped", "line": ["length/2", "breadth/2", "pw/2", "pd/2"] },
+        { "when": "sloped", "line": ["-length/2", "breadth/2", "-pw/2", "pd/2"] },
+        { "when": "label", "text": { "at": [0, "-breadth/2 - pcc - 1.8*txt"], "height": "txt", "value": "Footing {length} x {breadth}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "rcc.footing.section",
+      "title": "RCC isolated footing (section with mesh and column bars)",
+      "layer": "S-RCC", "color": 1, "lineweight": 35,
+      "params": [
+        { "name": "length", "label": "Footing width in section", "unit": "mm", "default": 1500, "min": 600, "max": 6000 },
+        { "name": "depth", "label": "Depth at column", "unit": "mm", "default": 450, "min": 200, "max": 2000 },
+        { "name": "edge", "label": "Depth at edge (sloped)", "unit": "mm", "default": 200, "min": 150, "max": 2000 },
+        { "name": "sloped", "label": "Sloped top", "default": 1, "choices": [ { "label": "Sloped", "value": 1 }, { "label": "Flat", "value": 0 } ] },
+        { "name": "colw", "label": "Column width", "unit": "mm", "default": 230, "min": 150, "max": 2000 },
+        { "name": "stub", "label": "Column stub shown", "unit": "mm", "default": 600, "min": 100, "max": 3000 },
+        { "name": "pcc", "label": "PCC thickness (0: none)", "unit": "mm", "default": 100, "min": 0, "max": 300 },
+        { "name": "proj", "label": "PCC projection", "unit": "mm", "default": 100, "min": 0, "max": 300 },
+        { "name": "cover", "label": "Clear cover", "unit": "mm", "default": 50, "min": 40, "max": 100 },
+        { "name": "bar", "label": "Mesh bar diameter", "unit": "mm", "default": 12, "choices": [
+          { "label": "10", "value": 10 }, { "label": "12", "value": 12 }, { "label": "16", "value": 16 }, { "label": "20", "value": 20 } ] },
+        { "name": "spacing", "label": "Mesh spacing", "unit": "mm", "default": 150, "min": 75, "max": 300 },
+        { "name": "colbar", "label": "Column bar diameter", "unit": "mm", "default": 16, "choices": [
+          { "label": "12", "value": 12 }, { "label": "16", "value": 16 }, { "label": "20", "value": 20 }, { "label": "25", "value": 25 } ] },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 50, "min": 10, "max": 500 }
+      ],
+      "vars": [
+        { "name": "pw", "expr": "colw + 150" },
+        { "name": "ndots", "expr": "floor((length - 2*cover - bar)/spacing) + 1" },
+        { "name": "cx", "expr": "colw/2 - 40 - colbar/2" },
+        { "name": "foot", "expr": "min(300, length/2 - cover - cx)" },
+        { "name": "edgeh", "expr": "min(edge, depth)" }
+      ],
+      "items": [
+        { "when": "pcc", "rect": ["-length/2 - proj", "-pcc", "length + 2*proj", "pcc"] },
+        { "when": "pcc", "hatch": { "pts": [["-length/2 - proj", "-pcc"], ["length/2 + proj", "-pcc"], ["length/2 + proj", 0], ["-length/2 - proj", 0]], "pattern": "AR-SAND", "scale": 150 } },
+        { "when": "sloped", "poly": { "closed": true, "pts": [["-length/2", 0], ["length/2", 0], ["length/2", "edgeh"], ["pw/2", "depth"], ["-pw/2", "depth"], ["-length/2", "edgeh"]] } },
+        { "when": "1 - sloped", "rect": ["-length/2", 0, "length", "depth"] },
+        { "line": ["-colw/2", "depth", "-colw/2", "depth + stub"] },
+        { "line": ["colw/2", "depth", "colw/2", "depth + stub"] },
+        { "poly": { "pts": [["-colw/2 - 50", "depth + stub - 40"], ["-colw/6", "depth + stub + 30"], ["colw/6", "depth + stub - 30"], ["colw/2 + 50", "depth + stub + 40"]] } },
+        { "repeat": { "var": "i", "count": "ndots", "items": [ { "dot": ["-length/2 + cover + bar/2 + i*spacing", "cover + bar/2", "bar/2"] } ] } },
+        { "poly": { "pts": [["-length/2 + cover", "edgeh - cover"], ["-length/2 + cover", "cover + 1.5*bar"], ["length/2 - cover", "cover + 1.5*bar"], ["length/2 - cover", "edgeh - cover"]] } },
+        { "poly": { "pts": [["-cx - foot", "cover + 2.5*bar"], ["-cx", "cover + 2.5*bar"], ["-cx", "depth + stub - 60"]] } },
+        { "poly": { "pts": [["cx + foot", "cover + 2.5*bar"], ["cx", "cover + 2.5*bar"], ["cx", "depth + stub - 60"]] } },
+        { "when": "label", "text": { "at": [0, "-pcc - 1.8*txt"], "height": "txt", "value": "Footing {length} wide, {depth} deep; {bar} dia @ {spacing} c/c both ways", "align": "c" } }
+      ]
+    },
+    {
+      "id": "rcc.lintel.section",
+      "title": "RCC lintel over an opening (elevation with bars)",
+      "layer": "S-RCC", "color": 1, "lineweight": 35,
+      "params": [
+        { "name": "span", "label": "Clear opening", "unit": "mm", "default": 1000, "min": 450, "max": 4000 },
+        { "name": "bearing", "label": "Bearing each side", "unit": "mm", "default": 150, "min": 100, "max": 450 },
+        { "name": "depth", "label": "Lintel depth", "unit": "mm", "default": 150, "min": 100, "max": 600 },
+        { "name": "cover", "label": "Clear cover", "unit": "mm", "default": 25, "min": 15, "max": 50 },
+        { "name": "jamb", "label": "Opening height shown", "unit": "mm", "default": 400, "min": 0, "max": 2400 },
+        { "name": "bar", "label": "Main bar diameter", "unit": "mm", "default": 10, "choices": [
+          { "label": "8", "value": 8 }, { "label": "10", "value": 10 }, { "label": "12", "value": 12 }, { "label": "16", "value": 16 } ] },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 40, "min": 10, "max": 500 }
+      ],
+      "vars": [ { "name": "full", "expr": "span + 2*bearing" } ],
+      "items": [
+        { "rect": ["-full/2", 0, "full", "depth"] },
+        { "when": "jamb", "line": ["-span/2", 0, "-span/2", "-jamb"] },
+        { "when": "jamb", "line": ["span/2", 0, "span/2", "-jamb"] },
+        { "linetype": "HIDDEN", "line": ["-full/2 + cover", "cover + bar/2", "full/2 - cover", "cover + bar/2"] },
+        { "linetype": "HIDDEN", "line": ["-full/2 + cover", "depth - cover - bar/2", "full/2 - cover", "depth - cover - bar/2"] },
+        { "when": "label", "text": { "at": [0, "depth + txt"], "height": "txt", "value": "Lintel {full} x {depth}, {bar} dia bars", "align": "c" } }
+      ]
+    },
+    {
+      "id": "rcc.slab.section",
+      "title": "RCC slab section (main and distribution bars)",
+      "layer": "S-RCC", "color": 1, "lineweight": 35,
+      "params": [
+        { "name": "span", "label": "Length shown", "unit": "mm", "default": 3000, "min": 600, "max": 12000 },
+        { "name": "thick", "label": "Slab thickness", "unit": "mm", "default": 125, "min": 75, "max": 400 },
+        { "name": "cover", "label": "Clear cover", "unit": "mm", "default": 20, "min": 15, "max": 50 },
+        { "name": "bar", "label": "Main bar diameter", "unit": "mm", "default": 10, "choices": [
+          { "label": "8", "value": 8 }, { "label": "10", "value": 10 }, { "label": "12", "value": 12 }, { "label": "16", "value": 16 } ] },
+        { "name": "dist", "label": "Distribution bar diameter", "unit": "mm", "default": 8, "choices": [
+          { "label": "6", "value": 6 }, { "label": "8", "value": 8 }, { "label": "10", "value": 10 } ] },
+        { "name": "spacing", "label": "Distribution spacing", "unit": "mm", "default": 200, "min": 75, "max": 450 },
+        { "name": "hatch", "label": "Concrete hatch", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 40, "min": 10, "max": 500 }
+      ],
+      "vars": [ { "name": "ndots", "expr": "floor((span - 2*cover - dist)/spacing) + 1" } ],
+      "items": [
+        { "rect": [0, 0, "span", "thick"] },
+        { "when": "hatch", "hatch": { "pts": [[0, 0], ["span", 0], ["span", "thick"], [0, "thick"]], "pattern": "AR-CONC", "scale": 80 } },
+        { "line": ["cover", "cover + bar/2", "span - cover", "cover + bar/2"] },
+        { "repeat": { "var": "i", "count": "ndots", "items": [ { "dot": ["cover + dist/2 + i*spacing", "cover + bar + dist/2", "dist/2"] } ] } },
+        { "when": "label", "text": { "at": [0, "-1.8*txt"], "height": "txt", "value": "Slab {thick} thick: {bar} dia main, {dist} dia @ {spacing} distribution", "align": "l" } }
+      ]
+    }
+  ]
+}

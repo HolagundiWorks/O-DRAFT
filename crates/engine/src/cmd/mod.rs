@@ -53,6 +53,7 @@ mod scriptcmd;
 mod selectmore;
 mod settings;
 mod sheet;
+pub(crate) mod smartblock;
 mod space;
 mod spatialq;
 mod spline_opts;
@@ -238,6 +239,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(electrical::specs());
         v.extend(walls::specs());
         v.extend(param::specs());
+        v.extend(smartblock::specs());
         v.extend(structure::specs());
         v.extend(symbols::specs());
         v.extend(bridge::specs());

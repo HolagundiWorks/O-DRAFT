@@ -1,0 +1,23 @@
+{
+  "id": "hvac",
+  "name": "HVAC symbols",
+  "units": "mm",
+  "licence": "CC0 1.0",
+  "attribution": "Innerscene Drawing Library (original models, public domain / CC0). Geometry is 1:1 millimetres; verify against the product, the design and local codes before construction.",
+  "source": "https://www.innerscene.com/tools/library/drawings",
+  "items": [
+    {"id": "air-handling-unit-plumbing-and-hvac-cad-symbol", "title": "Air handling unit", "file": "HVAC-AirHandlingUnit.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/air-handling-unit-plumbing-and-hvac-cad-symbol-817305fa"},
+    {"id": "condensing-unit-plumbing-and-hvac-cad-symbol", "title": "Condensing unit", "file": "HVAC-CondensingUnit.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/condensing-unit-plumbing-and-hvac-cad-symbol-33622373"},
+    {"id": "exhaust-air-grille-plumbing-and-hvac-cad-symbol", "title": "Exhaust air grille", "file": "HVAC-ExhaustAirGrille.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/exhaust-air-grille-plumbing-and-hvac-cad-symbol-a44e7b09"},
+    {"id": "fan-coil-unit-plumbing-and-hvac-cad-symbol", "title": "Fan coil unit", "file": "HVAC-FanCoilUnit.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/fan-coil-unit-plumbing-and-hvac-cad-symbol-527d5563"},
+    {"id": "hvac-symbols-a3-sheet-cad-collection", "title": "HVAC symbols A3 sheet", "file": "HVAC-HvacSymbolsA3Sheet.dxf", "category": "sheet", "source": "https://www.innerscene.com/tools/library/drawings/hvac-symbols-a3-sheet-cad-collection-88bcdc39"},
+    {"id": "inline-duct-fan-plumbing-and-hvac-cad-symbol", "title": "Inline duct fan", "file": "HVAC-InlineDuctFan.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/inline-duct-fan-plumbing-and-hvac-cad-symbol-478e906e"},
+    {"id": "linear-slot-diffuser-plumbing-and-hvac-cad-symbol", "title": "Linear slot diffuser", "file": "HVAC-LinearSlotDiffuser.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/linear-slot-diffuser-plumbing-and-hvac-cad-symbol-be125eb6"},
+    {"id": "return-air-grille-plumbing-and-hvac-cad-symbol", "title": "Return air grille", "file": "HVAC-ReturnAirGrille.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/return-air-grille-plumbing-and-hvac-cad-symbol-9dbe7a60"},
+    {"id": "round-supply-diffuser-plumbing-and-hvac-cad-symbol", "title": "Round supply diffuser", "file": "HVAC-RoundSupplyDiffuser.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/round-supply-diffuser-plumbing-and-hvac-cad-symbol-5203264a"},
+    {"id": "square-supply-diffuser-plumbing-and-hvac-cad-symbol", "title": "Square supply diffuser", "file": "HVAC-SquareSupplyDiffuser.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/square-supply-diffuser-plumbing-and-hvac-cad-symbol-16216d9e"},
+    {"id": "thermostat-plumbing-and-hvac-cad-symbol", "title": "Thermostat", "file": "HVAC-Thermostat.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/thermostat-plumbing-and-hvac-cad-symbol-e8b66b9e"},
+    {"id": "volume-control-damper-plumbing-and-hvac-cad-symbol", "title": "Volume control damper", "file": "HVAC-VolumeControlDamper.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/volume-control-damper-plumbing-and-hvac-cad-symbol-ee5d77cd"},
+    {"id": "wall-extractor-fan-plumbing-and-hvac-cad-symbol", "title": "Wall extractor fan", "file": "HVAC-WallExtractorFan.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/wall-extractor-fan-plumbing-and-hvac-cad-symbol-21842f88"}
+  ]
+}
