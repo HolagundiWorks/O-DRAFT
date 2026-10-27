@@ -4,8 +4,8 @@ Fixed window: primary 1920×1080 @ ~100% scaling. Theme: light. Build: WinUI Deb
 
 | Shot | File | Notes | Status |
 |---|---|---|---|
-| Empty main | [screenshots/01-main-empty.webp](screenshots/01-main-empty.webp) | Menu, arch bar (Layer/Space/Floor), tool strip, Ask pill, collapsed Properties | captured |
-| Focused main | [screenshots/02-main-focused.webp](screenshots/02-main-focused.webp) | Same chrome; used for click targeting | captured |
+| Empty main | 01-main-empty.webp | Menu, arch bar (Layer/Space/Floor), tool strip, Ask pill, collapsed Properties | observed; image removed (no ATTRIBUTION.md entry) |
+| Focused main | 02-main-focused.webp | Same chrome; used for click targeting | observed; image removed (no ATTRIBUTION.md entry) |
 
 ## Observed (not full token audit)
 
