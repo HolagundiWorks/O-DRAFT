@@ -694,6 +694,11 @@ public sealed partial class MainWindow : Window
             OpenProjectWizard();
             return;
         }
+        if (id == "level.import")
+        {
+            _ = OpenImportLevel();
+            return;
+        }
         if (id == "room.settings")
         {
             OpenRoomSettings();
@@ -4684,13 +4689,13 @@ public sealed partial class MainWindow : Window
         }
         BlocksPanel.Children.Add(FieldLabel("Double-click a thumbnail to insert. External references are not supported."));
         BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
-        AddSmartBlocksEntry();
+        AddSmartBlocksEntry(snapshot);
         AddFurnitureCatalog();
         AddDisciplineCatalogs();
     }
 
     /// <summary>Smart blocks (parametric RCC, steel, services and interior blocks): opens the Smart Blocks window.</summary>
-    private void AddSmartBlocksEntry()
+    private void AddSmartBlocksEntry(PanelSnapshot snapshot)
     {
         BlocksPanel.Children.Add(Heading("Smart blocks"));
         BlocksPanel.Children.Add(FieldLabel("Parametric RCC, steel, plumbing, HVAC, electrical and interior blocks. Edit a placed one in Properties or by its grips."));
@@ -4699,7 +4704,43 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(open, "Pick a smart block, set its parameters and insert it");
         open.Click += (_, _) => OpenSmartBlocks();
         BlocksPanel.Children.Add(open);
+        // The library for the tab on screen (all of it in the design view): one click opens the insert form.
+        if (snapshot.Library.Count > 0)
+        {
+            BlocksPanel.Children.Add(FieldLabel(snapshot.Library.Count + " in the library for this tab"));
+            foreach (var entry in snapshot.Library)
+            {
+                var item = new Button
+                {
+                    Content = entry.Title,
+                    MinHeight = Density.ControlHeight,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                };
+                Density.Name(item, "Insert smart block " + entry.Title);
+                ToolTipService.SetToolTip(item, entry.Description);
+                var id = entry.Id;
+                item.Click += (_, _) => InsertLibrarySmartBlock(id);
+                BlocksPanel.Children.Add(item);
+            }
+        }
         BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+    }
+
+    private void InsertLibrarySmartBlock(string id)
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        var form = Native.ReadForm(_host, "smartblock.insert");
+        if (string.IsNullOrEmpty(form))
+        {
+            History.Text = Native.LastError(_host);
+            return;
+        }
+        form = InjectFormField(form, "id", id);
+        FormDialog.Show(this, _host, form, AfterCommand);
     }
 
     /// <summary>Discipline DXF sets from <c>blocks/&lt;discipline&gt;</c> (CC0), one collapsed section each.
@@ -6556,6 +6597,14 @@ public sealed partial class MainWindow : Window
         public bool LayersTruncated { get; set; }
         public List<BlockRow> Blocks { get; set; } = new();
         public bool BlocksTruncated { get; set; }
+        public List<LibraryRow> Library { get; set; } = new();
+    }
+
+    private sealed class LibraryRow
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
     }
 
     private sealed class PropertyRow

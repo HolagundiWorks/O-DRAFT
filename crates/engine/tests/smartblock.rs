@@ -310,3 +310,29 @@ fn every_discipline_dxf_in_the_catalogs_reads() {
     }
     assert_eq!(n, 79);
 }
+
+#[test]
+fn a_metric_plan_flagged_as_inches_still_gets_blocks_at_millimetre_scale() {
+    // A plan 57 m long drawn in millimetres whose header says inches (the default of an untouched
+    // template): the blocks must come in at 1:1 in millimetres, not shrunk by 25.4.
+    let mut s = Session::empty();
+    s.new_drawing(false);
+    s.doc_mut().unwrap().header.set_i64("INSUNITS", 1);
+    s.execute("line", &json!({"points": [[0, 0], [57000, 0]]})).unwrap();
+    s.execute("line", &json!({"points": [[0, 0], [0, 7400]]})).unwrap();
+    let r = s.execute("smartblock.insert", &json!({ "id": "int.bed", "at": [1000, 1000] })).unwrap();
+    assert_eq!(reference(&s, r["handle"].as_str().unwrap()).3, 1.0, "millimetres inferred from the size of the plan");
+    // A small drawing that says inches stays in inches, and a stated metric unit is trusted.
+    let mut small = Session::empty();
+    small.new_drawing(false);
+    small.doc_mut().unwrap().header.set_i64("INSUNITS", 1);
+    small.execute("line", &json!({"points": [[0, 0], [400, 0]]})).unwrap();
+    let r = small.execute("smartblock.insert", &json!({ "id": "int.bed", "at": [0, 0] })).unwrap();
+    assert!((reference(&small, r["handle"].as_str().unwrap()).3 - 0.001 / 0.0254).abs() < 1e-9);
+    let mut metres = Session::empty();
+    metres.new_drawing(false);
+    metres.doc_mut().unwrap().header.set_i64("INSUNITS", 6);
+    metres.execute("line", &json!({"points": [[0, 0], [57000, 0]]})).unwrap();
+    let r = metres.execute("smartblock.insert", &json!({ "id": "int.bed", "at": [0, 0] })).unwrap();
+    assert!((reference(&metres, r["handle"].as_str().unwrap()).3 - 0.001).abs() < 1e-12);
+}

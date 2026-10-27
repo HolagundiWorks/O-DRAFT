@@ -342,3 +342,49 @@ fn merging_is_refused_into_a_main_drawing_and_for_bad_projects_and_changes_nothi
     assert_eq!(*metres.doc().unwrap(), before);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_layer_map_puts_a_files_objects_on_standard_layers_and_the_plan_suggests_them() {
+    let dir = temp("layermap");
+    let file = dir.join("Plan.dxf");
+    write_file(&file, "mm", |s| {
+        for l in ["AR_WALLS", "ST_COLUMNS", "N_TXT", "Odd Thing"] {
+            s.execute("layer.new", &json!({"name": l})).unwrap();
+        }
+        for (i, l) in ["AR_WALLS", "AR_WALLS", "ST_COLUMNS", "N_TXT", "Odd Thing"].iter().enumerate() {
+            s.execute("layer.current", &json!({"name": l})).unwrap();
+            line(s, i as f64);
+        }
+    });
+    let mut s = session("mm");
+    let plan = s.execute("layer.mapplan", &json!({"path": file.to_string_lossy()})).unwrap();
+    let suggested = |name: &str| plan["layers"].as_array().unwrap().iter().find(|l| l["name"] == name).map(|l| l["suggested"].clone());
+    assert_eq!(suggested("AR_WALLS"), Some(json!("A-WALL")));
+    assert_eq!(suggested("ST_COLUMNS"), Some(json!("S-RCC")));
+    assert_eq!(suggested("N_TXT"), Some(json!("AN-TEXT")));
+    assert_eq!(suggested("Odd Thing"), Some(Value::Null));
+    for (name, want) in [("MEASURE-DEDUCT", None), ("MEASURE-COLUMN", None), ("DUCTS", Some("M-HVAC")), ("Fancy", None)] {
+        assert_eq!(aad_engine::cmd::sheetstd::suggest_target(name), want, "{name}");
+    }
+    assert!(plan["targets"].as_array().unwrap().iter().any(|t| t["name"] == "A-WALL" && t["tab"] == "Working drawing"));
+    assert!(s.doc().unwrap().entity_count() == 0, "planning changes nothing");
+
+    s.execute(
+        "level.import",
+        &json!({"path": file.to_string_lossy(), "layerMap": {"ar_walls": "A-WALL", "ST_COLUMNS": "S-RCC", "N_TXT": "AN-TEXT"}}),
+    )
+    .unwrap();
+    let d = s.doc().unwrap();
+    let store = d.level_store(d.level_by_name("Plan").unwrap().id).unwrap();
+    let on = |l: &str| store.iter().filter(|e| e.common.layer == l).count();
+    assert_eq!((on("A-WALL"), on("S-RCC"), on("AN-TEXT"), on("Odd Thing")), (2, 1, 1, 1));
+    assert!(d.layer("A-WALL").is_some() && d.layer("AR_WALLS").is_none(), "the mapped layer takes the standard look and the file's own is not kept");
+    assert!(d.layer("Odd Thing").is_some(), "an unmapped layer keeps its name");
+
+    for bad in [json!({"layerMap": 5}), json!({"layerMap": {"A": ""}}), json!({"layerMap": {"A": 3}})] {
+        let mut params = bad.clone();
+        params["path"] = json!(file.to_string_lossy());
+        assert!(s.execute("level.import", &params).is_err(), "{bad}");
+    }
+    assert!(s.execute("layer.mapplan", &json!({})).is_err());
+}

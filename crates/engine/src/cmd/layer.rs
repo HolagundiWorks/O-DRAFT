@@ -114,6 +114,11 @@ fn layer_json(l: &Layer, current: bool) -> Value {
 /// Lower-case names of the layers used on the active level (its design objects and every sheet
 /// set's annotation of it), and by the active sheet set (its annotation on any level, and layers
 /// named with its prefix). A drawing without levels counts all of model space as its one level.
+/// Lower-case names of the layers used on the active level (see `layer_scopes`).
+pub fn layers_on_level(d: &aad_doc::Drawing) -> std::collections::HashSet<String> {
+    layer_scopes(d).0
+}
+
 fn layer_scopes(d: &aad_doc::Drawing) -> (std::collections::HashSet<String>, std::collections::HashSet<String>) {
     let mut level = std::collections::HashSet::new();
     let mut sheet = std::collections::HashSet::new();

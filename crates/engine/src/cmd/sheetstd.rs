@@ -256,6 +256,83 @@ pub fn is_object_layer(name: &str) -> bool {
     TABS.iter().flat_map(|t| t.layers.iter()).any(|l| is(l.0)) || STANDARD_LAYERS.iter().any(|l| is(l.0) && !l.0.starts_with("AN-"))
 }
 
+/// A standard layer by name: (name, colour, linetype, lineweight, description).
+fn std_layer(name: &str) -> Option<(&'static str, i16, &'static str, u16, &'static str)> {
+    TABS.iter().flat_map(|t| t.layers.iter()).chain(STANDARD_LAYERS.iter()).find(|l| l.0.eq_ignore_ascii_case(name)).copied()
+}
+
+/// Make the standard layer `name` if it is one and the drawing lacks it; true when it was made.
+pub(super) fn ensure_standard_layer(d: &mut Drawing, name: &str) -> bool {
+    std_layer(name).is_some_and(|(n, c, lt, lw, desc)| ensure_layer(d, n, c, lt, lw, desc))
+}
+
+/// The standard layers a drawn layer can be mapped to: (layer, tab it belongs to, description).
+pub(super) fn standard_targets() -> Vec<(&'static str, &'static str, &'static str)> {
+    let mut out: Vec<(&str, &str, &str)> = Vec::new();
+    for t in &TABS {
+        let own = t.layers.iter().map(|l| (l.0, t.name, l.4));
+        let arch = STANDARD_LAYERS
+            .iter()
+            .filter(|_| t.name == "Working drawing")
+            .filter(|l| l.0.starts_with("A-") || l.0.starts_with("AN-"))
+            .map(|l| (l.0, t.name, l.4));
+        for e in own.chain(arch) {
+            if !out.iter().any(|o| o.0 == e.0) {
+                out.push(e);
+            }
+        }
+    }
+    out
+}
+
+/// The standard layer a layer of another drawing most likely stands for, by the words in its name
+/// (`AR_WALLS` -> `A-WALL`). A layer that already has a standard name maps to itself; `0`, `Defpoints`
+/// and anything not recognised have no suggestion (they are imported under their own names).
+pub fn suggest_target(name: &str) -> Option<&'static str> {
+    let up = name.trim().to_ascii_uppercase();
+    if up.is_empty() || up == "0" || up == "DEFPOINTS" {
+        return None;
+    }
+    if let Some(l) = std_layer(&up) {
+        return Some(l.0);
+    }
+    // Quantity take-off layers stay as they are: the Working drawing tab already maps `MEASURE-*`.
+    if up.starts_with("MEASURE") {
+        return None;
+    }
+    let tokens: Vec<&str> = up.split(|c: char| !c.is_ascii_alphanumeric()).collect();
+    let has = |words: &[&str]| words.iter().any(|w| up.contains(w));
+    // Short words only count as whole words (`DEDUCT` is not a duct, `FANCY` is not a fan).
+    let word = |words: &[&str]| words.iter().any(|w| tokens.contains(w));
+    let structural = up.starts_with("ST") || up.starts_with("S-") || up.starts_with("S_") || has(&["STRUCT", "RCC"]);
+    let rules: [(bool, &str); 23] = [
+        (structural && has(&["COLUMN", "BEAM", "SLAB", "FOOTING", "RCC"]), "S-RCC"),
+        (structural && has(&["STEEL"]), "S-STEEL"),
+        (has(&["WALL"]), "A-WALL"),
+        (has(&["COLUMN"]), "A-COL"),
+        (has(&["DOOR"]), "A-DOOR"),
+        (has(&["WINDOW", "WIND", "GLAZ"]), "A-WIND"),
+        (has(&["STAIR"]), "A-STAIR"),
+        (has(&["RAIL"]), "A-RAIL"),
+        (has(&["ROOF"]), "A-ROOF"),
+        (has(&["CEIL", "CLNG"]), "A-CLNG"),
+        (has(&["FURN"]), "I-FURN"),
+        (has(&["JOIN", "CABINET"]), "I-JOIN"),
+        (has(&["DECOR"]), "I-DECOR"),
+        (has(&["FINISH"]), "I-FINISH"),
+        (has(&["DIM"]), "AN-DIMS"),
+        (has(&["TEXT", "NOTE", "ANNO"]) || word(&["TXT"]), "AN-TEXT"),
+        (has(&["HATCH"]), "AN-HATCH"),
+        (has(&["GRID", "CENTRE", "CENTER"]), "AN-GRID"),
+        (has(&["HVAC"]) || word(&["DUCT", "DUCTS"]), "M-HVAC"),
+        (has(&["LIGHT"]) || word(&["FAN", "FANS"]), "E-CEIL"),
+        (has(&["ELEC", "SWITCH", "SOCKET", "POWER"]), "E-POINT"),
+        (has(&["SANIT", "BASIN"]) || word(&["WC"]), "P-FIXT"),
+        (has(&["PLUMB", "PIPE"]), "P-PIPE"),
+    ];
+    rules.iter().find(|r| r.0).map(|r| r.1)
+}
+
 /// The names and prefixes of the standard tabs, in order (the presets of `sheetset.new`).
 pub(super) fn tab_names() -> impl Iterator<Item = (&'static str, &'static str)> {
     TABS.iter().map(|t| (t.name, t.prefix))
@@ -268,7 +345,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{sets? (names; default all five), layers? (default true: create the standard layers), symbols? (default true: add the standard symbol blocks)} → {sets, layersCreated, blocksCreated}. Creates Working drawing, Electrical, Plumbing, Interior and False ceiling when missing, maps each to its layer and block name patterns (replacing a mapping edited before), creates the missing layers, and adds the symbol blocks that are not in the drawing yet. One undo step."),
         CommandSpec::new("layer.scope", "Layer Scope", run_scope)
             .menu(&["Format", "Layer Scope"])
-            .params("{mode?: \"tab\" | \"all\"} → {mode}. While a sheet set is the active tab the Layers panel shows only its layers (`tab`, the default) or every layer (`all`); the choice is kept in the drawing. Without `mode` it only reports."),
+            .params("{mode?: \"tab\" | \"level\" | \"all\"} → {mode}. While a sheet set is the active tab the Layers panel shows only its layers (`tab`, the default), only the layers used on the active level (`level`), or every layer (`all`); the choice is kept in the drawing. Without `mode` it only reports."),
     ]
 }
 
@@ -387,21 +464,33 @@ pub fn show_all(d: &Drawing) -> bool {
     super::project::get(d, SCOPE_KEY).as_str() == Some("all")
 }
 
+/// Whether the Layers panel lists only the layers used on the active level.
+pub fn show_level_only(d: &Drawing) -> bool {
+    super::project::get(d, SCOPE_KEY).as_str() == Some("level")
+}
+
 fn run_scope(s: &mut Session, p: &Value) -> Result<Value> {
     match p.get("mode") {
         None | Some(Value::Null) => {}
         Some(v) => {
-            let all = match v.as_str().map(str::to_ascii_lowercase).as_deref() {
-                Some("all") => true,
-                Some("tab") => false,
-                _ => return Err(bad("layer.scope", "`mode` is `tab` or `all`")),
+            let mode = match v.as_str().map(str::to_ascii_lowercase).as_deref() {
+                Some(m @ ("all" | "tab" | "level")) => m.to_string(),
+                _ => return Err(bad("layer.scope", "`mode` is `tab`, `level` or `all`")),
             };
-            if show_all(s.doc()?) != all {
-                super::project::set(s.doc_mut()?, SCOPE_KEY, &json!(if all { "all" } else { "tab" }));
+            let current = if show_all(s.doc()?) {
+                "all"
+            } else if show_level_only(s.doc()?) {
+                "level"
+            } else {
+                "tab"
+            };
+            if current != mode {
+                super::project::set(s.doc_mut()?, SCOPE_KEY, &json!(mode));
             }
         }
     }
-    Ok(json!({ "mode": if show_all(s.doc()?) { "all" } else { "tab" } }))
+    let d = s.doc()?;
+    Ok(json!({ "mode": if show_all(d) { "all" } else if show_level_only(d) { "level" } else { "tab" } }))
 }
 
 #[cfg(test)]

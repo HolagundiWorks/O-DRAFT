@@ -44,10 +44,14 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
     // current layer always stays in the list.
     let show_all = aad_engine::cmd::sheetstd::show_all(doc);
     let scope = if show_all { None } else { doc.active_sheet_ref() };
+    let on_level = aad_engine::cmd::sheetstd::show_level_only(doc).then(|| aad_engine::cmd::layer::layers_on_level(doc));
     let mut layers_truncated = false;
     let mut layers = Vec::new();
     for layer in doc.layers.iter().take(MAX_LAYERS + 1) {
         if scope.is_some_and(|s| !s.maps_layer(&layer.name) && !layer.name.eq_ignore_ascii_case(&current)) {
+            continue;
+        }
+        if on_level.as_ref().is_some_and(|used| !used.contains(&layer.name.to_ascii_lowercase()) && !layer.name.eq_ignore_ascii_case(&current)) {
             continue;
         }
         if layers.len() == MAX_LAYERS {

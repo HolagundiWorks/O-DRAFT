@@ -157,8 +157,12 @@ fn the_layer_scope_is_kept_in_the_drawing_and_reported() {
     let bytes = aad_io::write(s.doc().unwrap(), "a.dxf").unwrap();
     let d = aad_io::read(&bytes, "a.dxf").unwrap();
     assert!(aad_engine::cmd::sheetstd::show_all(&d), "the choice survives a save");
+    s.execute("layer.scope", &json!({"mode": "level"})).unwrap();
+    assert_eq!(s.execute("layer.scope", &json!({})).unwrap()["mode"], "level");
+    assert!(aad_engine::cmd::sheetstd::show_level_only(s.doc().unwrap()) && !aad_engine::cmd::sheetstd::show_all(s.doc().unwrap()));
     s.execute("layer.scope", &json!({"mode": "tab"})).unwrap();
     assert!(!aad_engine::cmd::sheetstd::show_all(s.doc().unwrap()));
+    assert!(!aad_engine::cmd::sheetstd::show_level_only(s.doc().unwrap()));
 }
 
 #[test]

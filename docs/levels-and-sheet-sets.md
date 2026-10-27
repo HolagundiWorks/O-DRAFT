@@ -539,3 +539,20 @@ dragging (`level.set order` exists); the rail cannot create or rename sheet sets
 - Memory: all levels are in memory; entities are shared through `Arc`, but a 20-level tower needs a
   load test.
 - Overlap with rendering work in Phase 2.
+
+### Mapping layers on import
+
+- `layer.mapplan {path}` reads a DXF/DWG (changes nothing) and lists its layers with object counts and,
+  where the name is recognised by keyword (`AR_WALLS` -> `A-WALL`, `ST_COLUMNS` -> `S-RCC`, `N_TXT` ->
+  `AN-TEXT`), the standard layer it most likely stands for, plus the list of standard target layers
+  with their tab. Quantity take-off layers (`MEASURE-*`) and `0`/`Defpoints` get no suggestion. Short
+  words match whole words only (`MEASURE-DEDUCT` is not a duct).
+- `level.import {..., layerMap: {"AR_WALLS": "A-WALL", ...}}` puts the objects of those layers on the
+  target layers (created with the standard look when they are standard layers) and does not bring the
+  emptied source layers along; layers not listed keep their names. Blocks' inner layers are not remapped.
+- `layer.scope` has a third mode, `level`: the Layers panel lists only the layers used on the active
+  level (the current layer stays listed).
+- WinUI: Import Level opens a file picker, then a window with one row per layer (suggested target
+  preselected). Verified: engine test `a_layer_map_puts_a_files_objects_on_standard_layers_and_the_plan_suggests_them`,
+  host test `the_layers_panel_can_list_only_the_layers_used_on_the_active_level`; the shell window and
+  the Blocks-panel smart-block list compile but were not clicked through.

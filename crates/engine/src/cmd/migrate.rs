@@ -35,7 +35,11 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("level.import", "Import Level", run_import)
             .menu(&["Architecture", "Levels", "Import Level"])
-            .params("{path, name? (default the file name), elevation?, height?, after?, sheetSet? (import as that sheet set's annotation of `level` instead), level? (default the active one), ignoreUnits?} → {level, id, objects, ...}. Reads a DXF/DWG (flattened to 2D) as a new level."),
+            .params("{path, name? (default the file name), elevation?, height?, after?, sheetSet? (import as that sheet set's annotation of `level` instead), level? (default the active one), ignoreUnits?, layerMap? ({file layer: layer to put its objects on}; layers not listed keep their names)} → {level, id, objects, ...}. Reads a DXF/DWG (flattened to 2D) as a new level."),
+        CommandSpec::new("layer.mapplan", "Plan Layer Mapping", run_mapplan)
+            .menu(&["Architecture", "Levels", "Plan Layer Mapping"])
+            .params("{path} → {layers: [{name, objects, suggested?}], targets: [{name, tab, description}]}. Lists the layers of a DXF/DWG with their object counts and the standard layer each most likely stands for, to be passed as `layerMap` to `level.import`. Changes nothing.")
+            .noundo(),
         CommandSpec::new("level.export", "Export Level", run_export)
             .menu(&["Architecture", "Levels", "Export Level"])
             .params("{level (default the active one), path, overwrite?} → {path, objects}. One level as a plain single-level DXF.")
@@ -49,7 +53,7 @@ pub fn specs() -> Vec<CommandSpec> {
 // ---------------- reading ----------------
 
 /// A drawing file, read through the io hooks and flattened to 2D.
-fn load(path: &str) -> Result<Drawing> {
+pub(super) fn load(path: &str) -> Result<Drawing> {
     let mut src = read_drawing(path)?;
     crate::flatten::flatten_drawing(&mut src);
     if src.model.len() > MAX_IMPORT_OBJECTS {
@@ -221,6 +225,69 @@ fn set_in(d: &Drawing, v: &Value) -> Option<SheetSetId> {
     v.as_str().and_then(|name| d.sheet_set_by_name(name)).map(|x| x.id)
 }
 
+/// The `layerMap` parameter as upper-case file layer -> target layer.
+fn layer_map(p: &Value) -> Result<BTreeMap<String, String>> {
+    let mut out = BTreeMap::new();
+    match p.get("layerMap") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) if m.len() <= 4096 => {
+            for (from, to) in m {
+                let to = to.as_str().map(str::trim).filter(|t| !t.is_empty() && t.len() <= 255 && !t.chars().any(char::is_control));
+                let to = to.ok_or_else(|| bad("level.import", format!("`layerMap` target for `{from}` must be a layer name")))?;
+                if from.len() > 255 {
+                    return Err(bad("level.import", "`layerMap` has a layer name that is too long"));
+                }
+                out.insert(from.trim().to_ascii_uppercase(), to.to_string());
+            }
+        }
+        Some(_) => return Err(bad("level.import", "`layerMap` is an object of file layer -> layer (at most 4096)")),
+    }
+    Ok(out)
+}
+
+/// Put the objects of mapped layers on their target layers (creating a standard target layer with its
+/// standard look) and drop the emptied source layers, so the file's layers do not come along unused.
+fn remap_layers(d: &mut Drawing, src: &mut Drawing, map: &BTreeMap<String, String>) {
+    if map.is_empty() {
+        return;
+    }
+    let mut out = EntityStore::new();
+    for e in src.model.iter() {
+        let mut c = (**e).clone();
+        if let Some(to) = map.get(&c.common.layer.to_ascii_uppercase()) {
+            c.common.layer = to.clone();
+        }
+        out.push(c);
+    }
+    src.model = out;
+    src.layers.retain(|l| !map.contains_key(&l.name.to_ascii_uppercase()) || map.values().any(|t| t.eq_ignore_ascii_case(&l.name)));
+    for to in map.values() {
+        super::sheetstd::ensure_standard_layer(d, to);
+    }
+}
+
+fn run_mapplan(_s: &mut Session, p: &Value) -> Result<Value> {
+    let path = str_param(p, "path")
+        .filter(|t| !t.trim().is_empty() && t.len() < 1024 && !t.contains('\0'))
+        .ok_or_else(|| bad("layer.mapplan", "`path` is required"))?;
+    let src = load(path)?;
+    let mut counts: BTreeMap<String, (String, usize)> = BTreeMap::new();
+    for l in &src.layers {
+        counts.entry(l.name.to_ascii_uppercase()).or_insert_with(|| (l.name.clone(), 0));
+    }
+    for e in src.model.iter() {
+        let c = counts.entry(e.common.layer.to_ascii_uppercase()).or_insert_with(|| (e.common.layer.clone(), 0));
+        c.1 = c.1.saturating_add(1);
+    }
+    let mut rows: Vec<(String, usize)> = counts.into_values().collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let layers: Vec<Value> =
+        rows.iter().take(2000).map(|(name, n)| json!({ "name": name, "objects": n, "suggested": super::sheetstd::suggest_target(name) })).collect();
+    let targets: Vec<Value> =
+        super::sheetstd::standard_targets().iter().map(|(n, tab, desc)| json!({ "name": n, "tab": tab, "description": desc })).collect();
+    Ok(json!({ "path": path, "layers": layers, "targets": targets }))
+}
+
 fn run_import(s: &mut Session, p: &Value) -> Result<Value> {
     let path = str_param(p, "path")
         .filter(|t| !t.trim().is_empty() && t.len() < 1024 && !t.contains('\0'))
@@ -231,10 +298,12 @@ fn run_import(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let (elevation, height) = (num(p, "elevation")?.unwrap_or(0.0), num(p, "height")?.unwrap_or(0.0));
     let ignore = bool_or(p, "ignoreUnits", false);
-    let src = load(&path)?;
+    let mut src = load(&path)?;
+    let map = layer_map(p)?;
     // Everything is done on a copy and put in place at the end, so a failure changes nothing.
     let mut d = s.doc()?.clone();
     take_units(&mut d, &src, &path, ignore)?;
+    remap_layers(&mut d, &mut src, &map);
     let objects = src.model.len();
     let given = |key: &str| p.get(key).filter(|v| !v.is_null());
     let out = if let Some(sv) = given("sheetSet") {

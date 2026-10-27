@@ -29,7 +29,7 @@ mod hatch;
 mod hcw;
 mod hcwlayers;
 mod inquiry;
-mod layer;
+pub mod layer;
 pub mod layout;
 mod legacytools;
 mod legend;

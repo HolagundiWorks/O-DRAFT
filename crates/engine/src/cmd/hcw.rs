@@ -228,7 +228,7 @@ pub(crate) fn drawing_units(d: &Drawing, cmd: &str, p: &Value) -> Result<Units> 
     if let Some(u) = str_param(p, "units") {
         return Units::parse(u).ok_or_else(|| bad(cmd, "`units` must be mm, cm, m, ft or in"));
     }
-    Ok(match d.header.i64("INSUNITS", 0) {
+    let from_header = match d.header.i64("INSUNITS", 0) {
         1 => Units::In,
         2 => Units::Ft,
         4 => Units::Mm,
@@ -236,7 +236,29 @@ pub(crate) fn drawing_units(d: &Drawing, cmd: &str, p: &Value) -> Result<Units> 
         6 => Units::M,
         _ if d.header.i64("MEASUREMENT", 0) == 1 => Units::Mm,
         _ => Units::In,
-    })
+    };
+    Ok(infer_from_extents(d, from_header))
+}
+
+/// Inches is the default of a drawing that never set its unit, so a metric plan often says inches.
+/// When the header gives inches or feet but the drawing would then be longer than 500 m, take the
+/// unit that makes it a building-sized drawing (millimetres, then centimetres, then metres). A unit
+/// the header states as metric is trusted as it is.
+fn infer_from_extents(d: &Drawing, header: Units) -> Units {
+    const LARGEST_PLAUSIBLE_M: f64 = 500.0;
+    const SMALLEST_PLAUSIBLE_M: f64 = 3.0;
+    if !matches!(header, Units::In | Units::Ft) {
+        return header;
+    }
+    let b = d.extents(&aad_doc::Space::Model);
+    let size = (b.max.x - b.min.x).max(b.max.y - b.min.y);
+    if !size.is_finite() || size <= 0.0 || size * header.metres() <= LARGEST_PLAUSIBLE_M {
+        return header;
+    }
+    [Units::Mm, Units::Cm, Units::M]
+        .into_iter()
+        .find(|u| (SMALLEST_PLAUSIBLE_M..=LARGEST_PLAUSIBLE_M).contains(&(size * u.metres())))
+        .unwrap_or(header)
 }
 
 /// Feet and inches of a length in inches, rounded to the inch: `12'-6"`.
