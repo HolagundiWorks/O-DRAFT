@@ -40,6 +40,35 @@ The attach and calibrate steps are single undo steps. The records are kept in th
 3. Draw the measure lines over the PDF on `MEASURE-FULLBRICK`, `MEASURE-COLUMN` and the other measure layers
    (osnap picks the PDF's line ends), run the `takeoff.*` tools, then `takeoff.record` as for any drawing.
 
+## Importing a PDF as geometry (`pdf.import`)
+
+`underlay.attach` is for measuring over a plan. `pdf.import {path, page?, at?, scale?, layers?, layer?, text?,
+fills?, lineweights?, curves?}` brings a page in as drawing objects instead, in one undo step:
+
+| PDF content | Becomes |
+|---|---|
+| stroked two-point path | `Line` |
+| stroked path, closed or ending where it began | `LwPolyline` (closed when it closes); a round closed shape (a dozen points from curves, two dozen from short lines, within 1% of a circle) is a `Circle` |
+| filled path | solid `Hatch` in the fill colour (a page-sized or white fill is the paper and is dropped) |
+| text shown with a simple font, or a font with a ToUnicode map | `Text` at its position, angle and colour; height is 0.72 of the em size |
+| optional-content group (what a CAD export writes for layers, O-Draft's own PDF export included) | the drawing layer of that name |
+
+Everything else sorts by pen colour onto layers named `PDF-RRGGBB` (`layers: "colour"`, or the fallback for
+paths outside any group); `layers: "single"` puts it all on `layer`. Black and white become colour 7, other
+colours are kept as true colours, and line widths become the nearest standard lineweight. A PDF has no real
+scale: the page arrives at `scale` (drawing millimetres per paper millimetre, default 1) and the result
+reminds the user to check a known dimension. Not imported: images and shadings, clipping, text in a composite
+font without a character map (counted in `skipped.text`), invisible OCR text. Curves are cut into line segments, so
+an arc or spline becomes a polyline. Text is placed from the font size alone (no glyph widths), so a string
+shown in pieces without repositioning can overlap.
+
+Verified by `apps/aad-cli/tests/pdf_import.rs` (a layered drawing plotted by O-Draft comes back on its layers
+with a line, a circle and a closed polyline; one undo step; colour and single-layer modes; text, a solid hatch,
+the scale and the insertion point on a hand-made page; bad requests change nothing) and the reader tests in
+`crates/io/src/pdfread.rs` (colours, optional-content names including UTF-16, text position, size, angle and
+word gaps, invisible text, ToUnicode `bfchar` and `bfrange`, hostile marked content and maps). It has not been run
+on PDFs written by other CAD programs.
+
 ## Tests
 
 `apps/aad-cli/tests/underlay.rs` (real PDF writer and reader): a plan is plotted to PDF, attached to a fresh
@@ -53,7 +82,7 @@ points under a transform, bad and truncated input is an error, a form that draws
 
 - **Scanned (raster) PDFs.** Showing an image as an underlay needs an image entity and a decoder; none exists.
   The command says so instead of drawing nothing.
-- Text on the PDF is not drawn, so a dimension printed in it has to be read by eye.
+- The underlay draws no text (use `pdf.import` below when the text is wanted as text).
 - A dialog or a pick-two-points prompt for calibration in the WinUI shell; today it is the JSON form (the
   menu entries run it with defaults and report what is missing).
 - Several pages of one PDF in one step (attach each page on its own layer).

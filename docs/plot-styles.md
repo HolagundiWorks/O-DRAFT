@@ -105,3 +105,21 @@ Binary `.ctb`/`.stb` files are not read. We haven't found a public specification
   is `ByLayer`. `ByBlock` isn't written, so it reads back as `ByLayer`.
 - Tables kept in the drawing travel in the `AAD_PLOTSTYLES` XRECORD (JSON) of the named
   object dictionary.
+
+## Layered and resolution exports
+
+- **PDF layers.** A PDF plot writes every drawing layer as an optional-content group (PDF 1.5, `/OCProperties`),
+  listed in the viewer's layer panel and hideable there. Each run of one layer is one marked-content section, so
+  the draw order is unchanged. `layers: false` writes a plain PDF 1.4. A layout viewport's model contents are one
+  group, `Viewport content`.
+- **SVG layers.** `export` to SVG, and a plot with `format: "svg"`, group each layer as `<g inkscape:groupmode="layer"
+  inkscape:label="NAME">` (one group per layer, in the order each layer first draws; `layers: false` keeps the exact
+  draw order in one run). A plot SVG is the sheet in points with the printable area as a clip.
+- **PNG at a resolution.** `export` with `format: "png"` and any of `layout`, `dpi`, `paper`, `landscape`, `fit`,
+  `scale`, `window`, `lineweights` renders the plot: the whole sheet at `dpi` (36 to 1200, default 150), in the
+  printed colours on white, with lineweights at their true width, and the resolution written to the file (`pHYs`)
+  so it opens at its paper size. An image over 16384 pixels a side or 100 megapixels is refused with the highest
+  `dpi` that would fit. Without those parameters a PNG is still the extents of model space at 2400 pixels wide.
+
+Verified by `crates/io/tests/layered_export.rs` and `apps/aad-cli/tests/export_layers.rs`. Not checked in a PDF
+viewer, Inkscape or an image editor: only parsed with lopdf and decoded with tiny-skia.

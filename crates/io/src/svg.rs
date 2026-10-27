@@ -15,6 +15,14 @@ pub fn export(d: &Drawing, space: &Space) -> String {
 /// Export showing exactly `window` (the `viewBox`; geometry outside it is clipped by the viewer),
 /// or the extents with a 2% margin when `window` is `None`.
 pub fn export_window(d: &Drawing, space: &Space, window: Option<Bounds2>) -> String {
+    export_layers(d, space, window, true)
+}
+
+/// Like [`export_window`]; with `layers` each drawing layer is a `<g>` group marked as an Inkscape
+/// layer (`inkscape:groupmode="layer"`, `inkscape:label` the layer name), so editors list and hide
+/// them. The groups are in the order each layer first draws; with `layers` off everything is drawn in
+/// the display list's exact order.
+pub fn export_layers(d: &Drawing, space: &Space, window: Option<Bounds2>, layers: bool) -> String {
     let list = aad_render::build(d, space, &aad_render::Options::default());
     let window = window.filter(|w| !w.is_empty());
     let b = window.unwrap_or(list.bounds);
@@ -24,17 +32,21 @@ pub fn export_window(d: &Drawing, space: &Space, window: Option<Bounds2>) -> Str
     let vw = w + 2.0 * m;
     let vh = h + 2.0 * m;
     let stroke = vw.max(vh) / 1500.0;
-    let mut s = String::new();
+    let index = layers.then(|| crate::layers::index(d, &list));
+    let mut bodies: Vec<String> = vec![String::new(); index.as_ref().map_or(1, |i| i.names.len().max(1))];
+    let mut head = String::new();
     let _ = write!(
-        s,
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {vw:.6} {vh:.6}" width="{:.0}" height="{:.0}"><rect width="100%" height="100%" fill="white"/>"#,
+        head,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 {vw:.6} {vh:.6}" width="{:.0}" height="{:.0}"><rect width="100%" height="100%" fill="white"/>"#,
         1600.0,
         1600.0 * vh / vw
     );
     let white = Rgb(255, 255, 255);
     let tx = |x: f64| x - x0;
     let ty = |y: f64| y1 - y;
-    for p in &list.prims {
+    for (pi, p) in list.prims.iter().enumerate() {
+        let g = index.as_ref().and_then(|i| i.of_prim.get(pi).copied()).unwrap_or(0).min(bodies.len() - 1);
+        let s = &mut bodies[g];
         let c = p.display_rgb(white).hex();
         let pts = list.points(p);
         match p.kind {
@@ -115,6 +127,93 @@ pub fn export_window(d: &Drawing, space: &Space, window: Option<Bounds2>) -> Str
             }
         }
     }
+    assemble(head, &bodies, index.as_ref().map(|i| i.names.as_slice()))
+}
+
+/// The document: the header, then either one group per layer or the bodies as one run.
+fn assemble(head: String, bodies: &[String], names: Option<&[String]>) -> String {
+    let mut s = head;
+    match names {
+        Some(names) => {
+            for (i, (name, body)) in names.iter().zip(bodies).enumerate() {
+                if body.is_empty() {
+                    continue;
+                }
+                let _ = write!(
+                    s,
+                    r#"<g id="{}" inkscape:groupmode="layer" inkscape:label="{}">{body}</g>"#,
+                    crate::layers::xml_id(name, i),
+                    crate::layers::xml_attr(name)
+                );
+            }
+        }
+        None => {
+            for b in bodies {
+                s.push_str(b);
+            }
+        }
+    }
     s.push_str("</svg>");
     s
+}
+
+/// An SVG of a plot of `space` as the PDF writer would lay it out: the sheet in points
+/// (`viewBox`, with `width` and `height` in millimetres), the drawing fitted, scaled and clipped to
+/// the printable area as set by `o`, and the layers as groups unless `o.layers` is `Some(false)`.
+pub fn plot(d: &Drawing, space: &Space, o: &crate::PdfOptions) -> crate::Result<String> {
+    let pr = crate::pdf::prepare(d, space, o)?;
+    let index = o.layers.unwrap_or(true).then(|| crate::layers::index(d, &pr.list));
+    let mut bodies: Vec<String> = vec![String::new(); index.as_ref().map_or(1, |i| i.names.len().max(1))];
+    let (w, h) = (pr.media.x, pr.media.y);
+    let fy = |y: f64| h - y;
+    for (pi, p) in pr.list.prims.iter().enumerate() {
+        let Some(shape) = crate::pdf::shape(p, &pr.list, &pr.map, &pr.clip_pt) else { continue };
+        let g = index.as_ref().and_then(|i| i.of_prim.get(pi).copied()).unwrap_or(0).min(bodies.len() - 1);
+        let s = &mut bodies[g];
+        match shape {
+            crate::pdf::Shape::Stroke { pts, rgb, width_pt } => {
+                let _ = write!(
+                    s,
+                    r#"<polyline fill="none" stroke="{}" stroke-width="{:.3}" stroke-linecap="round" stroke-linejoin="round" points=""#,
+                    rgb.hex(),
+                    width_pt.max(0.25)
+                );
+                for q in &pts {
+                    let _ = write!(s, "{:.3},{:.3} ", q.x, fy(q.y));
+                }
+                s.push_str(r#""/>"#);
+            }
+            crate::pdf::Shape::Fill { pts, rgb } => {
+                let _ = write!(s, r#"<path fill="{}" d=""#, rgb.hex());
+                for t in pts.chunks(3) {
+                    if let [a, b, c] = t {
+                        let _ = write!(s, "M{:.3} {:.3}L{:.3} {:.3}L{:.3} {:.3}Z", a.x, fy(a.y), b.x, fy(b.y), c.x, fy(c.y));
+                    }
+                }
+                s.push_str(r#""/>"#);
+            }
+            crate::pdf::Shape::Dot { at, size, rgb } => {
+                let _ = write!(s, r#"<circle cx="{:.3}" cy="{:.3}" r="{:.3}" fill="{}"/>"#, at.x, fy(at.y), size / 2.0, rgb.hex());
+            }
+        }
+    }
+    let mm = 25.4 / 72.0;
+    let mut head = String::new();
+    let _ = write!(
+        head,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 {w:.3} {h:.3}" width="{:.3}mm" height="{:.3}mm"><title>{}</title><defs><clipPath id="printable"><rect x="{:.3}" y="{:.3}" width="{:.3}" height="{:.3}"/></clipPath></defs><rect width="{w:.3}" height="{h:.3}" fill="white"/><g clip-path="url(#printable)">"#,
+        w * mm,
+        h * mm,
+        crate::layers::xml_attr(&pr.title),
+        pr.clip_pt.min.x,
+        fy(pr.clip_pt.max.y),
+        pr.clip_pt.width(),
+        pr.clip_pt.height()
+    );
+    let mut s = assemble(head, &bodies, index.as_ref().map(|i| i.names.as_slice()));
+    // The clip group opened in the header is closed before the root.
+    if let Some(at) = s.rfind("</svg>") {
+        s.insert_str(at, "</g>");
+    }
+    Ok(s)
 }

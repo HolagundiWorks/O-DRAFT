@@ -63,11 +63,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["File", "Print..."])
             .key("Cmd+P")
             .alias(&["print"])
-            .params("{path? (else returns base64 `data`), layout?: current|\"Model\", window?: [x0, y0, x1, y1] (model space: plot this rectangle, not the whole drawing), paper?, landscape?, fit?: bool, scale?, lineweights?: bool}")
+            .params("{path? (else returns base64 `data`), layout?: current|\"Model\", window?: [x0, y0, x1, y1] (model space: plot this rectangle, not the whole drawing), paper?, landscape?, fit?: bool, scale?, lineweights?: bool, layers?: bool (default true: each drawing layer is a PDF layer the viewer can hide)}")
             .noundo(),
         CommandSpec::new("exportpdf", "Export to PDF...", |s, p| run_plot(s, p, "exportpdf"))
             .menu(&["File", "Export to PDF..."])
-            .params("{path? (else returns base64 `data`), layout?, paper?, landscape?, fit?, lineweights?}")
+            .params("{path? (else returns base64 `data`), layout?, paper?, landscape?, fit?, lineweights?, layers?: bool (default true: PDF optional-content layers), format?: pdf|svg|png (default pdf), dpi? (png: dots per inch, 36-1200, default 150; the image is the whole sheet)}")
             .noundo(),
         CommandSpec::new("mspace", "Model Space (in viewport)", run_mspace)
             .alias(&["ms"])

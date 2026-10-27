@@ -417,7 +417,7 @@ fn hostile_export_window_is_an_error() {
 
 /// Structural sanity check of a PDF: header, object count, xref offsets pointing at `n 0 obj`.
 fn check_pdf(bytes: &[u8]) -> String {
-    assert!(bytes.starts_with(b"%PDF-1.4"));
+    assert!(bytes.starts_with(b"%PDF-1.4") || bytes.starts_with(b"%PDF-1.5"));
     let find = |pat: &[u8]| bytes.windows(pat.len()).position(|w| w == pat);
     let rfind = |pat: &[u8]| bytes.windows(pat.len()).rposition(|w| w == pat);
     let tail = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(64)..]).to_string();

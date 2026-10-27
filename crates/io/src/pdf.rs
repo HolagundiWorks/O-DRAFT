@@ -46,6 +46,9 @@ pub struct PdfOptions {
     /// Model space only: plot this rectangle (drawing units), fitted to the printable area,
     /// instead of the extents. Ignored for layouts.
     pub window: Option<Bounds2>,
+    /// Write each drawing layer as a PDF optional-content group (a layer the viewer can show or
+    /// hide). Default on.
+    pub layers: Option<bool>,
 }
 
 impl PdfOptions {
@@ -67,6 +70,7 @@ impl PdfOptions {
             compress: v.get("compress").and_then(Value::as_bool).unwrap_or(true),
             title: v.get("title").and_then(Value::as_str).unwrap_or("").to_string(),
             window: window_from_json(v),
+            layers: v.get("layers").and_then(Value::as_bool),
         }
     }
 }
@@ -116,22 +120,34 @@ pub fn page_for(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<PageSetup>
 
 /// World → paper-unit mapping: `p' = (p - from) * s + to`.
 #[derive(Clone, Copy)]
-struct Map {
-    from: Vec2,
-    s: f64,
-    to: Vec2,
+pub(crate) struct Map {
+    pub from: Vec2,
+    pub s: f64,
+    pub to: Vec2,
     /// Points per paper unit.
-    k: f64,
+    pub k: f64,
 }
 
 impl Map {
-    fn pt(&self, p: Vec2) -> Vec2 {
+    pub fn pt(&self, p: Vec2) -> Vec2 {
         ((p - self.from) * self.s + self.to) * self.k
     }
 }
 
-/// Write a one-page vector PDF of a space.
-pub fn pdf(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<Vec<u8>> {
+/// What a plot of one space needs, whatever the output format: the display list, where it lands on
+/// the sheet, and the sheet itself. Shared by the PDF, SVG and PNG writers so they fit, scale and
+/// clip alike.
+pub(crate) struct Prepared {
+    pub list: aad_render::DisplayList,
+    pub map: Map,
+    /// The sheet in points.
+    pub media: Vec2,
+    /// Where the drawing may be drawn, in points.
+    pub clip_pt: Bounds2,
+    pub title: String,
+}
+
+pub(crate) fn prepare(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<Prepared> {
     let page = page_for(d, space, o)?;
     let unit_mm = paper::paper_unit_mm(d);
     let sheet = Sheet::from_page(&page, unit_mm);
@@ -176,7 +192,6 @@ pub fn pdf(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<Vec<u8>> {
     } else {
         Bounds2::new(Vec2::ZERO, media)
     };
-    let content = content_stream(&list, &map, &clip_pt);
     let title = if o.title.is_empty() {
         match space {
             Space::Model => "Model".to_string(),
@@ -185,7 +200,16 @@ pub fn pdf(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<Vec<u8>> {
     } else {
         o.title.clone()
     };
-    Ok(assemble(media, content.as_bytes(), o.compress, &title))
+    Ok(Prepared { list, map, media, clip_pt, title })
+}
+
+/// Write a one-page vector PDF of a space.
+pub fn pdf(d: &Drawing, space: &Space, o: &PdfOptions) -> Result<Vec<u8>> {
+    let pr = prepare(d, space, o)?;
+    let layers = o.layers.unwrap_or(true).then(|| crate::layers::index(d, &pr.list));
+    let content = content_stream(&pr.list, &pr.map, &pr.clip_pt, layers.as_ref());
+    let names: &[String] = layers.as_ref().map_or(&[], |l| l.names.as_slice());
+    Ok(assemble(pr.media, content.as_bytes(), o.compress, &pr.title, names))
 }
 
 /// Paper units per drawing unit for a plot.
@@ -237,8 +261,78 @@ fn color(out: &mut String, c: Rgb, op: &str) {
     out.push('\n');
 }
 
-fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) -> String {
+/// One drawn primitive in sheet points, ready for any writer.
+pub(crate) enum Shape {
+    /// An open polyline (lines, tessellated arcs and ellipses, clipped infinite lines).
+    Stroke { pts: Vec<Vec2>, rgb: Rgb, width_pt: f64 },
+    /// Filled triangles, three points each (solid fills; a wipeout's mask is paper white).
+    Fill { pts: Vec<Vec2>, rgb: Rgb },
+    /// A point marker: its centre and full size.
+    Dot { at: Vec2, size: f64, rgb: Rgb },
+}
+
+/// The shape of primitive `p` on the sheet; `None` for one that draws nothing (not finite, fewer
+/// than two points, off the clip).
+pub(crate) fn shape(p: &aad_render::DPrim, list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) -> Option<Shape> {
     let white = Rgb(255, 255, 255);
+    let rgb = p.display_rgb(white);
+    let raw = list.points(p);
+    if raw.iter().any(|q| !q.is_finite()) {
+        return None;
+    }
+    let w = f64::from(p.lw) * PT_PER_MM;
+    let width_pt = if w.is_finite() && w > 0.0 { w.min(100.0) } else { 0.0 };
+    match p.kind {
+        Kind::Polyline | Kind::Arc { .. } | Kind::Ellipse { .. } | Kind::Infinite { .. } => {
+            let pts: Vec<Vec2> = match p.kind {
+                Kind::Infinite { ray } => {
+                    let (base, dir) = (raw.first()?, raw.get(1)?);
+                    let a = map.pt(*base);
+                    let dir_pt = map.pt(*base + *dir) - a;
+                    let (x, y) = clip::clip_infinite(a, dir_pt, ray, clip_pt)?;
+                    vec![x, y]
+                }
+                Kind::Arc { sweep } => {
+                    let (center, rim) = (raw.first()?, raw.get(1)?);
+                    let radius = center.dist(*rim);
+                    let start = center.angle_to(*rim);
+                    let mut tess = Vec::new();
+                    aad_geom::Arc::new(*center, radius, start, start + aad_render::sweep_radians(sweep))
+                        .tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                    tess.iter().map(|q| map.pt(*q)).collect()
+                }
+                Kind::Ellipse { start, sweep } => {
+                    let (center, u_tip, v_tip) = (raw.first()?, raw.get(1)?, raw.get(2)?);
+                    let u = *u_tip - *center;
+                    let v = *v_tip - *center;
+                    let sw = aad_render::sweep_radians(sweep);
+                    let a0 = f64::from(start);
+                    let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
+                    (0..=n)
+                        .map(|i| {
+                            let t = a0 + sw * i as f64 / n as f64;
+                            map.pt(*center + u * t.cos() + v * t.sin())
+                        })
+                        .collect()
+                }
+                _ => raw.iter().map(|q| map.pt(*q)).collect(),
+            };
+            (pts.len() >= 2).then_some(Shape::Stroke { pts, rgb, width_pt })
+        }
+        Kind::Tris | Kind::Mask => {
+            // A wipeout's mask is paper white.
+            let rgb = if p.kind == Kind::Mask { white } else { rgb };
+            let pts: Vec<Vec2> = raw.as_chunks::<3>().0.iter().flatten().map(|q| map.pt(*q)).collect();
+            (!pts.is_empty()).then_some(Shape::Fill { pts, rgb })
+        }
+        Kind::Point => {
+            let q = raw.first()?;
+            Some(Shape::Dot { at: map.pt(*q), size: width_pt.max(0.5), rgb })
+        }
+    }
+}
+
+fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2, layers: Option<&crate::layers::LayerIndex>) -> String {
     let mut c = String::new();
     c.push_str("q\n1 J 1 j\n");
     // Clip to the plot area.
@@ -252,76 +346,39 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
     let mut fill: Option<Rgb> = None;
     let mut width: Option<f64> = None;
     let mut pending = false;
+    let mut open_group: Option<usize> = None;
     let flush = |c: &mut String, pending: &mut bool| {
         if *pending {
             c.push_str("S\n");
             *pending = false;
         }
     };
-    for p in &list.prims {
-        let rgb = p.display_rgb(white);
-        let raw = list.points(p);
-        if raw.iter().any(|q| !q.is_finite()) {
-            continue;
-        }
-        let w = f64::from(p.lw) * PT_PER_MM;
-        let w = if w.is_finite() && w > 0.0 { w.min(100.0) } else { 0.0 };
-        match p.kind {
-            Kind::Polyline | Kind::Arc { .. } | Kind::Ellipse { .. } | Kind::Infinite { .. } => {
-                let pts: Vec<Vec2> = match p.kind {
-                    Kind::Infinite { ray } => match (raw.first(), raw.get(1)) {
-                        (Some(base), Some(dir)) => {
-                            let a = map.pt(*base);
-                            let dir_pt = map.pt(*base + *dir) - a;
-                            match clip::clip_infinite(a, dir_pt, ray, clip_pt) {
-                                Some((x, y)) => vec![x, y],
-                                None => continue,
-                            }
-                        }
-                        _ => continue,
-                    },
-                    Kind::Arc { sweep } => match (raw.first(), raw.get(1)) {
-                        (Some(center), Some(rim)) => {
-                            let radius = center.dist(*rim);
-                            let start = center.angle_to(*rim);
-                            let mut tess = Vec::new();
-                            aad_geom::Arc::new(*center, radius, start, start + aad_render::sweep_radians(sweep))
-                                .tessellate((radius * 1e-3).max(1e-6), &mut tess);
-                            tess.iter().map(|q| map.pt(*q)).collect()
-                        }
-                        _ => continue,
-                    },
-                    Kind::Ellipse { start, sweep } => match (raw.first(), raw.get(1), raw.get(2)) {
-                        (Some(center), Some(u_tip), Some(v_tip)) => {
-                            let u = *u_tip - *center;
-                            let v = *v_tip - *center;
-                            let sw = aad_render::sweep_radians(sweep);
-                            let a0 = f64::from(start);
-                            let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
-                            (0..=n)
-                                .map(|i| {
-                                    let t = a0 + sw * i as f64 / n as f64;
-                                    map.pt(*center + u * t.cos() + v * t.sin())
-                                })
-                                .collect()
-                        }
-                        _ => continue,
-                    },
-                    _ => raw.iter().map(|q| map.pt(*q)).collect(),
-                };
-                if pts.len() < 2 {
-                    continue;
+    for (i, p) in list.prims.iter().enumerate() {
+        let Some(shape) = shape(p, list, map, clip_pt) else { continue };
+        if let Some(ix) = layers {
+            // Each run of one layer is one marked-content section, so the draw order is kept.
+            let g = ix.of_prim.get(i).copied().unwrap_or(0);
+            if open_group != Some(g) {
+                flush(&mut c, &mut pending);
+                if open_group.is_some() {
+                    c.push_str("EMC\n");
                 }
-                if stroke != Some(rgb) || width != Some(w) {
+                let _ = writeln!(c, "/OC /L{g} BDC");
+                open_group = Some(g);
+            }
+        }
+        match shape {
+            Shape::Stroke { pts, rgb, width_pt } => {
+                if stroke != Some(rgb) || width != Some(width_pt) {
                     flush(&mut c, &mut pending);
                     if stroke != Some(rgb) {
                         color(&mut c, rgb, "RG");
                         stroke = Some(rgb);
                     }
-                    if width != Some(w) {
-                        num(&mut c, w);
+                    if width != Some(width_pt) {
+                        num(&mut c, width_pt);
                         c.push_str(" w\n");
-                        width = Some(w);
+                        width = Some(width_pt);
                     }
                 }
                 for (i, q) in pts.iter().enumerate() {
@@ -330,36 +387,29 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
                 }
                 pending = true;
             }
-            Kind::Tris | Kind::Mask => {
+            Shape::Fill { pts, rgb } => {
                 flush(&mut c, &mut pending);
-                // A wipeout's mask is paper white.
-                let rgb = if p.kind == Kind::Mask { white } else { rgb };
                 if fill != Some(rgb) {
                     color(&mut c, rgb, "rg");
                     fill = Some(rgb);
                 }
-                let mut any = false;
-                for t in raw.as_chunks::<3>().0 {
+                for t in pts.chunks(3) {
                     for (i, q) in t.iter().enumerate() {
-                        pt(&mut c, map.pt(*q));
+                        pt(&mut c, *q);
                         c.push_str(if i == 0 { " m\n" } else { " l\n" });
                     }
                     c.push_str("h\n");
-                    any = true;
                 }
-                if any {
-                    c.push_str("f\n");
-                }
+                c.push_str("f\n");
             }
-            Kind::Point => {
-                let Some(q) = raw.first() else { continue };
+            Shape::Dot { at, size, rgb } => {
                 flush(&mut c, &mut pending);
                 if fill != Some(rgb) {
                     color(&mut c, rgb, "rg");
                     fill = Some(rgb);
                 }
-                let half = (w.max(0.5)) / 2.0;
-                pt(&mut c, map.pt(*q) - Vec2::new(half, half));
+                let half = size / 2.0;
+                pt(&mut c, at - Vec2::new(half, half));
                 c.push(' ');
                 num(&mut c, half * 2.0);
                 c.push(' ');
@@ -369,6 +419,9 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
         }
     }
     flush(&mut c, &mut pending);
+    if open_group.is_some() {
+        c.push_str("EMC\n");
+    }
     c.push_str("Q\n");
     c
 }
@@ -390,10 +443,26 @@ fn pdf_string(s: &str) -> String {
     out
 }
 
-/// Assemble the file: header, five objects, cross-reference table and trailer.
-fn assemble(media: Vec2, content: &[u8], compress: bool, title: &str) -> Vec<u8> {
+/// A PDF text string (UTF-16BE with a byte-order mark when it is not plain ASCII), for layer names.
+fn pdf_text(s: &str) -> String {
+    let s: String = s.chars().filter(|c| !c.is_control()).take(120).collect();
+    if s.is_ascii() {
+        return pdf_string(&s);
+    }
+    let mut out = String::from("<FEFF");
+    for u in s.encode_utf16() {
+        let _ = write!(out, "{u:04X}");
+    }
+    out.push('>');
+    out
+}
+
+/// Assemble the file: header, the catalog, the page tree, the page, its content, the info
+/// dictionary, one optional-content group per layer, then the cross-reference table and trailer.
+fn assemble(media: Vec2, content: &[u8], compress: bool, title: &str, layers: &[String]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::with_capacity(content.len() + 1024);
-    out.extend_from_slice(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+    // Optional content needs PDF 1.5.
+    out.extend_from_slice(if layers.is_empty() { b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n" } else { b"%PDF-1.5\n%\xE2\xE3\xCF\xD3\n" });
     let mut offsets: Vec<usize> = Vec::new();
     let mut obj = |out: &mut Vec<u8>, body: &[u8]| {
         offsets.push(out.len());
@@ -402,13 +471,26 @@ fn assemble(media: Vec2, content: &[u8], compress: bool, title: &str) -> Vec<u8>
         out.extend_from_slice(body);
         out.extend_from_slice(b"\nendobj\n");
     };
-    obj(&mut out, b"<< /Type /Catalog /Pages 2 0 R >>");
+    // Objects 1-5 are fixed; the groups follow as 6, 7, ...
+    let group_refs: Vec<String> = (0..layers.len()).map(|i| format!("{} 0 R", 6 + i)).collect();
+    if layers.is_empty() {
+        obj(&mut out, b"<< /Type /Catalog /Pages 2 0 R >>");
+    } else {
+        let all = group_refs.join(" ");
+        obj(&mut out, format!("<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [{all}] /D << /Order [{all}] /ON [{all}] >> >> >>").as_bytes());
+    }
     obj(&mut out, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
     let mut mb = String::new();
     num(&mut mb, media.x);
     mb.push(' ');
     num(&mut mb, media.y);
-    obj(&mut out, format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {mb}] /Resources << >> /Contents 4 0 R >>").as_bytes());
+    let resources = if layers.is_empty() {
+        "<< >>".to_string()
+    } else {
+        let props: String = group_refs.iter().enumerate().map(|(i, r)| format!("/L{i} {r} ")).collect();
+        format!("<< /Properties << {props}>> >>")
+    };
+    obj(&mut out, format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {mb}] /Resources {resources} /Contents 4 0 R >>").as_bytes());
     let (data, filter) =
         if compress { (miniz_oxide::deflate::compress_to_vec_zlib(content, 6), " /Filter /FlateDecode") } else { (content.to_vec(), "") };
     let mut stream = format!("<< /Length {}{filter} >>\nstream\n", data.len()).into_bytes();
@@ -416,6 +498,9 @@ fn assemble(media: Vec2, content: &[u8], compress: bool, title: &str) -> Vec<u8>
     stream.extend_from_slice(b"\nendstream");
     obj(&mut out, &stream);
     obj(&mut out, format!("<< /Producer (AAD) /Creator (AAD) /Title {} >>", pdf_string(title)).as_bytes());
+    for name in layers {
+        obj(&mut out, format!("<< /Type /OCG /Name {} >>", pdf_text(name)).as_bytes());
+    }
     let xref = out.len();
     let mut x = format!("xref\n0 {}\n0000000000 65535 f \n", offsets.len() + 1);
     for o in &offsets {

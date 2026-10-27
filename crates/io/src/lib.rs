@@ -6,6 +6,7 @@ mod dxf_ext;
 mod dxf_image;
 mod dxf_read;
 mod dxf_write;
+mod layers;
 mod levels_file;
 pub mod pdf;
 #[cfg(not(target_arch = "wasm32"))]
@@ -15,7 +16,7 @@ pub mod svg;
 use aad_doc::{Drawing, Space};
 use aad_geom::Bounds2;
 
-pub use pdf::{PdfOptions, pdf, plot};
+pub use pdf::{PdfOptions, pdf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum IoError {
@@ -96,6 +97,110 @@ pub fn check_window(w: &Bounds2) -> Result<()> {
         return Err(IoError::Format(format!("export window: width and height must be positive (got {width} x {height})")));
     }
     Ok(())
+}
+
+/// Plot a space with JSON options (the engine's `plot` hook). `format` picks the output: `pdf`
+/// (default), `svg` or `png` (with `dpi`, default 150). All three lay the sheet out alike
+/// (`paper`, `landscape`, `fit`, `scale`, `window`, `lineweights`, `plotStyleTable`); `layers`
+/// (default on) keeps the drawing layers as PDF optional-content groups or SVG layer groups.
+pub fn plot(d: &Drawing, space: &Space, opts: &serde_json::Value) -> Result<Vec<u8>> {
+    let o = PdfOptions::from_json(opts);
+    match opts.get("format").and_then(serde_json::Value::as_str).map(str::to_ascii_lowercase).as_deref() {
+        None | Some("pdf") => pdf::pdf(d, space, &o),
+        Some("svg") => svg::plot(d, space, &o).map(String::into_bytes),
+        Some("png") => {
+            let dpi = match opts.get("dpi") {
+                None | Some(serde_json::Value::Null) => 150.0,
+                Some(v) => v.as_f64().ok_or_else(|| IoError::Format("`dpi` must be a number".into()))?,
+            };
+            png_at_dpi(d, space, &o, dpi)
+        }
+        Some(other) => Err(IoError::Format(format!("unknown plot format `{other}` (pdf, svg, png)"))),
+    }
+}
+
+/// Lowest and highest dots per inch a raster export accepts.
+pub const DPI_RANGE: (f64, f64) = (36.0, 1200.0);
+/// Most pixels along one side of a raster export (the rasteriser's limit).
+const MAX_SIDE_PX: f64 = 16384.0;
+/// Most pixels in a raster export (about 400 MB of RGBA).
+const MAX_PIXELS: f64 = 100_000_000.0;
+
+/// Render a plot of `space` (a layout at its paper size, or model space fitted to a sheet) to PNG at
+/// `dpi` dots per inch: the image is the whole sheet, `paper size / 25.4 * dpi` pixels, drawn with
+/// the printed colours on white and the lineweights at their true width. The file records the
+/// resolution (`pHYs`), so it opens at its paper size in viewers and page-layout programs.
+pub fn png_at_dpi(d: &Drawing, space: &Space, o: &PdfOptions, dpi: f64) -> Result<Vec<u8>> {
+    if !dpi.is_finite() || dpi < DPI_RANGE.0 || dpi > DPI_RANGE.1 {
+        return Err(IoError::Format(format!("`dpi` must be between {} and {}", DPI_RANGE.0, DPI_RANGE.1)));
+    }
+    let pr = pdf::prepare(d, space, o)?;
+    // Sheet points -> pixels.
+    let px_per_pt = dpi / 72.0;
+    let (w, h) = ((pr.media.x * px_per_pt).round(), (pr.media.y * px_per_pt).round());
+    if !(w >= 1.0 && h >= 1.0) || w > MAX_SIDE_PX || h > MAX_SIDE_PX || w * h > MAX_PIXELS {
+        let side = pr.media.x.max(pr.media.y) / 72.0;
+        let max_dpi = (MAX_SIDE_PX / side.max(1e-9)).min((MAX_PIXELS / (pr.media.x * pr.media.y / 5184.0).max(1e-9)).sqrt());
+        return Err(IoError::Format(format!(
+            "a {:.0} x {:.0} px image is too large ({:.0} megapixels at most, {:.0} px per side); at most {:.0} dpi for this sheet",
+            w,
+            h,
+            MAX_PIXELS / 1e6,
+            MAX_SIDE_PX,
+            max_dpi.floor().max(DPI_RANGE.0)
+        )));
+    }
+    let (w, h) = (w as u32, h as u32);
+    // The world point at the image centre and pixels per drawing unit, from the plot's own mapping.
+    let m = pr.map;
+    let center = m.from + (pr.media / 2.0 / m.k - m.to) / m.s;
+    let view = aad_render::raster::View { center, scale: m.s * m.k * px_per_pt, width: w, height: h };
+    let px_per_mm = (dpi / 25.4) as f32;
+    let opts = aad_render::raster::RasterOptions {
+        background: aad_color::Rgb(255, 255, 255),
+        hairline: (px_per_mm * 0.1).max(1.0),
+        px_per_mm,
+        antialias: true,
+    };
+    let png = aad_render::raster::render_png(&pr.list, &view, &opts).ok_or_else(|| IoError::Format("render failed".into()))?;
+    Ok(with_resolution(png, dpi))
+}
+
+/// `png` with a `pHYs` chunk giving `dpi` dots per inch (inserted after the header chunk); the bytes
+/// are returned unchanged when they are not a PNG.
+fn with_resolution(png: Vec<u8>, dpi: f64) -> Vec<u8> {
+    const SIGNATURE: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    // Signature (8) + IHDR chunk (4 length + 4 type + 13 data + 4 crc).
+    const AFTER_IHDR: usize = 8 + 25;
+    if png.len() < AFTER_IHDR || !png.starts_with(SIGNATURE) || &png[12..16] != b"IHDR" {
+        return png;
+    }
+    let per_metre = (dpi / 0.0254).round().clamp(1.0, f64::from(u32::MAX)) as u32;
+    let mut chunk = Vec::with_capacity(21);
+    chunk.extend_from_slice(&9u32.to_be_bytes());
+    chunk.extend_from_slice(b"pHYs");
+    chunk.extend_from_slice(&per_metre.to_be_bytes());
+    chunk.extend_from_slice(&per_metre.to_be_bytes());
+    chunk.push(1); // metres
+    let crc = crc32(&chunk[4..]);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    let mut out = Vec::with_capacity(png.len() + chunk.len());
+    out.extend_from_slice(&png[..AFTER_IHDR]);
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&png[AFTER_IHDR..]);
+    out
+}
+
+/// CRC-32 (the PNG chunk checksum).
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in data {
+        crc ^= u32::from(b);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+        }
+    }
+    !crc
 }
 
 /// Render a space to PNG, fitted to its extents.

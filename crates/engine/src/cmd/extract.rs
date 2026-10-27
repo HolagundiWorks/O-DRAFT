@@ -20,7 +20,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["File", "Export..."])
             .params(
                 "{format?: dxf|dwg|pdf|png|svg|csv (default from path, else dxf), path? (else returns base64 `data`), \
-                 layout?, paper?, landscape?, fit?, lineweights?} → {path?|data, bytes, format}",
+                 layout?, paper?, landscape?, fit?, scale?, window?, lineweights?, layers? (pdf and svg: keep the drawing layers as layers, default true),                  dpi? (png: 36-1200; with `layout`, `dpi` or a sheet setting the image is the whole sheet at that resolution)} → {path?|data, bytes, format}",
             )
             .noundo(),
         CommandSpec::new("eattext", "Extract Attributes", run_eattext)
@@ -119,6 +119,22 @@ fn run_export(s: &mut Session, p: &Value) -> Result<Value> {
             let mut plot_p = p.clone();
             if let Some(o) = plot_p.as_object_mut() {
                 o.remove("format");
+            }
+            s.execute("exportpdf", &plot_p)
+        }
+        // A layout, a resolution or a sheet setting asks for the plot's page layout (the whole sheet,
+        // the layout's scale, true lineweights) rather than the extents of model space.
+        "png" | "svg"
+            if ["layout", "dpi", "paper", "landscape", "fit", "scale", "window", "lineweights"]
+                .iter()
+                .any(|k| p.get(*k).is_some_and(|v| !v.is_null())) =>
+        {
+            let mut plot_p = p.clone();
+            if let Some(o) = plot_p.as_object_mut() {
+                o.insert("format".into(), json!(format));
+                if format == "svg" {
+                    o.remove("dpi");
+                }
             }
             s.execute("exportpdf", &plot_p)
         }
