@@ -5,7 +5,7 @@
 //! no explicit levels is one implicit level; the first `level.new` makes it explicit, named after
 //! the current floor (else `Level 1`), and adds the new level after it.
 
-use aad_doc::{Level, LevelId, MAX_LEVELS};
+use aad_doc::{Level, LevelId, MAX_LEVELS, Trace, TraceColour, TraceOrder};
 use serde_json::{Value, json};
 
 use super::project;
@@ -27,6 +27,9 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("level.delete", "Delete Level", run_delete)
             .menu(&["Architecture", "Levels", "Delete Level"])
             .params("{level, force? (delete although objects or traces are on it)} → {deleted, active}"),
+        CommandSpec::new("level.trace", "Trace Levels", run_trace)
+            .menu(&["Architecture", "Levels", "Trace"])
+            .params("{level? (default the active one), add? (level or list), remove? (level or list), set? (an existing traced level to edit), fade? 0..90, colour? grey|true, order? below|above, snap? bool, layers? [names] | null (all)} → {level, traces}. A trace shows another level read-only and faded under (or over) this one; settings apply to each added trace and to `set`."),
         CommandSpec::new("level.moveto", "Move to Level", run_moveto)
             .menu(&["Architecture", "Levels", "Move to Level"])
             .params("{level, handles? (default the selection)} → {moved}. Moves objects of the active level to another level at the same coordinates."),
@@ -36,6 +39,14 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("level.fromfloors", "Levels from Floors", run_fromfloors)
             .menu(&["Architecture", "Levels", "Levels from Floors"])
             .params("{} → {created: [names], levels}. Adds an empty level for each floor of the project data that has none; elevation is the sum of the floor heights below it."),
+        CommandSpec::new("level.next", "Next Level", run_next)
+            .menu(&["Architecture", "Levels", "Next Level"])
+            .key("Cmd+PageDown")
+            .params("{} → {active, objects}. Activates the level after the active one (the last wraps to the first)."),
+        CommandSpec::new("level.prev", "Previous Level", run_prev)
+            .menu(&["Architecture", "Levels", "Previous Level"])
+            .key("Cmd+PageUp")
+            .params("{} → {active, objects}. Activates the level before the active one (the first wraps to the last)."),
         CommandSpec::new("level.activate", "Activate Level", run_activate)
             .menu(&["Architecture", "Levels", "Activate Level"])
             .alias(&["levelactivate"])
@@ -186,6 +197,25 @@ fn run_delete(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let d = s.doc()?;
     Ok(json!({ "deleted": name, "active": d.active_level_ref().map(|l| l.name.clone()) }))
+}
+
+fn step(s: &mut Session, cmd: &str, delta: isize) -> Result<Value> {
+    let d = s.doc()?;
+    if d.levels.len() < 2 {
+        return Err(bad(cmd, "the drawing has fewer than two levels"));
+    }
+    let n = d.levels.len() as isize;
+    let at = d.levels.iter().position(|l| Some(l.id) == d.active_level).unwrap_or(0) as isize;
+    let to = d.levels.get((at + delta).rem_euclid(n) as usize).map(|l| l.id).ok_or_else(|| bad(cmd, "no such level"))?;
+    run_activate(s, &json!({ "level": to.0 }))
+}
+
+fn run_next(s: &mut Session, _p: &Value) -> Result<Value> {
+    step(s, "level.next", 1)
+}
+
+fn run_prev(s: &mut Session, _p: &Value) -> Result<Value> {
+    step(s, "level.prev", -1)
 }
 
 fn run_activate(s: &mut Session, p: &Value) -> Result<Value> {
@@ -352,4 +382,104 @@ fn run_fromfloors(s: &mut Session, _p: &Value) -> Result<Value> {
         created.push(name.to_string());
     }
     Ok(json!({ "created": created, "levels": all(d) }))
+}
+
+/// Levels named by a single value or a list, resolved to ids (at most `MAX_LEVELS`).
+fn level_refs(s: &Session, cmd: &str, p: &Value, key: &str) -> Result<Vec<LevelId>> {
+    let Some(v) = p.get(key).filter(|v| !v.is_null()) else { return Ok(Vec::new()) };
+    let items: Vec<&Value> = match v.as_array() {
+        Some(a) if a.len() <= MAX_LEVELS => a.iter().collect(),
+        Some(_) => return Err(bad(cmd, format!("`{key}` lists too many levels"))),
+        None => vec![v],
+    };
+    items.into_iter().map(|i| find(s, cmd, &json!({ "level": i }), "level")).collect()
+}
+
+/// Apply the trace settings given in `p` to `t`.
+fn apply_trace_settings(t: &mut Trace, p: &Value) -> Result<()> {
+    const CMD: &str = "level.trace";
+    if let Some(v) = p.get("fade").filter(|v| !v.is_null()) {
+        let n = v.as_u64().filter(|n| *n <= 90).ok_or_else(|| bad(CMD, "`fade` is a whole number from 0 to 90 (percent)"))?;
+        t.fade = n as u8;
+    }
+    if let Some(c) = str_param(p, "colour").or_else(|| str_param(p, "color")) {
+        t.colour = match c.to_ascii_lowercase().as_str() {
+            "grey" | "gray" => TraceColour::Grey,
+            "true" | "truecolour" | "truecolor" => TraceColour::TrueColour,
+            _ => return Err(bad(CMD, "`colour` is `grey` or `true`")),
+        };
+    }
+    if let Some(o) = str_param(p, "order") {
+        t.order = match o.to_ascii_lowercase().as_str() {
+            "below" => TraceOrder::Below,
+            "above" => TraceOrder::Above,
+            _ => return Err(bad(CMD, "`order` is `below` or `above`")),
+        };
+    }
+    if let Some(v) = p.get("snap").filter(|v| !v.is_null()) {
+        t.snap = v.as_bool().ok_or_else(|| bad(CMD, "`snap` is true or false"))?;
+    }
+    match p.get("layers") {
+        None => {}
+        Some(Value::Null) => t.layers = None,
+        Some(Value::Array(a)) if a.len() <= 256 => {
+            let names: Option<Vec<String>> = a.iter().map(|v| v.as_str().filter(|n| n.chars().count() <= 255).map(str::to_string)).collect();
+            t.layers = Some(names.ok_or_else(|| bad(CMD, "`layers` is a list of layer names"))?);
+        }
+        Some(_) => return Err(bad(CMD, "`layers` is a list of at most 256 layer names, or null for all")),
+    }
+    Ok(())
+}
+
+fn trace_json(d: &aad_doc::Drawing, t: &Trace) -> Value {
+    json!({
+        "level": t.level.0, "name": d.level(t.level).map(|l| l.name.clone()), "fade": t.fade,
+        "colour": if t.colour == TraceColour::Grey { "grey" } else { "true" },
+        "order": if t.order == TraceOrder::Below { "below" } else { "above" },
+        "snap": t.snap, "layers": t.layers,
+    })
+}
+
+fn run_trace(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "level.trace";
+    if !s.doc()?.has_levels() {
+        return Err(bad(CMD, "the drawing has one level; add another with level.new first"));
+    }
+    let on = if p.get("level").is_some_and(|v| !v.is_null()) {
+        find(s, CMD, p, "level")?
+    } else {
+        s.doc()?.active_level.ok_or_else(|| bad(CMD, "no active level"))?
+    };
+    let add = level_refs(s, CMD, p, "add")?;
+    let remove = level_refs(s, CMD, p, "remove")?;
+    let set = level_refs(s, CMD, p, "set")?;
+    // Work out every trace first so a bad parameter changes nothing.
+    let existing = |id: LevelId| s.doc().ok().and_then(|d| d.level(on)).and_then(|l| l.traces.iter().find(|t| t.level == id).cloned());
+    let mut new_traces = Vec::new();
+    for id in add {
+        let mut t = existing(id).unwrap_or_else(|| Trace::new(id));
+        apply_trace_settings(&mut t, p)?;
+        new_traces.push(t);
+    }
+    for id in set {
+        let mut t = existing(id).ok_or_else(|| bad(CMD, "that level is not traced yet; use `add`"))?;
+        apply_trace_settings(&mut t, p)?;
+        new_traces.push(t);
+    }
+    // Apply to a scratch copy first, so a refused change (the cap, a bad level) leaves the
+    // drawing exactly as it was.
+    let mut scratch = s.doc()?.clone();
+    for id in remove {
+        scratch.remove_trace(on, id);
+    }
+    for t in new_traces {
+        scratch.set_trace(on, t)?;
+    }
+    let result = scratch.level(on).map(|l| l.traces.clone()).unwrap_or_default();
+    let d = s.doc_mut()?;
+    if let Some(l) = d.levels.iter_mut().find(|l| l.id == on) {
+        l.traces = result;
+    }
+    let traces: Vec<Value> = d.level(on).map(|l| l.traces.iter().map(|t| trace_json(d, t)).collect()).unwrap_or_default();
+    Ok(json!({ "level": d.level(on).map(|l| l.name.clone()), "traces": traces }))
 }

@@ -2885,6 +2885,8 @@ public sealed partial class MainWindow : Window
             "ENTER" or "RETURN" => Windows.System.VirtualKey.Enter,
             "SPACE" => Windows.System.VirtualKey.Space,
             "TAB" => Windows.System.VirtualKey.Tab,
+            "PAGEUP" => Windows.System.VirtualKey.PageUp,
+            "PAGEDOWN" => Windows.System.VirtualKey.PageDown,
             "F1" => Windows.System.VirtualKey.F1,
             "F2" => Windows.System.VirtualKey.F2,
             "F3" => Windows.System.VirtualKey.F3,

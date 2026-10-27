@@ -237,6 +237,38 @@ impl Drawing {
         Ok(())
     }
 
+    /// Add a trace of `trace.level` to `on`, or replace the existing trace of that level.
+    /// A level cannot trace itself, and one level has at most [`MAX_TRACES`] traces.
+    pub fn set_trace(&mut self, on: LevelId, trace: Trace) -> Result<()> {
+        if on == trace.level {
+            return Err(invalid("a level cannot trace itself"));
+        }
+        if trace.fade > 90 {
+            return Err(invalid("fade is 0 to 90 percent"));
+        }
+        if self.level(trace.level).is_none() {
+            return Err(invalid("no such level to trace"));
+        }
+        let l = self.levels.iter_mut().find(|l| l.id == on).ok_or_else(|| invalid("no such level"))?;
+        if let Some(t) = l.traces.iter_mut().find(|t| t.level == trace.level) {
+            *t = trace;
+            return Ok(());
+        }
+        if l.traces.len() >= MAX_TRACES {
+            return Err(invalid(format!("at most {MAX_TRACES} traces on a level")));
+        }
+        l.traces.push(trace);
+        Ok(())
+    }
+
+    /// Remove the trace of `of` from `on`; returns whether there was one.
+    pub fn remove_trace(&mut self, on: LevelId, of: LevelId) -> bool {
+        let Some(l) = self.levels.iter_mut().find(|l| l.id == on) else { return false };
+        let n = l.traces.len();
+        l.traces.retain(|t| t.level != of);
+        l.traces.len() != n
+    }
+
     /// Whether any other level traces `id`.
     pub fn level_is_traced(&self, id: LevelId) -> bool {
         self.levels.iter().any(|l| l.id != id && l.traces.iter().any(|t| t.level == id))

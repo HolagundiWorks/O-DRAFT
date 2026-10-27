@@ -78,6 +78,21 @@ impl Default for FrameCache {
     }
 }
 
+/// Whether the level being edited traces other levels.
+fn has_traces(doc: &Drawing) -> bool {
+    doc.active_level_ref().is_some_and(|l| !l.traces.is_empty())
+}
+
+/// The display list of `space`; model space of a level with traces is built with its traces,
+/// faded towards `background`.
+fn build_list(doc: &Drawing, space: &Space, opts: &aad_render::Options, background: Rgb) -> DisplayList {
+    if matches!(space, Space::Model) && has_traces(doc) {
+        aad_render::build_with_traces(doc, opts, background)
+    } else {
+        aad_render::build(doc, space, opts)
+    }
+}
+
 fn space_fp(space: &Space) -> u64 {
     match space {
         Space::Model => 0,
@@ -893,6 +908,10 @@ impl Host {
     pub fn set_dark(&mut self, dark: bool) -> Result<(), String> {
         // Always store the preference — exclusive() can no-op while a redraw is in flight,
         // which previously left the GPU paper black under a light WinUI shell.
+        if self.dark != dark && self.session.doc().is_ok_and(has_traces) {
+            // Traces are faded towards the background colour, so the list must be rebuilt.
+            self.frame.list = None;
+        }
         self.dark = dark;
         self.exclusive(|host| host.present_if_ready())
     }
@@ -1803,6 +1822,7 @@ impl Host {
             plot_style_table: None,
         };
         let list_key: ListKey = (state.uid, state.revision, band, lw, space_fp(&state.space), text, fill);
+        let background = self.paper();
         // Take a finished background band rebuild first.
         if let Some(p) = &self.frame.pending {
             match p.rx.try_recv() {
@@ -1832,7 +1852,7 @@ impl Host {
                 if std::thread::Builder::new()
                     .name("aad-display-list".into())
                     .spawn(move || {
-                        let _ = tx.send(aad_render::build(&doc, &space, &opts));
+                        let _ = tx.send(build_list(&doc, &space, &opts, background));
                     })
                     .is_ok()
                 {
@@ -1844,6 +1864,8 @@ impl Host {
                 let incremental = match (&self.frame.list, &self.frame.list_doc) {
                     (Some(old), Some(old_doc))
                         if matches!(state.space, Space::Model)
+                            && !has_traces(&state.doc)
+                            && !has_traces(old_doc)
                             && self.frame.list_key.0 == list_key.0
                             && self.frame.list_key.2 == list_key.2
                             && self.frame.list_key.3 == list_key.3
@@ -1854,7 +1876,7 @@ impl Host {
                     }
                     _ => None,
                 };
-                self.frame.list = Some(incremental.unwrap_or_else(|| aad_render::build(&state.doc, &state.space, &opts)));
+                self.frame.list = Some(incremental.unwrap_or_else(|| build_list(&state.doc, &state.space, &opts, background)));
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
                 self.frame.mesh_key = None;
@@ -1863,7 +1885,7 @@ impl Host {
             // same_drawing with pending still building: keep showing the previous list.
             if self.frame.list.is_none() {
                 aad_engine::spatial::warm(state.doc.clone(), state.space.clone());
-                self.frame.list = Some(aad_render::build(&state.doc, &state.space, &opts));
+                self.frame.list = Some(build_list(&state.doc, &state.space, &opts, background));
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
                 self.frame.mesh_key = None;
@@ -2382,6 +2404,51 @@ mod tests {
         assert_eq!(host.frame.list_key, list_key, "pan must not rebuild the display list");
         assert_eq!(key_b, key_a, "fine pan must keep the mesh upload key");
         assert_ne!(uniform_a[0], uniform_b[0], "the view offset uniform must change");
+    }
+
+    #[test]
+    fn traced_levels_are_in_the_cached_list_and_survive_an_edit() {
+        let mut host = Host::create(false);
+        host.execute("line", &json!({ "points": [[0.0, 0.0], [100.0, 0.0]] })).unwrap();
+        host.execute("level.new", &json!({ "name": "First", "first": "Ground" })).unwrap();
+        host.execute("level.activate", &json!({ "level": "First" })).unwrap();
+        host.execute("line", &json!({ "points": [[0.0, 50.0], [100.0, 50.0]] })).unwrap();
+        host.execute("level.trace", &json!({ "add": "Ground", "fade": 60 })).unwrap();
+        host.execute("zoom.extents", &json!({})).unwrap();
+        host.mesh().unwrap();
+        let traced = |h: &Host| h.frame.list.as_ref().map(|l| l.prims.iter().filter(|p| p.handle == aad_render::VIEWPORT_CONTENT).count());
+        assert_eq!(traced(&host), Some(1), "the traced level's line is in the list");
+        assert_eq!(host.frame.list.as_ref().map(|l| l.prims.len()), Some(2));
+
+        // An edit takes the incremental path when there are no traces; with traces it must still show them.
+        host.execute("line", &json!({ "points": [[0.0, 60.0], [100.0, 60.0]] })).unwrap();
+        host.mesh().unwrap();
+        assert_eq!(traced(&host), Some(1), "the trace survives an edit");
+        assert_eq!(host.frame.list.as_ref().map(|l| l.prims.len()), Some(3));
+
+        // Removing the trace removes it from the list.
+        host.execute("level.trace", &json!({ "remove": "Ground" })).unwrap();
+        host.mesh().unwrap();
+        assert_eq!(traced(&host), Some(0));
+    }
+
+    #[test]
+    fn the_status_bar_data_lists_level_tabs_with_the_active_and_traced_marks() {
+        let mut host = Host::create(false);
+        let levels = |h: &Host| -> Vec<Value> {
+            let v: Value = serde_json::from_str(&crate::chrome::chrome_json(&h.session, None, "")).unwrap();
+            v["levels"].as_array().cloned().unwrap_or_default()
+        };
+        assert!(levels(&host).is_empty(), "a drawing with one implicit level has no level tabs");
+        host.execute("level.new", &json!({ "name": "First", "first": "Ground" })).unwrap();
+        host.execute("level.new", &json!({ "name": "Terrace" })).unwrap();
+        host.execute("level.activate", &json!({ "level": "First" })).unwrap();
+        host.execute("level.trace", &json!({ "add": "Ground" })).unwrap();
+        let tabs = levels(&host);
+        let row = |n: &str| tabs.iter().find(|t| t["name"] == n).cloned().unwrap();
+        assert_eq!(tabs.iter().map(|t| t["name"].as_str().unwrap()).collect::<Vec<_>>(), ["Ground", "First", "Terrace"]);
+        assert_eq!((row("First")["active"].as_bool(), row("Ground")["active"].as_bool()), (Some(true), Some(false)));
+        assert_eq!((row("Ground")["traced"].as_bool(), row("Terrace")["traced"].as_bool()), (Some(true), Some(false)));
     }
 
     #[test]

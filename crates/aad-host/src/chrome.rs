@@ -180,7 +180,26 @@ pub fn chrome_json(session: &Session, cursor: Option<aad_geom::Vec2>, draft: &st
     let mut space = "Model".to_string();
     let mut layer = "0".to_string();
     let mut layouts = vec!["Model".to_string()];
+    let mut levels: Vec<serde_json::Value> = Vec::new();
     if let Ok(state) = session.state() {
+        // Level tabs (empty while the drawing has one implicit level). `traced` marks a level
+        // that is shown under or over the one being edited.
+        let active = state.doc.active_level_ref();
+        levels = state
+            .doc
+            .levels
+            .iter()
+            .take(aad_engine::doc::MAX_LEVELS)
+            .map(|l| {
+                serde_json::json!({
+                    "id": l.id.0,
+                    "name": l.name,
+                    "active": state.doc.active_level == Some(l.id),
+                    "traced": active.is_some_and(|a| a.traces.iter().any(|t| t.level == l.id)),
+                    "elevation": l.elevation,
+                })
+            })
+            .collect();
         space = match &state.space {
             aad_engine::doc::Space::Model => "Model".to_string(),
             aad_engine::doc::Space::Paper(name) => name.clone(),
@@ -212,6 +231,7 @@ pub fn chrome_json(session: &Session, cursor: Option<aad_geom::Vec2>, draft: &st
         "history": history,
         "space": space,
         "layouts": layouts,
+        "levels": levels,
         "documents": documents,
         "layer": layer,
         "ortho": settings.orthomode,

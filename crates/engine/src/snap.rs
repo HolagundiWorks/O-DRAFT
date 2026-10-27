@@ -188,6 +188,29 @@ pub(crate) fn extendable(p: &Prim) -> bool {
     matches!(p, Prim::Seg(_) | Prim::Circle(_) | Prim::Infinite { .. })
 }
 
+/// Most objects scanned in one traced level per snap query.
+const MAX_TRACE_SCAN: usize = 200_000;
+
+/// Objects of the levels traced into the active level whose trace has snaps switched on. Traces
+/// are read-only: only the snap point is used, never the object. The scan is linear in the size
+/// of the traced level (no spatial index for inactive levels yet).
+fn trace_candidates<'a>(d: &'a Drawing, space: &Space) -> Vec<(&'a aad_doc::Entity, Option<Bounds2>)> {
+    let mut out = Vec::new();
+    if !matches!(space, Space::Model) {
+        return out;
+    }
+    let Some(level) = d.active_level_ref() else { return out };
+    for t in level.traces.iter().filter(|t| t.snap) {
+        let Some(store) = d.level_store(t.level) else { continue };
+        for e in store.iter().take(MAX_TRACE_SCAN) {
+            if t.layers.as_ref().is_none_or(|ls| ls.iter().any(|n| n.eq_ignore_ascii_case(&e.common.layer))) {
+                out.push((e.as_ref(), None));
+            }
+        }
+    }
+    out
+}
+
 /// The snap candidates of `osmode` and the primitives within `aperture` of `cursor`; `None`
 /// when the drawing can't be searched.
 pub(crate) fn gather(
@@ -203,7 +226,8 @@ pub(crate) fn gather(
     let mut near_prims: Vec<Prim> = Vec::new();
     let mut count = 0usize;
     let mut budget = MAX_BLOCK_LEAVES;
-    for (e, known) in crate::select::candidates(d, space, ix, &probe.expand(aperture), true, false)? {
+    let main = crate::select::candidates(d, space, ix, &probe.expand(aperture), true, false)?;
+    for (e, known) in main.chain(trace_candidates(d, space)) {
         if !d.is_visible(e) {
             continue;
         }

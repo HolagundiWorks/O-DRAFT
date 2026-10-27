@@ -18,6 +18,7 @@ pub mod paper;
 mod plotstyle;
 mod point;
 pub mod raster;
+mod trace;
 pub mod units;
 mod wide;
 
@@ -31,6 +32,7 @@ pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, d
 pub use fill::{triangulate_evenodd, triangulate_outline};
 pub use hatch::pattern_lines;
 pub use paper::{PAPER_SIZES, PaperSize, Sheet, paper_size, sheet};
+pub use trace::{build_with_traces, stylize_trace};
 
 /// Handle carried by model-space geometry drawn inside a paper-space viewport (it belongs to no
 /// single paper-space entity, so selection highlighting never matches it).

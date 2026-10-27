@@ -340,3 +340,118 @@ fn a_healthy_multi_level_file_opens_without_a_warning() {
     assert_eq!(s.doc().unwrap().levels.len(), 2);
     assert!(!s.log.iter().any(|m| m.contains("level")), "{:?}", s.log);
 }
+
+/// The traces of a level, read from the drawing (so reading adds no undo step).
+fn traces(s: &mut Session, on: &str) -> Vec<Value> {
+    let d = s.doc().unwrap();
+    let l = d.level_by_name(on).unwrap();
+    l.traces
+        .iter()
+        .map(|t| {
+            json!({
+                "name": d.level(t.level).unwrap().name, "fade": t.fade, "snap": t.snap, "layers": t.layers,
+                "colour": if t.colour == aad_engine::doc::TraceColour::Grey { "grey" } else { "true" },
+                "order": if t.order == aad_engine::doc::TraceOrder::Below { "below" } else { "above" },
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn a_level_can_trace_several_others_with_their_own_settings() {
+    let mut s = Session::new();
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    s.execute("level.new", &json!({"name": "Terrace"})).unwrap();
+
+    let r = s.execute("level.trace", &json!({"level": "First", "add": ["Ground", "Terrace"], "fade": 70, "snap": true})).unwrap();
+    assert_eq!(r["level"], "First");
+    let ts = r["traces"].as_array().unwrap();
+    assert_eq!(ts.len(), 2);
+    assert!(ts.iter().all(|t| t["fade"] == 70 && t["snap"] == true && t["colour"] == "grey" && t["order"] == "below"));
+
+    s.execute("level.trace", &json!({"level": "First", "set": "Terrace", "colour": "true", "order": "above", "fade": 20, "layers": ["A-WALL"]}))
+        .unwrap();
+    let ts = traces(&mut s, "First");
+    let terrace = ts.iter().find(|t| t["name"] == "Terrace").unwrap();
+    assert_eq!((terrace["colour"].as_str(), terrace["order"].as_str(), terrace["fade"].as_u64()), (Some("true"), Some("above"), Some(20)));
+    assert_eq!(terrace["layers"], json!(["A-WALL"]));
+    assert_eq!(ts.iter().find(|t| t["name"] == "Ground").unwrap()["fade"], 70, "the other trace is untouched");
+
+    // Adding again updates instead of duplicating; remove drops one.
+    s.execute("level.trace", &json!({"level": "First", "add": "Ground", "fade": 10})).unwrap();
+    assert_eq!(traces(&mut s, "First").len(), 2);
+    s.execute("level.trace", &json!({"level": "First", "remove": "Ground"})).unwrap();
+    assert_eq!(traces(&mut s, "First").len(), 1);
+    s.execute("undo", &json!({})).unwrap();
+    assert_eq!(traces(&mut s, "First").len(), 2, "one undo step");
+}
+
+#[test]
+fn a_level_never_traces_itself_and_bad_settings_change_nothing() {
+    let mut s = Session::new();
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    assert!(s.execute("level.trace", &json!({"level": "First", "add": "First"})).is_err());
+    assert!(s.execute("level.trace", &json!({"level": "First", "add": "Ground", "fade": 91})).is_err());
+    assert!(s.execute("level.trace", &json!({"level": "First", "add": "Ground", "colour": "red"})).is_err());
+    assert!(s.execute("level.trace", &json!({"level": "First", "set": "Ground"})).is_err(), "not traced yet");
+    assert!(s.execute("level.trace", &json!({"level": "First", "add": "Nope"})).is_err());
+    assert!(traces(&mut s, "First").is_empty());
+
+    // The cap of 8 traces holds, and a failed add leaves no partial traces.
+    for i in 0..9 {
+        s.execute("level.new", &json!({"name": format!("L{i}")})).unwrap();
+    }
+    let all: Vec<String> = (0..9).map(|i| format!("L{i}")).collect();
+    assert!(s.execute("level.trace", &json!({"level": "First", "add": all})).is_err());
+    assert!(traces(&mut s, "First").is_empty());
+    s.execute("level.trace", &json!({"level": "First", "add": &all[..8]})).unwrap();
+    assert_eq!(traces(&mut s, "First").len(), 8);
+
+    // Deleting a traced level removes the traces of it.
+    s.execute("level.delete", &json!({"level": "L0", "force": true})).unwrap();
+    assert_eq!(traces(&mut s, "First").len(), 7);
+}
+
+#[test]
+fn hostile_trace_parameters_never_panic() {
+    let mut s = Session::new();
+    assert!(s.execute("level.trace", &json!({})).is_err(), "one level has nothing to trace");
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    let long = "x".repeat(400);
+    for p in [
+        json!({"add": null}),
+        json!({"add": {"a": 1}}),
+        json!({"add": [[]]}),
+        json!({"add": "Ground", "fade": -1}),
+        json!({"add": "Ground", "fade": u64::MAX}),
+        json!({"add": "Ground", "fade": 1.5}),
+        json!({"add": "Ground", "snap": "yes"}),
+        json!({"add": "Ground", "layers": [1, 2]}),
+        json!({"add": "Ground", "layers": [long]}),
+        json!({"add": "Ground", "layers": "A"}),
+        json!({"level": [1], "add": "Ground"}),
+        json!({"add": "Ground", "order": 3}),
+    ] {
+        let _ = s.execute("level.trace", &p);
+    }
+}
+
+#[test]
+fn next_and_previous_level_cycle_through_the_tabs_and_have_shortcuts() {
+    let mut s = Session::new();
+    assert!(s.execute("level.next", &json!({})).is_err(), "one level has nothing to step to");
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    s.execute("level.new", &json!({"name": "Roof"})).unwrap();
+    let active = |s: &Session| s.doc().unwrap().active_level_ref().unwrap().name.clone();
+    assert_eq!(active(&s), "Ground");
+    s.execute("level.next", &json!({})).unwrap();
+    assert_eq!(active(&s), "First");
+    s.execute("level.next", &json!({})).unwrap();
+    s.execute("level.next", &json!({})).unwrap();
+    assert_eq!(active(&s), "Ground", "the last wraps to the first");
+    s.execute("level.prev", &json!({})).unwrap();
+    assert_eq!(active(&s), "Roof", "the first wraps to the last");
+
+    let key = |id: &str| aad_engine::find_command(id).and_then(|c| c.shortcut);
+    assert_eq!((key("level.next"), key("level.prev")), (Some("Cmd+PageDown"), Some("Cmd+PageUp")));
+}
