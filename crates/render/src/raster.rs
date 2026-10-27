@@ -89,6 +89,31 @@ pub fn render(list: &DisplayList, view: &View, o: &RasterOptions) -> Option<Pixm
                     pm.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
                 }
             }
+            Kind::Arc { sweep } => {
+                let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { continue };
+                let radius = center.dist(*rim);
+                let start = center.angle_to(*rim);
+                let mut tess = Vec::new();
+                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                let bb = Bounds2::from_points(tess.iter().copied());
+                if !bb.intersects(&vis) {
+                    continue;
+                }
+                let mut pb = PathBuilder::new();
+                for (i, q) in tess.iter().enumerate() {
+                    let (x, y) = view.to_screen(*q);
+                    if i == 0 {
+                        pb.move_to(x, y);
+                    } else {
+                        pb.line_to(x, y);
+                    }
+                }
+                if let Some(path) = pb.finish() {
+                    let w = if o.px_per_mm > 0.0 && p.lw > 0.0 { (p.lw * o.px_per_mm).max(o.hairline) } else { o.hairline };
+                    let stroke = Stroke { width: w, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Default::default() };
+                    pm.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+                }
+            }
             Kind::Tris | Kind::Mask => {
                 if p.kind == Kind::Mask {
                     paint.set_color_rgba8(o.background.0, o.background.1, o.background.2, 255);

@@ -33,6 +33,20 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
     if !b.opts.fill {
         return;
     }
+    // Far zoom: a light solid tint avoids moiré from sub-pixel pattern lines.
+    if b.opts.fill_tint {
+        let tint = Ink {
+            rgb: Rgb(
+                ((u16::from(rgb.rgb.0) * 2 + 255) / 3) as u8,
+                ((u16::from(rgb.rgb.1) * 2 + 255) / 3) as u8,
+                ((u16::from(rgb.rgb.2) * 2 + 255) / 3) as u8,
+            ),
+            aci7: rgb.aci7,
+            aci: rgb.aci,
+        };
+        b.tris(ctx, tint, &fill::triangulate_evenodd(&loops));
+        return;
+    }
     for seg in pattern_lines(h, &loops) {
         if seg.len() == 1 {
             if let Some(p) = seg.first() {

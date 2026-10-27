@@ -267,7 +267,7 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
         let w = f64::from(p.lw) * PT_PER_MM;
         let w = if w.is_finite() && w > 0.0 { w.min(100.0) } else { 0.0 };
         match p.kind {
-            Kind::Polyline | Kind::Infinite { .. } => {
+            Kind::Polyline | Kind::Arc { .. } | Kind::Infinite { .. } => {
                 let pts: Vec<Vec2> = match p.kind {
                     Kind::Infinite { ray } => match (raw.first(), raw.get(1)) {
                         (Some(base), Some(dir)) => {
@@ -277,6 +277,17 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
                                 Some((x, y)) => vec![x, y],
                                 None => continue,
                             }
+                        }
+                        _ => continue,
+                    },
+                    Kind::Arc { sweep } => match (raw.first(), raw.get(1)) {
+                        (Some(center), Some(rim)) => {
+                            let radius = center.dist(*rim);
+                            let start = center.angle_to(*rim);
+                            let mut tess = Vec::new();
+                            aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep))
+                                .tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                            tess.iter().map(|q| map.pt(*q)).collect()
                         }
                         _ => continue,
                     },

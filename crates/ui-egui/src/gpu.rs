@@ -17,8 +17,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use aad_render::mesh::{CANVAS_SHADER as SHADER, INSTANCE_SIZE, VERTEX_SIZE};
-pub use aad_render::mesh::{MeshData, build_mesh, choose_origin, expand_hairlines, wide_width};
+use aad_render::mesh::{CANVAS_SHADER as SHADER, INSTANCE_SIZE, RING_INSTANCE_SIZE, VERTEX_SIZE};
+pub use aad_render::mesh::{LineweightMode, MeshData, build_mesh, build_mesh_mode, choose_origin, expand_hairlines, wide_width};
 use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::util::DeviceExt;
 
@@ -101,6 +101,8 @@ pub struct CanvasCallback {
     pub scale: f32,
     /// Canvas rect centre in points.
     pub center: [f32; 2],
+    /// Paper-space true-scale lineweights (`view.c.y` in the canvas shader).
+    pub true_scale: bool,
 }
 
 struct Batch {
@@ -112,6 +114,7 @@ struct Resources {
     line_pipeline: wgpu::RenderPipeline,
     tri_pipeline: wgpu::RenderPipeline,
     quad_pipeline: wgpu::RenderPipeline,
+    ring_pipeline: wgpu::RenderPipeline,
     uniform: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     linear_out: bool,
@@ -119,7 +122,8 @@ struct Resources {
     lines: Vec<Batch>,
     tris: Vec<Batch>,
     quads: Vec<Batch>,
-    breaks: Vec<[usize; 3]>,
+    rings: Vec<Batch>,
+    breaks: Vec<[usize; 4]>,
 }
 
 const UNIFORM_SIZE: u64 = 48;
@@ -132,6 +136,11 @@ fn vertex_layout() -> wgpu::VertexBufferLayout<'static> {
 fn instance_layout() -> wgpu::VertexBufferLayout<'static> {
     const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Unorm8x4, 3 => Float32];
     wgpu::VertexBufferLayout { array_stride: INSTANCE_SIZE as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &ATTRS }
+}
+
+fn ring_layout() -> wgpu::VertexBufferLayout<'static> {
+    const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Unorm8x4];
+    wgpu::VertexBufferLayout { array_stride: RING_INSTANCE_SIZE as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &ATTRS }
 }
 
 impl Resources {
@@ -192,6 +201,7 @@ impl Resources {
             line_pipeline: pipeline("cad_lines", "vs_line", wgpu::PrimitiveTopology::LineList, vertex_layout()),
             tri_pipeline: pipeline("cad_fills", "vs_line", wgpu::PrimitiveTopology::TriangleList, vertex_layout()),
             quad_pipeline: pipeline("cad_quads", "vs_quad", wgpu::PrimitiveTopology::TriangleList, instance_layout()),
+            ring_pipeline: pipeline("cad_rings", "vs_ring", wgpu::PrimitiveTopology::TriangleList, ring_layout()),
             uniform,
             bind_group,
             linear_out: target.format.is_srgb(),
@@ -199,6 +209,7 @@ impl Resources {
             lines: Vec::new(),
             tris: Vec::new(),
             quads: Vec::new(),
+            rings: Vec::new(),
             breaks: Vec::new(),
         }
     }
@@ -242,6 +253,7 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
                 res.lines = upload(device, "cad_lines", &m.lines, VERTEX_SIZE, usage);
                 res.tris = upload(device, "cad_fills", &m.tris, VERTEX_SIZE, usage);
                 res.quads = upload(device, "cad_quads", &m.quads, INSTANCE_SIZE, usage);
+                res.rings = upload(device, "cad_rings", &m.rings, RING_INSTANCE_SIZE, usage);
                 res.breaks = m.breaks;
                 res.key = Some(self.key);
             }
@@ -250,7 +262,7 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
         let [w, h] = screen.size_in_pixels;
         let a = [self.offset[0], self.offset[1], self.scale * ppp, if res.linear_out { 1.0 } else { 0.0 }];
         let b = [self.center[0] * ppp, self.center[1] * ppp, w.max(1) as f32, h.max(1) as f32];
-        let c = [ppp, 0.0, 0.0, 0.0];
+        let c = [ppp, if self.true_scale { 1.0 } else { 0.0 }, 0.0, 0.0];
         let bytes: Vec<u8> = a.iter().chain(&b).chain(&c).flat_map(|v| v.to_le_bytes()).collect();
         queue.write_buffer(&res.uniform, 0, &bytes);
         Vec::new()
@@ -270,11 +282,17 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
         pass.set_bind_group(0, &res.bind_group, &[]);
         // Draw-order groups split at each wipeout; without wipeouts there is one group.
         let total = |bs: &[Batch]| bs.iter().map(|b| b.count as usize).sum::<usize>();
-        let all = [total(&res.tris), total(&res.lines), total(&res.quads)];
-        let mut from = [0usize; 3];
+        let all = [total(&res.tris), total(&res.lines), total(&res.quads), total(&res.rings)];
+        let mut from = [0usize; 4];
         for to in res.breaks.iter().copied().chain(std::iter::once(all)) {
-            for (i, (pipeline, batches)) in
-                [(&res.tri_pipeline, &res.tris), (&res.line_pipeline, &res.lines), (&res.quad_pipeline, &res.quads)].into_iter().enumerate()
+            for (i, (pipeline, batches)) in [
+                (&res.tri_pipeline, &res.tris),
+                (&res.line_pipeline, &res.lines),
+                (&res.quad_pipeline, &res.quads),
+                (&res.ring_pipeline, &res.rings),
+            ]
+            .into_iter()
+            .enumerate()
             {
                 let parts = batch_ranges(batches.iter().map(|b| b.count), from[i]..to[i]);
                 if parts.is_empty() {
@@ -284,8 +302,12 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
                 for (j, r) in parts {
                     let Some(b) = batches.get(j) else { continue };
                     pass.set_vertex_buffer(0, b.buffer.slice(..));
-                    // Quads are instanced: six vertices per instance.
-                    if i == 2 { pass.draw(0..6, r) } else { pass.draw(r, 0..1) }
+                    // Quads and rings are instanced: six vertices per instance.
+                    if i >= 2 {
+                        pass.draw(0..6, r)
+                    } else {
+                        pass.draw(r, 0..1)
+                    }
                 }
             }
             from = to;
@@ -367,14 +389,15 @@ mod tests {
         let l = list();
         let origin = Vec2::new(1e6, 1e6);
         let m = build_mesh(&l, origin, Rgb(255, 255, 255), false);
-        assert_eq!(m.line_vertices(), 4, "two segments");
+        assert_eq!(m.line_vertices(), 0, "strokes are quads; infinites stay out of the mesh");
         assert_eq!(m.tri_vertices(), 3);
-        assert_eq!(m.quad_instances(), 1, "the point marker");
-        // First vertex is stored relative to the origin, so it's exactly zero.
-        assert_eq!(&m.lines[0..8], &[0u8; 8]);
+        // Open 3-point strip: 2 butt edges + 2 caps + 1 join, plus the point marker.
+        assert_eq!(m.quad_instances(), 6);
+        // First instance endpoint is relative to the origin, so it's exactly zero.
+        assert_eq!(&m.quads[0..8], &[0u8; 8]);
         // Colour 7 on a white background inverts to black (display_rgb).
-        assert_eq!(&m.lines[8..12], &[0, 0, 0, 255]);
-        let x = f32::from_le_bytes([m.lines[12], m.lines[13], m.lines[14], m.lines[15]]);
+        assert_eq!(&m.quads[16..20], &[0, 0, 0, 255]);
+        let x = f32::from_le_bytes([m.quads[8], m.quads[9], m.quads[10], m.quads[11]]);
         assert_eq!(x, 1.0);
     }
 
@@ -386,9 +409,9 @@ mod tests {
         }
         let m = build_mesh(&l, Vec2::ZERO, Rgb(0, 0, 0), true);
         assert_eq!(m.line_vertices(), 0);
-        assert_eq!(m.quad_instances(), 3);
-        assert_eq!(wide_width(0.25, true), None, "thin lineweights stay hairlines");
-        assert_eq!(wide_width(0.7, false), None);
+        assert_eq!(m.quad_instances(), 6);
+        assert!(wide_width(0.25, Some(LineweightMode::Screen)).is_some());
+        assert_eq!(wide_width(0.7, None), None);
     }
 
     #[test]
@@ -396,9 +419,12 @@ mod tests {
     fn shader_is_valid_for_webgpu_and_webgl2() {
         let module = naga::front::wgsl::parse_str(SHADER).unwrap();
         let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty()).validate(&module).unwrap();
-        for (stage, entry) in
-            [(naga::ShaderStage::Vertex, "vs_line"), (naga::ShaderStage::Vertex, "vs_quad"), (naga::ShaderStage::Fragment, "fs_main")]
-        {
+        for (stage, entry) in [
+            (naga::ShaderStage::Vertex, "vs_line"),
+            (naga::ShaderStage::Vertex, "vs_quad"),
+            (naga::ShaderStage::Vertex, "vs_ring"),
+            (naga::ShaderStage::Fragment, "fs_main"),
+        ] {
             let options = naga::back::glsl::Options { version: naga::back::glsl::Version::new_gles(300), ..Default::default() };
             let pipeline = naga::back::glsl::PipelineOptions { shader_stage: stage, entry_point: entry.into(), multiview: None };
             let mut out = String::new();
@@ -427,11 +453,11 @@ mod tests {
         }
         let bg = Rgb(10, 20, 30);
         let m = build_mesh(&l, Vec2::ZERO, bg, false);
-        // The polyline's two segments come before the mask; the point marker after it.
-        assert_eq!(m.breaks, vec![[0, 4, 0]]);
+        // The polyline strip (5 instances) comes before the mask; the point marker after it.
+        assert_eq!(m.breaks, vec![[0, 0, 5, 0]]);
         assert_eq!(m.tri_vertices(), 3);
         assert_eq!(&m.tris[8..12], &[10, 20, 30, 255], "the mask takes the background colour");
-        assert_eq!(m.quad_instances(), 1);
+        assert_eq!(m.quad_instances(), 6);
     }
 
     #[test]

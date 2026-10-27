@@ -34,13 +34,56 @@ use aad_render::DisplayList;
 use aad_render::mesh::{self, MeshData};
 use serde_json::Value;
 
-/// (document uid, revision, tessellation band, lwdisplay, space fingerprint, draw text, draw fill).
-type ListKey = (u64, u64, i32, bool, u64, bool, bool);
+/// uid, revision, tessellation band, lwdisplay, space, packed LOD bits, packed model pan cell.
+/// LOD bits: text | fill<<1 | text_greek<<2 | fill_tint<<3.
+type ListKey = (u64, u64, i32, bool, u64, u8, i64);
+
+fn lod_pack(l: aad_render::LodFlags) -> u8 {
+    u8::from(l.text) | (u8::from(l.fill) << 1) | (u8::from(l.text_greek) << 2) | (u8::from(l.fill_tint) << 3)
+}
 
 /// Display list being rebuilt on a worker for a new zoom / LOD band.
 struct PendingList {
     key: ListKey,
     rx: std::sync::mpsc::Receiver<DisplayList>,
+}
+
+/// Eased wheel zoom in progress (~120 ms). Fast notches accumulate onto `target`.
+struct ZoomAnim {
+    from: aad_engine::View,
+    target: aad_engine::View,
+    t0: std::time::Instant,
+}
+
+impl ZoomAnim {
+    fn sample(&self, now: std::time::Instant) -> aad_engine::View {
+        let ms = now.duration_since(self.t0).as_millis();
+        if ms >= ZOOM_ANIM_MS {
+            return self.target;
+        }
+        let t = ease_out_cubic(ms as f64 / ZOOM_ANIM_MS as f64);
+        let ln_h = self.from.height.ln() + (self.target.height.ln() - self.from.height.ln()) * t;
+        aad_engine::View {
+            center: Vec2::new(
+                self.from.center.x + (self.target.center.x - self.from.center.x) * t,
+                self.from.center.y + (self.target.center.y - self.from.center.y) * t,
+            ),
+            height: ln_h.exp(),
+        }
+    }
+}
+
+const ZOOM_ANIM_MS: u128 = 120;
+
+fn zoomed_view(v: aad_engine::View, factor: f64, about: Vec2) -> aad_engine::View {
+    let h = (v.height / factor).clamp(1e-9, 1e12);
+    let k = h / v.height;
+    aad_engine::View { center: about + (v.center - about) * k, height: h }
+}
+
+fn ease_out_cubic(t: f64) -> f64 {
+    let u = 1.0 - t;
+    1.0 - u * u * u
 }
 
 /// Cached display list / GPU mesh so pans and small edits do not rebuild everything every frame.
@@ -67,7 +110,7 @@ struct PaintStamp {
 impl Default for FrameCache {
     fn default() -> Self {
         FrameCache {
-            list_key: (0, 0, 0, false, 0, true, true),
+            list_key: (0, 0, 0, false, 0, 0b11, 0),
             list: None,
             list_doc: None,
             mesh_key: None,
@@ -348,6 +391,8 @@ pub struct Host {
     frame: FrameCache,
     /// Control-channel `app.open` / `app.save` waiting for a worker poll to finish.
     control_io: Option<(control::Job, ControlIoKind)>,
+    /// Wheel zoom easing; advanced on [`Host::pump`] / present.
+    zoom_anim: Option<ZoomAnim>,
 }
 
 /// Which file job a deferred control reply is waiting on.
@@ -446,6 +491,7 @@ impl Host {
             plotting: None,
             frame: FrameCache::default(),
             control_io: None,
+            zoom_anim: None,
         }
     }
 
@@ -1318,9 +1364,60 @@ impl Host {
             return Ok(());
         }
         let about = self.screen_to_world(ev.x, ev.y)?;
-        // One notch is 120 wheel units in the egui shell (`scroll.y / 300`).
-        let factor = (f64::from(ev.wheel) * 120.0 / 300.0).exp();
-        self.session.zoom_about(factor, about).map_err(|e| e.to_string())
+        // One notch is 120 wheel units. Divisor 600 → ~1.22× per notch (was 300 → ~1.49×).
+        let factor = (f64::from(ev.wheel) * 120.0 / 600.0).exp();
+        let now = std::time::Instant::now();
+        let from = match &self.zoom_anim {
+            Some(anim) => anim.sample(now),
+            None => self.session.state().map_err(|e| e.to_string())?.view(),
+        };
+        let target = zoomed_view(from, factor, about);
+        self.zoom_anim = Some(ZoomAnim { from, target, t0: now });
+        self.fitted = None;
+        // Unit tests and hosts without a GPU pump loop need the final view immediately.
+        #[cfg(windows)]
+        let live = self.gpu.is_some();
+        #[cfg(not(windows))]
+        let live = false;
+        if live {
+            self.apply_zoom_sample(now)?;
+            #[cfg(windows)]
+            {
+                self.paint_dirty = true;
+            }
+        } else {
+            self.finish_zoom()?;
+        }
+        Ok(())
+    }
+
+    fn finish_zoom(&mut self) -> Result<(), String> {
+        if let Some(anim) = self.zoom_anim.take() {
+            self.session.state_mut().map_err(|e| e.to_string())?.set_view_quiet(anim.target);
+        }
+        Ok(())
+    }
+
+    fn apply_zoom_sample(&mut self, now: std::time::Instant) -> Result<(), String> {
+        let Some(anim) = &self.zoom_anim else {
+            return Ok(());
+        };
+        let view = anim.sample(now);
+        let done = now.duration_since(anim.t0).as_millis() >= ZOOM_ANIM_MS;
+        self.session.state_mut().map_err(|e| e.to_string())?.set_view_quiet(view);
+        if done {
+            self.zoom_anim = None;
+        }
+        Ok(())
+    }
+
+    /// Advance an in-flight wheel zoom; keep presenting while it runs.
+    fn tick_zoom(&mut self) -> Result<bool, String> {
+        if self.zoom_anim.is_none() {
+            return Ok(false);
+        }
+        self.apply_zoom_sample(std::time::Instant::now())?;
+        Ok(self.zoom_anim.is_some())
     }
 
     fn left_down(&mut self, ev: Pointer) -> Result<(), String> {
@@ -1810,25 +1907,35 @@ impl Host {
         let view = state.view();
         let px = view.height / f64::from(self.height.max(1));
         let band = aad_render::tessellation_band(px);
-        let (text, fill) = aad_render::lod_for_view(px.max(1e-300), 1.0);
+        let lod = aad_render::lod_flags_for_view(px.max(1e-300), 1.0);
+        let on_paper = matches!(state.space, Space::Paper(_));
         let opts = aad_render::Options {
             tolerance: aad_render::tessellation_tolerance(band),
             min_dash: px * 2.0,
-            text,
-            fill,
+            text: lod.text,
+            fill: lod.fill,
+            text_greek: lod.text_greek,
+            fill_tint: lod.fill_tint,
             lineweights: lw,
             view_height: view.height,
             view_center: matches!(state.space, Space::Model).then_some(view.center),
             plot_style_table: None,
         };
-        let list_key: ListKey = (state.uid, state.revision, band, lw, space_fp(&state.space), text, fill);
+        let pan_cell = if matches!(state.space, Space::Model) {
+            let (cx, cy) = aad_render::model_pan_cell(view.center, view.height);
+            ((cx as i32 as u32 as i64) << 32) | (cy as i32 as u32 as i64)
+        } else {
+            0
+        };
+        let lod_bits = lod_pack(lod);
+        let list_key: ListKey = (state.uid, state.revision, band, lw, space_fp(&state.space), lod_bits, pan_cell);
         let background = self.paper();
         // Take a finished background band rebuild first.
         if let Some(p) = &self.frame.pending {
             match p.rx.try_recv() {
                 Ok(list) => {
                     if let Some(p) = self.frame.pending.take()
-                        && (p.key.0, p.key.1, p.key.3, p.key.4) == (list_key.0, list_key.1, list_key.3, list_key.4)
+                        && (p.key.0, p.key.1, p.key.3, p.key.4, p.key.6) == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.6)
                     {
                         self.frame.list = Some(list);
                         self.frame.list_key = p.key;
@@ -1843,8 +1950,8 @@ impl Host {
         }
         if self.frame.list_key != list_key || self.frame.list.is_none() {
             let same_drawing = self.frame.list.is_some()
-                && (self.frame.list_key.0, self.frame.list_key.1, self.frame.list_key.3, self.frame.list_key.4)
-                    == (list_key.0, list_key.1, list_key.3, list_key.4);
+                && (self.frame.list_key.0, self.frame.list_key.1, self.frame.list_key.3, self.frame.list_key.4, self.frame.list_key.6)
+                    == (list_key.0, list_key.1, list_key.3, list_key.4, list_key.6);
             // Zoom / LOD band only: keep the last list on screen and rebuild on a worker.
             if same_drawing && self.frame.pending.is_none() {
                 let (tx, rx) = std::sync::mpsc::channel();
@@ -1896,14 +2003,25 @@ impl Host {
         let origin = mesh::choose_origin(&list.bounds, view.center, view.height);
         let paper = self.paper();
         let tint = u64::from(paper.0) << 16 | u64::from(paper.1) << 8 | u64::from(paper.2);
+        let lw_mode = lw.then_some(if on_paper { mesh::LineweightMode::TrueScale } else { mesh::LineweightMode::Screen });
+        let true_scale = matches!(lw_mode, Some(mesh::LineweightMode::TrueScale));
         // Origin is snapped to a coarse grid while panning, so the mesh key stays stable across
         // fine pans and the GPU keeps the last upload (uniform carries the view offset).
-        let mesh_key = state.revision ^ origin.x.to_bits() ^ origin.y.to_bits().rotate_left(1) ^ tint.rotate_left(21) ^ (band as u64).rotate_left(40);
+        let mesh_key = state.revision
+            ^ origin.x.to_bits()
+            ^ origin.y.to_bits().rotate_left(1)
+            ^ tint.rotate_left(21)
+            ^ (band as u64).rotate_left(40)
+            ^ u64::from(true_scale).rotate_left(48);
         if self.frame.mesh_key != Some(mesh_key) || self.frame.mesh.is_none() {
-            let mut built = mesh::build_mesh(list, origin, paper, lw);
+            let mut built = mesh::build_mesh_mode(list, origin, paper, lw_mode);
             let world_width = view.height * f64::from(self.width.max(1)) / f64::from(self.height.max(1));
             mesh::append_infinite(&mut built, list, origin, view.center, world_width, view.height, paper);
-            mesh::expand_hairlines(&mut built);
+            if true_scale {
+                mesh::expand_hairlines_true_scale(&mut built);
+            } else {
+                mesh::expand_hairlines(&mut built);
+            }
             self.frame.mesh = Some(built);
             self.frame.mesh_key = Some(mesh_key);
             self.frame.mesh_origin = origin;
@@ -1920,7 +2038,7 @@ impl Host {
             f64::from(self.width.max(1)) as f32,
             f64::from(self.height.max(1)) as f32,
             self.pixels_per_point,
-            0.0,
+            if true_scale { 1.0 } else { 0.0 },
             0.0,
             0.0,
         ];
@@ -1931,7 +2049,7 @@ impl Host {
     pub fn mesh_vertices(&mut self) -> Result<usize, String> {
         let _ = self.mesh()?;
         let built = self.frame.mesh.as_ref().ok_or_else(|| "mesh missing".to_string())?;
-        Ok(built.line_vertices() + built.tri_vertices() + built.quad_instances())
+        Ok(built.line_vertices() + built.tri_vertices() + built.quad_instances() + built.ring_instances())
     }
 }
 
@@ -2012,12 +2130,13 @@ impl Host {
             for ev in events {
                 self.pointer(ev)?;
             }
+            let zooming = self.tick_zoom()?;
             // Idle pumps skip the GPU path: document/overlay only change on input, commands
-            // (`present_if_ready`), resize, or a background display-list band finishing.
-            let need = had_events || self.paint_dirty || self.frame.pending.is_some();
+            // (`present_if_ready`), resize, a zoom animation, or a background display-list band finishing.
+            let need = had_events || self.paint_dirty || zooming || self.frame.pending.is_some();
             if self.gpu.is_some() && need {
                 self.redraw()?;
-                self.paint_dirty = false;
+                self.paint_dirty = zooming;
             }
             Ok(())
         })();
@@ -2165,9 +2284,28 @@ mod tests {
         assert_eq!(host.stats().entities, before + 1);
         let height = host.stats().view_height;
         host.pointer(Pointer { x: 600.0, y: 400.0, action: POINTER_WHEEL, wheel: 1.0, mods: 0 }).unwrap();
-        assert!(host.stats().view_height < height, "wheel zooms in");
+        let after = host.stats().view_height;
+        assert!(after < height, "wheel zooms in");
+        let step = height / after;
+        assert!((1.15..=1.30).contains(&step), "wheel step ≈1.22×, got {step}");
         host.pointer(Pointer { x: 600.0, y: 400.0, action: POINTER_WHEEL, wheel: -1.0, mods: 0 }).unwrap();
         assert!((host.stats().view_height - height).abs() / height < 1e-6);
+    }
+
+    #[test]
+    fn zoom_anim_eases_and_accumulates_notches() {
+        let start = aad_engine::View { center: Vec2::new(10.0, 5.0), height: 100.0 };
+        let about = Vec2::new(10.0, 5.0);
+        let mid = zoomed_view(start, (0.2_f64).exp(), about);
+        let end = zoomed_view(mid, (0.2_f64).exp(), about);
+        let t0 = std::time::Instant::now();
+        let anim = ZoomAnim { from: start, target: end, t0 };
+        let at_start = anim.sample(t0);
+        assert!((at_start.height - start.height).abs() < 1e-9);
+        let half = anim.sample(t0 + std::time::Duration::from_millis(60));
+        assert!(half.height < start.height && half.height > end.height);
+        let done = anim.sample(t0 + std::time::Duration::from_millis(ZOOM_ANIM_MS as u64));
+        assert!((done.height - end.height).abs() < 1e-9);
     }
 
     #[test]
@@ -2472,7 +2610,10 @@ mod tests {
         let hit = |bytes: &[u8], stride: usize, at: usize| {
             bytes.chunks(stride).any(|v| v.len() >= at + 3 && v[at] == rgb[0] && v[at + 1] == rgb[1] && v[at + 2] == rgb[2])
         };
-        hit(&mesh.lines, mesh::VERTEX_SIZE, 8) || hit(&mesh.tris, mesh::VERTEX_SIZE, 8) || hit(&mesh.quads, mesh::INSTANCE_SIZE, 16)
+        hit(&mesh.lines, mesh::VERTEX_SIZE, 8)
+            || hit(&mesh.tris, mesh::VERTEX_SIZE, 8)
+            || hit(&mesh.quads, mesh::INSTANCE_SIZE, 16)
+            || hit(&mesh.rings, mesh::RING_INSTANCE_SIZE, 24)
     }
 
     #[test]

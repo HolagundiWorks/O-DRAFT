@@ -7,14 +7,15 @@
 
 use std::hash::{Hash, Hasher};
 
-use aad_render::mesh::{CANVAS_SHADER, INSTANCE_SIZE, MeshData, VERTEX_SIZE};
+use aad_render::mesh::{CANVAS_SHADER, INSTANCE_SIZE, MeshData, RING_INSTANCE_SIZE, VERTEX_SIZE};
 use wgpu::util::DeviceExt;
 
 use crate::surface;
 
 const CHUNK: usize = 4_194_300;
 const UNIFORM_SIZE: u64 = 48;
-const SAMPLE_COUNT: u32 = 1;
+/// 4× MSAA softens hatch fills and TrueType glyph edges; stroke quads still use coverage AA.
+const SAMPLE_COUNT: u32 = 4;
 
 struct Batch {
     buffer: wgpu::Buffer,
@@ -30,18 +31,21 @@ pub struct Gpu {
     line_pipeline: wgpu::RenderPipeline,
     tri_pipeline: wgpu::RenderPipeline,
     quad_pipeline: wgpu::RenderPipeline,
+    ring_pipeline: wgpu::RenderPipeline,
     uniform: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     lines: Vec<Batch>,
     tris: Vec<Batch>,
     quads: Vec<Batch>,
-    breaks: Vec<[usize; 3]>,
+    rings: Vec<Batch>,
+    breaks: Vec<[usize; 4]>,
     key: Option<u64>,
     clear: wgpu::Color,
     over_lines: Vec<Batch>,
     over_tris: Vec<Batch>,
     over_quads: Vec<Batch>,
-    over_breaks: Vec<[usize; 3]>,
+    over_rings: Vec<Batch>,
+    over_breaks: Vec<[usize; 4]>,
     over_key: Option<u64>,
     /// Multisampled colour target resolved into the swapchain each frame.
     msaa: Option<(wgpu::Texture, wgpu::TextureView)>,
@@ -57,15 +61,14 @@ impl Gpu {
         if let Some(format) = caps.formats.iter().copied().find(|f| f.is_srgb()) {
             config.format = format;
         }
-        // Crosshair is drawn in the overlay; a deep swapchain queue reads as pointer lag.
-        // AutoNoVsync picks Immediate → Mailbox → Fifo and is valid on every surface.
-        // AAD_VSYNC=1/on forces tear-free FIFO; =0/off keeps the low-latency mode.
+        // Default: tear-free vsync. AAD_VSYNC=0/off picks AutoNoVsync (Immediate → Mailbox → FIFO)
+        // when the crosshair must track a high-rate pointer with lower latency.
         config.present_mode = present_mode_from_env();
         config.desired_maximum_frame_latency = 1;
         let format = config.format;
         surface.configure(&device, &config);
         let linear_out = format.is_srgb();
-        let (line_pipeline, tri_pipeline, quad_pipeline, uniform, bind_group) = pipelines(&device, format, SAMPLE_COUNT);
+        let (line_pipeline, tri_pipeline, quad_pipeline, ring_pipeline, uniform, bind_group) = pipelines(&device, format, SAMPLE_COUNT);
         let msaa = if SAMPLE_COUNT > 1 { Some(msaa_target(&device, &config)) } else { None };
         Ok(Gpu {
             surface,
@@ -76,17 +79,20 @@ impl Gpu {
             line_pipeline,
             tri_pipeline,
             quad_pipeline,
+            ring_pipeline,
             uniform,
             bind_group,
             lines: Vec::new(),
             tris: Vec::new(),
             quads: Vec::new(),
+            rings: Vec::new(),
             breaks: Vec::new(),
             key: None,
             clear: wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
             over_lines: Vec::new(),
             over_tris: Vec::new(),
             over_quads: Vec::new(),
+            over_rings: Vec::new(),
             over_breaks: Vec::new(),
             over_key: None,
             msaa,
@@ -119,6 +125,7 @@ impl Gpu {
         self.over_lines = upload(&self.device, "cad_over_lines", &mesh.lines, VERTEX_SIZE);
         self.over_tris = upload(&self.device, "cad_over_fills", &mesh.tris, VERTEX_SIZE);
         self.over_quads = upload(&self.device, "cad_over_quads", &mesh.quads, INSTANCE_SIZE);
+        self.over_rings = upload(&self.device, "cad_over_rings", &mesh.rings, RING_INSTANCE_SIZE);
         self.over_breaks = mesh.breaks.clone();
         self.over_key = Some(key);
     }
@@ -133,6 +140,7 @@ impl Gpu {
             self.lines = upload(&self.device, "cad_lines", &mesh.lines, VERTEX_SIZE);
             self.tris = upload(&self.device, "cad_fills", &mesh.tris, VERTEX_SIZE);
             self.quads = upload(&self.device, "cad_quads", &mesh.quads, INSTANCE_SIZE);
+            self.rings = upload(&self.device, "cad_rings", &mesh.rings, RING_INSTANCE_SIZE);
             self.breaks = mesh.breaks.clone();
             self.key = Some(key);
         }
@@ -172,22 +180,36 @@ impl Gpu {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            self.draw_parts(&mut pass, &self.tris, &self.lines, &self.quads, &self.breaks);
-            self.draw_parts(&mut pass, &self.over_tris, &self.over_lines, &self.over_quads, &self.over_breaks);
+            self.draw_parts(&mut pass, &self.tris, &self.lines, &self.quads, &self.rings, &self.breaks);
+            self.draw_parts(&mut pass, &self.over_tris, &self.over_lines, &self.over_quads, &self.over_rings, &self.over_breaks);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(frame);
         Ok(())
     }
 
-    fn draw_parts(&self, pass: &mut wgpu::RenderPass<'_>, tris: &[Batch], lines: &[Batch], quads: &[Batch], breaks: &[[usize; 3]]) {
+    fn draw_parts(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        tris: &[Batch],
+        lines: &[Batch],
+        quads: &[Batch],
+        rings: &[Batch],
+        breaks: &[[usize; 4]],
+    ) {
         pass.set_bind_group(0, &self.bind_group, &[]);
         let total = |bs: &[Batch]| bs.iter().map(|b| b.count as usize).sum::<usize>();
-        let all = [total(tris), total(lines), total(quads)];
-        let mut from = [0usize; 3];
+        let all = [total(tris), total(lines), total(quads), total(rings)];
+        let mut from = [0usize; 4];
         for to in breaks.iter().copied().chain(std::iter::once(all)) {
-            for (i, (pipeline, batches)) in
-                [(&self.tri_pipeline, tris), (&self.line_pipeline, lines), (&self.quad_pipeline, quads)].into_iter().enumerate()
+            for (i, (pipeline, batches)) in [
+                (&self.tri_pipeline, tris),
+                (&self.line_pipeline, lines),
+                (&self.quad_pipeline, quads),
+                (&self.ring_pipeline, rings),
+            ]
+            .into_iter()
+            .enumerate()
             {
                 let parts = batch_ranges(batches.iter().map(|b| b.count), from[i]..to[i]);
                 if parts.is_empty() {
@@ -197,7 +219,11 @@ impl Gpu {
                 for (j, range) in parts {
                     let Some(batch) = batches.get(j) else { continue };
                     pass.set_vertex_buffer(0, batch.buffer.slice(..));
-                    if i == 2 { pass.draw(0..6, range) } else { pass.draw(range, 0..1) }
+                    if i >= 2 {
+                        pass.draw(0..6, range)
+                    } else {
+                        pass.draw(range, 0..1)
+                    }
                 }
             }
             from = to;
@@ -209,7 +235,7 @@ fn pipelines(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     sample_count: u32,
-) -> (wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::Buffer, wgpu::BindGroup) {
+) -> (wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::Buffer, wgpu::BindGroup) {
     let module = device
         .create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("cad_canvas"), source: wgpu::ShaderSource::Wgsl(CANVAS_SHADER.into()) });
     let entry = |binding: u32| wgpu::BindGroupLayoutEntry {
@@ -261,6 +287,7 @@ fn pipelines(
         pipeline("cad_lines", "vs_line", wgpu::PrimitiveTopology::LineList, vertex_layout()),
         pipeline("cad_fills", "vs_line", wgpu::PrimitiveTopology::TriangleList, vertex_layout()),
         pipeline("cad_quads", "vs_quad", wgpu::PrimitiveTopology::TriangleList, instance_layout()),
+        pipeline("cad_rings", "vs_ring", wgpu::PrimitiveTopology::TriangleList, ring_layout()),
         uniform,
         bind_group,
     )
@@ -274,6 +301,11 @@ fn vertex_layout() -> wgpu::VertexBufferLayout<'static> {
 fn instance_layout() -> wgpu::VertexBufferLayout<'static> {
     const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Unorm8x4, 3 => Float32];
     wgpu::VertexBufferLayout { array_stride: INSTANCE_SIZE as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &ATTRS }
+}
+
+fn ring_layout() -> wgpu::VertexBufferLayout<'static> {
+    const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Unorm8x4];
+    wgpu::VertexBufferLayout { array_stride: RING_INSTANCE_SIZE as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &ATTRS }
 }
 
 fn upload(device: &wgpu::Device, label: &str, bytes: &[u8], stride: usize) -> Vec<Batch> {
@@ -326,18 +358,23 @@ fn mesh_fingerprint(mesh: &MeshData) -> u64 {
     mesh.lines.len().hash(&mut h);
     mesh.tris.len().hash(&mut h);
     mesh.quads.len().hash(&mut h);
+    mesh.rings.len().hash(&mut h);
     mesh.breaks.hash(&mut h);
     h.write(&mesh.lines);
     h.write(&mesh.tris);
     h.write(&mesh.quads);
+    h.write(&mesh.rings);
     h.finish()
 }
 
 fn present_mode_from_env() -> wgpu::PresentMode {
-    match std::env::var("AAD_VSYNC").ok().as_deref().map(str::trim).map(|v| v.to_ascii_lowercase()).as_deref() {
-        Some("1" | "on" | "true" | "yes") => wgpu::PresentMode::AutoVsync,
+    present_mode_for(std::env::var("AAD_VSYNC").ok().as_deref())
+}
+
+fn present_mode_for(vsync: Option<&str>) -> wgpu::PresentMode {
+    match vsync.map(str::trim).map(|v| v.to_ascii_lowercase()).as_deref() {
         Some("0" | "off" | "false" | "no") => wgpu::PresentMode::AutoNoVsync,
-        _ => wgpu::PresentMode::AutoNoVsync,
+        _ => wgpu::PresentMode::AutoVsync,
     }
 }
 
@@ -372,4 +409,14 @@ fn open_adapter(hwnd: isize) -> Result<(wgpu::Instance, wgpu::Surface<'static>, 
         }
     }
     Err(last)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn present_mode_defaults_to_vsync() {
+        assert!(matches!(super::present_mode_for(None), wgpu::PresentMode::AutoVsync));
+        assert!(matches!(super::present_mode_for(Some("1")), wgpu::PresentMode::AutoVsync));
+        assert!(matches!(super::present_mode_for(Some("off")), wgpu::PresentMode::AutoNoVsync));
+    }
 }

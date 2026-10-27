@@ -358,6 +358,18 @@ fn preview_entities<'a>(d: &aad_doc::Drawing, entities: impl Iterator<Item = &'a
                     strokes.push((p.display_rgb(paper), pts.to_vec()));
                 }
             }
+            aad_render::Kind::Arc { sweep } => {
+                let pts = list.points(p);
+                if let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) {
+                    let radius = center.dist(*rim);
+                    let start = center.angle_to(*rim);
+                    let mut tess = Vec::new();
+                    aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                    if tess.len() >= 2 {
+                        strokes.push((p.display_rgb(paper), tess));
+                    }
+                }
+            }
             aad_render::Kind::Point => {
                 if let Some(&q) = list.points(p).first() {
                     strokes.push((p.display_rgb(paper), vec![q, q]));

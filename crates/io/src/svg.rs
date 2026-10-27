@@ -48,6 +48,21 @@ pub fn export_window(d: &Drawing, space: &Space, window: Option<Bounds2>) -> Str
                 }
                 s.push_str(r#""/>"#);
             }
+            Kind::Arc { sweep } => {
+                let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { continue };
+                let radius = center.dist(*rim);
+                let start = center.angle_to(*rim);
+                let mut tess = Vec::new();
+                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                let _ = write!(
+                    s,
+                    r#"<polyline fill="none" stroke="{c}" stroke-width="{stroke:.6}" stroke-linecap="round" stroke-linejoin="round" points=""#
+                );
+                for q in &tess {
+                    let _ = write!(s, "{:.6},{:.6} ", tx(q.x), ty(q.y));
+                }
+                s.push_str(r#""/>"#);
+            }
             Kind::Tris | Kind::Mask => {
                 // A wipeout's mask hides what lies under it with the white background.
                 let c = if p.kind == Kind::Mask { white.hex() } else { c };
