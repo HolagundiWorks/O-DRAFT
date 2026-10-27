@@ -5,15 +5,21 @@
 //! circles and arcs. `companion.subscribe` keeps a background reader that stores
 //! pushed `evaluation` messages into [`crate::Session::companion`] for preview.
 //!
-//! Commit and ghost overlay rendering land in later phases. Non-Windows builds
-//! return a clear "not available" error (wasm stays green).
+//! `companion.commit` writes evaluate output onto named levels (Phase 3). Ghost
+//! overlay rendering is still deferred. Non-Windows builds return a clear
+//! "not available" error for pipe methods (wasm stays green); commit from a
+//! supplied `result` works on every target.
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use aad_geom::{Arc as GeomArc, Vec2};
 use serde_json::{Value, json};
 
+use super::hcw::{add_on, ensure_layer};
+use super::helpers::{arc, circle, line};
 use super::project;
 use super::*;
 use crate::{Result, Session};
@@ -21,6 +27,8 @@ use crate::{Result, Session};
 const DEFAULT_PIPE: &str = "ODraft.Dynamo";
 const MAX_PIPE_NAME: usize = 64;
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_COMMIT_ITEMS: usize = 20_000;
+const MAX_LEVEL_NAME: usize = 64;
 
 /// Connection and preview state for the O-Dynamo companion.
 #[derive(Clone)]
@@ -89,6 +97,9 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("companion.preview", "Companion Preview", run_preview)
             .params("{} → {preview}")
             .noundo(),
+        CommandSpec::new("companion.commit", "Commit Companion Graph", run_commit)
+            .menu(&["Architecture", "Companion", "Commit"])
+            .params("{result?: evaluate result (else last preview)} → {committed, levels, lines, circles, arcs} (one undo step; creates missing levels)"),
     ]
 }
 
@@ -221,6 +232,197 @@ fn run_unsubscribe(s: &mut Session, _p: &Value) -> Result<Value> {
 fn run_preview(s: &mut Session, _p: &Value) -> Result<Value> {
     s.companion.pull_slot();
     Ok(json!({ "preview": s.companion.preview }))
+}
+
+fn run_commit(s: &mut Session, p: &Value) -> Result<Value> {
+    if s.block_edit.is_some() {
+        return Err(bad("companion.commit", "close the block editor first"));
+    }
+    s.companion.pull_slot();
+    let result = p
+        .get("result")
+        .cloned()
+        .or_else(|| s.companion.preview.clone())
+        .ok_or_else(|| bad("companion.commit", "no result to commit; evaluate first or pass `result`"))?;
+    if !result.is_object() {
+        return Err(bad("companion.commit", "`result` must be an object with lines, circles and arcs"));
+    }
+
+    let active_name = s.doc()?.active_level_ref().map(|l| l.name.clone());
+    let groups = group_by_level(&result, active_name.as_deref())?;
+    if groups.is_empty() {
+        return Ok(json!({ "committed": false, "levels": [], "lines": 0, "circles": 0, "arcs": 0 }));
+    }
+
+    let restore = s.doc()?.active_level;
+    let mut total_lines = 0usize;
+    let mut total_circles = 0usize;
+    let mut total_arcs = 0usize;
+    let mut level_names = Vec::new();
+
+    for (level_name, items) in groups {
+        ensure_named_level(s, &level_name)?;
+        let id = s
+            .doc()?
+            .level_by_name(&level_name)
+            .map(|l| l.id)
+            .ok_or_else(|| bad("companion.commit", format!("level `{level_name}` could not be created")))?;
+        if s.doc()?.active_level != Some(id) {
+            s.doc_mut()?.switch_level(id).map_err(|e| bad("companion.commit", e.to_string()))?;
+            s.set_selection(Vec::new());
+        }
+        level_names.push(level_name);
+        for item in items {
+            match item {
+                CommitItem::Line { a, b, layer } => {
+                    ensure_layer(s.doc_mut()?, &layer, 7, "Continuous", 25, "Companion commit");
+                    add_on(s, &layer, line(a, b))?;
+                    total_lines += 1;
+                }
+                CommitItem::Circle { c, r, layer } => {
+                    ensure_layer(s.doc_mut()?, &layer, 7, "Continuous", 25, "Companion commit");
+                    add_on(s, &layer, circle(c, r))?;
+                    total_circles += 1;
+                }
+                CommitItem::Arc { c, r, start, end, layer } => {
+                    ensure_layer(s.doc_mut()?, &layer, 7, "Continuous", 25, "Companion commit");
+                    let geom = GeomArc::new(c, r, start, end);
+                    add_on(s, &layer, arc(&geom))?;
+                    total_arcs += 1;
+                }
+            }
+        }
+    }
+
+    if let Some(id) = restore {
+        if s.doc()?.active_level != Some(id) {
+            let _ = s.doc_mut()?.switch_level(id);
+        }
+    }
+
+    Ok(json!({
+        "committed": true,
+        "levels": level_names,
+        "lines": total_lines,
+        "circles": total_circles,
+        "arcs": total_arcs,
+    }))
+}
+
+enum CommitItem {
+    Line { a: Vec2, b: Vec2, layer: String },
+    Circle { c: Vec2, r: f64, layer: String },
+    Arc { c: Vec2, r: f64, start: f64, end: f64, layer: String },
+}
+
+fn group_by_level(result: &Value, active: Option<&str>) -> Result<BTreeMap<String, Vec<CommitItem>>> {
+    let mut out: BTreeMap<String, Vec<CommitItem>> = BTreeMap::new();
+    let mut count = 0usize;
+    let default_level = active.unwrap_or("Level 1").to_string();
+
+    let push = |out: &mut BTreeMap<String, Vec<CommitItem>>, level: String, item: CommitItem, count: &mut usize| -> Result<()> {
+        *count = count.saturating_add(1);
+        if *count > MAX_COMMIT_ITEMS {
+            return Err(bad("companion.commit", format!("at most {MAX_COMMIT_ITEMS} entities per commit")));
+        }
+        out.entry(level).or_default().push(item);
+        Ok(())
+    };
+
+    if let Some(arr) = result.get("lines").and_then(Value::as_array) {
+        for (i, v) in arr.iter().enumerate() {
+            let layer = layer_of(v, "0");
+            let level = level_of(v, &default_level)?;
+            let x0 = num_field(v, "x0", i, "line")?;
+            let y0 = num_field(v, "y0", i, "line")?;
+            let x1 = num_field(v, "x1", i, "line")?;
+            let y1 = num_field(v, "y1", i, "line")?;
+            push(
+                &mut out,
+                level,
+                CommitItem::Line { a: Vec2::new(x0, y0), b: Vec2::new(x1, y1), layer },
+                &mut count,
+            )?;
+        }
+    }
+    if let Some(arr) = result.get("circles").and_then(Value::as_array) {
+        for (i, v) in arr.iter().enumerate() {
+            let layer = layer_of(v, "0");
+            let level = level_of(v, &default_level)?;
+            let cx = num_field(v, "cx", i, "circle")?;
+            let cy = num_field(v, "cy", i, "circle")?;
+            let r = num_field(v, "r", i, "circle")?;
+            if !(r > 0.0) {
+                return Err(bad("companion.commit", format!("circle {i}: `r` must be positive")));
+            }
+            push(&mut out, level, CommitItem::Circle { c: Vec2::new(cx, cy), r, layer }, &mut count)?;
+        }
+    }
+    if let Some(arr) = result.get("arcs").and_then(Value::as_array) {
+        for (i, v) in arr.iter().enumerate() {
+            let layer = layer_of(v, "0");
+            let level = level_of(v, &default_level)?;
+            let cx = num_field(v, "cx", i, "arc")?;
+            let cy = num_field(v, "cy", i, "arc")?;
+            let r = num_field(v, "r", i, "arc")?;
+            let start = num_field(v, "startAngle", i, "arc")?;
+            let end = num_field(v, "endAngle", i, "arc")?;
+            if !(r > 0.0) {
+                return Err(bad("companion.commit", format!("arc {i}: `r` must be positive")));
+            }
+            push(
+                &mut out,
+                level,
+                CommitItem::Arc { c: Vec2::new(cx, cy), r, start, end, layer },
+                &mut count,
+            )?;
+        }
+    }
+    Ok(out)
+}
+
+fn layer_of(v: &Value, fallback: &str) -> String {
+    v.get("layer")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.len() <= 255)
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn level_of(v: &Value, fallback: &str) -> Result<String> {
+    match v.get("level").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+        Some(name) if name.len() <= MAX_LEVEL_NAME && aad_doc::level_name_ok(name) => Ok(name.to_string()),
+        Some(_) => Err(bad("companion.commit", "a level name is 1 to 64 characters without control characters")),
+        None => Ok(fallback.to_string()),
+    }
+}
+
+fn num_field(v: &Value, key: &str, index: usize, kind: &str) -> Result<f64> {
+    v.get(key)
+        .and_then(Value::as_f64)
+        .filter(|n| n.is_finite())
+        .ok_or_else(|| bad("companion.commit", format!("{kind} {index}: `{key}` must be a finite number")))
+}
+
+fn ensure_named_level(s: &mut Session, name: &str) -> Result<()> {
+    if s.doc()?.level_by_name(name).is_some() {
+        return Ok(());
+    }
+    let d = s.doc_mut()?;
+    if !d.has_levels() {
+        let first = super::levels::implicit_name(d);
+        if first.eq_ignore_ascii_case(name) {
+            d.materialize_levels(name, 0.0, 3.0).map_err(|e| bad("companion.commit", e.to_string()))?;
+            return Ok(());
+        }
+        d.materialize_levels(&first, 0.0, 3.0).map_err(|e| bad("companion.commit", e.to_string()))?;
+    }
+    if d.level_by_name(name).is_some() {
+        return Ok(());
+    }
+    d.add_level(name, 0.0, 3.0, None).map_err(|e| bad("companion.commit", e.to_string()))?;
+    Ok(())
 }
 
 fn ensure_connected(s: &Session) -> Result<()> {

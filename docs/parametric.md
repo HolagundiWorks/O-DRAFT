@@ -117,4 +117,4 @@ Roadmap: [dynamo-enhancement-plan.md](dynamo-enhancement-plan.md). This does not
 - Columns, beams, slabs and other component types beyond `osas.wall` in `aad-param` (companion
   has draft geometry nodes; commit is Phase 3).
 - Agent tools for `param.*` (engine commands exist; the agent registry does not expose them yet).
-- Companion canvas ghost overlay and `companion.commit`.
+- Companion canvas ghost overlay.

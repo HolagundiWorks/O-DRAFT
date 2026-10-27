@@ -1,9 +1,8 @@
 # Dynamo companion enhancement plan
 
-**Status: in progress.** Phases 1 and 2 are implemented and verified (O-Dynamo `dotnet test`: 11
-passed; O-Draft `cargo test -p aad-engine --test companion`: 5 passed). Phase 2 canvas ghost
-overlay is deferred (preview is stored on the session via `companion.preview`). Phases 3–6 remain
-planned. Capability matrix: [status.md](status.md).
+**Status: in progress.** Phases 1–3 are implemented and verified (O-Dynamo `dotnet test`: 12
+passed; O-Draft `cargo test -p aad-engine --test companion`: 8 passed). Phase 2 canvas ghost
+overlay is deferred. Phases 4–6 remain planned. Capability matrix: [status.md](status.md).
 
 ## Goal
 
@@ -133,39 +132,22 @@ clearly; subscribe stores pushed evaluations into `Session.companion` / `compani
 
 ---
 
-### Phase 3 — Level-aware commit (both repos)
+### Phase 3 — Level-aware commit (both repos) — **done**
 
 **Goal:** Geometry from the companion lands on the correct level instead of always the first
 model space.
 
-**Graph output extension:**
+**Verified:** O-Dynamo level-on-output test; `companion.commit` with Ground/First lines+circle,
+store counts, and undo (`cargo test --test companion`: 8 passed).
 
-```json
-{
-  "lines": [{ "x0": 0, "y0": 0, "x1": 4000, "y1": 0, "layer": "A-WALL", "level": "Ground" }],
-  "circles": [...],
-  "arcs": [...]
-}
-```
-
-Every output item gains an optional `level` field. If absent, it goes to the active level.
-
-**O-Dynamo changes:**
+Every output item has an optional `level` field (from a wired `levelSelect` or a string literal).
+If absent, commit uses the active level (or `Level 1`).
 
 | File | Change |
 |---|---|
-| `GraphEngine.cs` | When a geometry node has a `levelSelect` wired to its `level` input port, the output `GraphLine` / `GraphCircle` / `GraphArc` carries the level name. Add a `Level` field to each output record. |
-| `GraphLine` / `GraphCircle` / `GraphArc` | Add `string? Level` property. |
-
-**O-Draft changes:**
-
-| File | Change |
-|---|---|
-| `companion.rs` | `companion.commit` groups the output by `level`, switches to each level's store, and writes the entities there. If a named level does not exist, it is created with `level.new`. Commit is one undo step. |
-| Tests | A graph with two `levelSelect` nodes (Ground, First) commits lines to both levels; undo removes all of them. |
-
-**Done when:** A wall on "Ground" and a stair on "First" in one graph commit to the correct
-levels; `drawing.inspect` confirms the entity counts per level.
+| `GraphLine` / `GraphCircle` / `GraphArc` | Optional `Level` |
+| `GraphEngine.cs` | Geometry nodes read `level` port / literal |
+| `companion.commit` | Groups by level, creates missing levels, writes lines/circles/arcs, one undo step |
 
 ---
 
