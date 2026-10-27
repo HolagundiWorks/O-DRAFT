@@ -82,7 +82,8 @@ impl CompanyProfile {
             v.push(Issue::new("name", "is required"));
         }
         let email = self.contact.email.trim();
-        if !email.is_empty() && !(email.contains('@') && !email.starts_with('@') && !email.ends_with('@') && !email.contains(' ')) {
+        let looks_like_email = email.contains('@') && !email.starts_with('@') && !email.ends_with('@') && !email.contains(' ');
+        if !email.is_empty() && !looks_like_email {
             v.push(Issue::new("contact.email", "does not look like an email address"));
         }
         let logo = &self.logo.relative_path;
