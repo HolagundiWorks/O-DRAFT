@@ -66,7 +66,7 @@ states is not done; the tests that save screenshots (`CRAFT_UI_VISUAL_DIR`) are 
 **Open.** The existing tests can write PNGs but nothing compares them with approved images, so no
 baseline was created. Approving images needs a person to look at them, and the harness renders on
 the CPU path, which differs from the GPU canvas. Proposed first step: approve the three
-`chrome_geometry` sizes as baselines under `crates/ui-egui/tests/snapshots/` with a tolerance, after
+`chrome_geometry` sizes as baselines (no snapshot folder exists yet) with a tolerance, after
 review.
 
 ## F. Window sizes and scaling

@@ -27,8 +27,6 @@ eTransmit removal, and dynamic door/window work on top of `2f4af48`.
 | [visual-audit.md](visual-audit.md) | Screenshots and UI notes |
 | [release-readiness.md](release-readiness.md) | Blockers and open risks |
 | [artifacts/](artifacts/) | Raw command output |
-| [screenshots/](screenshots/) | Captured UI images |
-| [evidence/](evidence/) | Minimal repros and logs |
 
 ## Campaign status (2026-10-26)
 

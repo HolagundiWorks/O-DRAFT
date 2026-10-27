@@ -52,7 +52,7 @@ The web build (`apps/aad-web`) is not part of the supported product yet; it is o
 ## Tests
 
 ```sh
-cargo xtask ci        # fmt, clippy -D warnings, tests, asset list, layering, wasm check
+cargo xtask ci        # fmt, clippy -D warnings, tests, asset list, layering, licences, UI rules, wasm check
 ```
 
 `cargo xtask --help` lists the other tasks (`layers`, `assets`, `wasm`, `parity`, `version`, `logo`, `stats`).
@@ -140,7 +140,6 @@ An offline assistant can call a fixed set of validated tools (summary, flatten, 
 | [docs/BUG_BACKLOG.md](docs/BUG_BACKLOG.md), [docs/UI_BASELINE.md](docs/UI_BASELINE.md), [docs/UI_BUG_BACKLOG.md](docs/UI_BUG_BACKLOG.md) | Quality programme records |
 | [docs/UI_TESTING_STRATEGY.md](docs/UI_TESTING_STRATEGY.md), [docs/UI_TEST_MATRIX.md](docs/UI_TEST_MATRIX.md) | UI test tooling, coverage |
 | [docs/WCAG_UI_AUDIT.md](docs/WCAG_UI_AUDIT.md) | Accessibility and interface audit of the WinUI shell: method, findings, fixes |
-| [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md) | What the documents promise and the code lacks; performance plan |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured interactive and I/O performance; residual costs |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Open bugs and verified limits |
 | [docs/architecture/suite-integration.md](docs/architecture/suite-integration.md) | How O-Draft connects to O-Studio, O-CoreOp, ShilpiDB and AORMS |

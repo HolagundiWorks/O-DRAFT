@@ -185,7 +185,7 @@ Manual, per changed screen, at 100 %, 150 % and 200 % scaling and in both themes
 8. Open and close ten times; the process exits when the shell closes.
 9. Save prompt: the shell cannot be clicked while it is open, and gets focus back after.
 
-Screenshot regression baselines (`docs/baselines/`) and automated UI tests (WinAppDriver /
+Screenshot regression baselines (none are stored yet) and automated UI tests (WinAppDriver /
 UI Automation) do not exist yet.
 
 ## Follow-ups

@@ -211,8 +211,8 @@ the parametric library is O-Draft's own.
 
 ## Not done
 
-- The WinUI changes (Smart Blocks window, Blocks panel sections) have not been compiled or run on
-  Windows yet; the Rust side they call is tested.
+- The WinUI changes (Smart Blocks window, the Blocks panel library thumbnails) build in the shell
+  (`dotnet build`) but were not clicked through; the Rust side they call is tested.
 - Grips for count parameters (bars, chairs, shutters) and for the switch board; these are edited
   in Properties.
 - Discipline DXFs and a smart block picker in the egui window.

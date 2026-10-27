@@ -71,7 +71,7 @@ The control channel is described in [control-protocol.md](control-protocol.md).
 ## Test, format, lint
 
 ```text
-cargo xtask ci                                           # verified: fmt, clippy -D warnings (with aad/egui), tests, assets, layers, wasm
+cargo xtask ci                                           # fmt, clippy -D warnings (with aad/egui), tests, assets, layers, licences, ui, wasm
 cargo fmt --all -- --check                               # verified
 cargo clippy --workspace --all-targets --features aad/egui -- -D warnings
 cargo test --workspace --features aad/egui               # keeps the optional egui shell in the graph

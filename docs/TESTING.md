@@ -7,7 +7,7 @@ supported platform for now.
 
 ```text
 cargo xtask ci                                   # the gate: fmt, clippy -D warnings, all tests,
-                                                 # asset attribution, layering, wasm compile
+                                                 # asset attribution, layering, licences, UI rules, wasm compile
 powershell -File tools/quality/baseline.ps1      # the same commands with timings, as a report
 cargo bench -p aad-geom --bench geometry    # benchmarks (see PERFORMANCE.md)
 ```

@@ -466,7 +466,8 @@ carried `levels`, `sheetSets` and `designMode`):
 - **Level tabs** in a bar under the drawing (a row of its own, because the canvas is a native child
   window that XAML cannot overlay). One tab per level, the active one selected, a half-filled circle
   on a level traced under the active one, the elevation in the tooltip. A click runs
-  `level.activate`. The bar is always present; with one implicit level it shows only the add button.
+  `level.activate`. The bar is always present; a drawing with one implicit level shows it as an active tab
+  named `Level 1`, with the add button beside it.
 - **Tab menu** (right-click, opens upward): *Rename, elevation and height...* (the engine form
   `level.set`, prefilled with the level), *Trace over the current level* (a tick that runs
   `level.trace` add or remove with the default settings), *Trace settings...* (the engine form
@@ -504,9 +505,9 @@ carried `levels`, `sheetSets` and `designMode`):
   matching *Copy to Level* entry yet (`level.copyto` exists).
 - **Sheet-set rail** on the left edge as vertical tabs (the name rotated 90 degrees, reading
   upward): Design, then one tab per sheet set, the active one
-  selected; a click runs `sheetset.activate`. The rail is hidden while the drawing has no sheet
-  sets (create them with `level.setup` or `sheetset.new`, from the Architecture menu or the
-  command line). In a sheet view the bar says which set is being annotated.
+  selected; a click runs `sheetset.activate`. Without sheet sets the rail shows Design and a
+  `+ Drawing tabs` entry that runs `sheetset.standard` (the Project Wizard and `level.setup` also
+  make tabs). In a sheet view the bar says which set is being annotated.
 - **The project's active floor follows the level**: `level.activate` (and so the tabs, Ctrl+PageUp
   and Ctrl+PageDown, `level.next` and `level.prev`) sets the active floor when the level has the
   name of a listed floor. There is no Floor selector (or any context bar) in the WinUI shell

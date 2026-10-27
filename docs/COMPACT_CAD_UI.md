@@ -113,7 +113,7 @@ Capture at a fixed window size (e.g. 1440×900) and 100% scaling:
 3. Hatch Editor (swatch grid).
 4. Text Style (or Dim Style) dialog.
 
-Store under `docs/baselines/compact-cad/` when available (`before/` / `after/`).
+No before/after screenshots are stored in the repository.
 
 ## Related
 

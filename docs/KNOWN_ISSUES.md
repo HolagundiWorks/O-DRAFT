@@ -9,6 +9,7 @@ P2 significant, P3 minor, P4 cosmetic. Confirmed means reproduced; a hypothesis 
 | ID | Sev | Summary | Reproduce | Workaround |
 |---|---|---|---|---|
 | BUG-001 residual | P3 | In-process DWG reads (no `aad_dwg::isolated::enable()`) are still uncapped. The apps use the worker with a Windows Job Object memory cap (~2 GiB). Upstream `acadrust` AC18 unchecked allocs are not reported yet | Read the alloc-bomb fixture in-process | Use the apps / isolated worker |
+| UI-LINT | P2 | `cargo xtask ui`, a step of `cargo xtask ci`, fails on `main` with 15 problems (checked 2026-10-27): `LayerMapWindow.cs` and `ProjectWizardWindow.cs` create windows without `StandardWindow.Present`, call `ShellIcon`/`ShellFit` directly and carry hard-coded dimensions; `GraphPanel.cs`, `HistoryWindow.cs`, `RevisionsWindow.cs` and `SeamlessTab.cs` have hard-coded dimensions with none allowed; `LevelBars.cs`, `MainWindow.xaml` and `MainWindow.xaml.cs` are over their allowed counts. They were written or changed after the design-system rules landed | `cargo xtask ui` | Convert the windows to a template and use the `Density` tokens ([UI_STANDARDS.md](UI_STANDARDS.md)) |
 | (limit) | P3 | Command-line `open`/`qsave`, batch plot and PDF preview still run their commit/plot work on the session thread. Menu/picker and control-channel `app.open`/`app.save` use workers (control replies are deferred across `pump`) | Batch plot a large set | Wait |
 | (limit) | P3 | A full display-list rebuild of every entity at zoom extents is still about 125 ms at 100 000 entities (post-rayon). Far-zoom LOD, frustum cull when zoomed in, and async band rebuild reduce freezes; they do not change full-extents O(n) ([PERFORMANCE.md](PERFORMANCE.md)) | Open or heavily edit a 100k drawing at extents | none |
 | (limit) | P3 | Reading a large DWG takes about 1.2 to 1.5 s in the worker (acadrust + DXF round-trip) before the drawing appears; set `AAD_DWG_STAGE=1` for spawn timing. The window stays responsive in the WinUI shell | Open a large DWG | Wait |
@@ -25,7 +26,7 @@ LOD, WinUI async zoom-band rebuild, control-channel and menu save via workers.
 - UI-003: file open and save block the UI thread — largely addressed for WinUI picker and control `app.open`/`app.save`; remaining session-thread cases are listed under Confirmed limits above.
 - UI-004: `Ctrl+O` is declared by two commands; no misbehaviour seen.
 - UI-005: an overly wide Properties panel in a layout tab, seen once, not reproduced.
-- The GitHub workflows `cad-ci.yml` and `cad-nightly.yml` have not run on GitHub yet.
+- GitHub: `cad-ci.yml` runs on every push (it passed on 2026-10-27 and failed at the `fmt` step of a later push, for formatting in the companion code); `cad-nightly.yml` failed on its last three scheduled runs (2026-10-25 to 2026-10-27) and the cause has not been looked into.
 - The release installer was installed, run and uninstalled silently on the development machine, but not on a clean machine, and the wizard pages were not exercised ([RELEASE_AND_PACKAGING.md](RELEASE_AND_PACKAGING.md)).
 - Neither package ships `NOTICE` (third-party notices); both are unsigned.
 - Dependencies are not audited for advisories on this machine (`cargo audit` is run by the nightly

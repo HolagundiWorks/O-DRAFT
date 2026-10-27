@@ -1,5 +1,8 @@
 # UI baseline
 
+> A record of 2026-10-12, measured on the egui window before any interface change; it is not updated. The WinUI
+> shell is covered by [status.md](status.md), [UI_STANDARDS.md](UI_STANDARDS.md) and [WCAG_UI_AUDIT.md](WCAG_UI_AUDIT.md).
+
 What was measured and run on 2026-10-12, before any change to the interface. Nothing in the
 application was modified for these results; only tests were added.
 
