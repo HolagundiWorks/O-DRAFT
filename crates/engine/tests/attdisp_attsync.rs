@@ -42,22 +42,22 @@ fn attdisp_sets_attmode_and_the_display_follows_it() {
     line(&mut s);
     make_block(&mut s, "B");
     insert(&mut s, 0.0, json!({}));
-    let normal = segments(&s);
+    let normal = draw_prims(&s);
 
     s.cmdline("attdisp").unwrap();
     assert!(s.prompt_text().contains("[Normal/ON/OFF] <Normal>"), "{}", s.prompt_text());
     s.cmdline("on").unwrap();
     assert!(s.running.is_none());
     assert_eq!(s.doc().unwrap().header.i64("ATTMODE", 1), 2);
-    let on = segments(&s);
+    let on = draw_prims(&s);
 
     s.cmdline("attdisp off").unwrap();
     assert_eq!(s.doc().unwrap().header.i64("ATTMODE", 1), 0);
-    let off = segments(&s);
+    let off = draw_prims(&s);
     assert!(off < normal && normal < on, "off {off}, normal {normal}, on {on}");
 
     assert_eq!(s.execute("attdisp", &json!({"mode": "normal"})).unwrap(), json!({"attmode": 1}));
-    assert_eq!(segments(&s), normal);
+    assert_eq!(draw_prims(&s), normal);
     assert!(s.execute("attdisp", &json!({"mode": "sometimes"})).is_err());
 }
 
