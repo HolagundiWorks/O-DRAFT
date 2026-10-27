@@ -53,12 +53,30 @@ pub fn export_window(d: &Drawing, space: &Space, window: Option<Bounds2>) -> Str
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                aad_geom::Arc::new(*center, radius, start, start + aad_render::sweep_radians(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
                 let _ = write!(
                     s,
                     r#"<polyline fill="none" stroke="{c}" stroke-width="{stroke:.6}" stroke-linecap="round" stroke-linejoin="round" points=""#
                 );
                 for q in &tess {
+                    let _ = write!(s, "{:.6},{:.6} ", tx(q.x), ty(q.y));
+                }
+                s.push_str(r#""/>"#);
+            }
+            Kind::Ellipse { start, sweep } => {
+                let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) else { continue };
+                let u = *u_tip - *center;
+                let v = *v_tip - *center;
+                let sw = aad_render::sweep_radians(sweep);
+                let a0 = f64::from(start);
+                let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
+                let _ = write!(
+                    s,
+                    r#"<polyline fill="none" stroke="{c}" stroke-width="{stroke:.6}" stroke-linecap="round" stroke-linejoin="round" points=""#
+                );
+                for i in 0..=n {
+                    let t = a0 + sw * i as f64 / n as f64;
+                    let q = *center + u * t.cos() + v * t.sin();
                     let _ = write!(s, "{:.6},{:.6} ", tx(q.x), ty(q.y));
                 }
                 s.push_str(r#""/>"#);

@@ -139,7 +139,8 @@ fn instance_layout() -> wgpu::VertexBufferLayout<'static> {
 }
 
 fn ring_layout() -> wgpu::VertexBufferLayout<'static> {
-    const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Unorm8x4];
+    // centre, U, V, (start,sweep,width,pad), colour — see RING_INSTANCE_SIZE.
+    const ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Float32x4, 4 => Unorm8x4];
     wgpu::VertexBufferLayout { array_stride: RING_INSTANCE_SIZE as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &ATTRS }
 }
 
@@ -285,14 +286,10 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
         let all = [total(&res.tris), total(&res.lines), total(&res.quads), total(&res.rings)];
         let mut from = [0usize; 4];
         for to in res.breaks.iter().copied().chain(std::iter::once(all)) {
-            for (i, (pipeline, batches)) in [
-                (&res.tri_pipeline, &res.tris),
-                (&res.line_pipeline, &res.lines),
-                (&res.quad_pipeline, &res.quads),
-                (&res.ring_pipeline, &res.rings),
-            ]
-            .into_iter()
-            .enumerate()
+            for (i, (pipeline, batches)) in
+                [(&res.tri_pipeline, &res.tris), (&res.line_pipeline, &res.lines), (&res.quad_pipeline, &res.quads), (&res.ring_pipeline, &res.rings)]
+                    .into_iter()
+                    .enumerate()
             {
                 let parts = batch_ranges(batches.iter().map(|b| b.count), from[i]..to[i]);
                 if parts.is_empty() {
@@ -303,11 +300,7 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
                     let Some(b) = batches.get(j) else { continue };
                     pass.set_vertex_buffer(0, b.buffer.slice(..));
                     // Quads and rings are instanced: six vertices per instance.
-                    if i >= 2 {
-                        pass.draw(0..6, r)
-                    } else {
-                        pass.draw(r, 0..1)
-                    }
+                    if i >= 2 { pass.draw(0..6, r) } else { pass.draw(r, 0..1) }
                 }
             }
             from = to;

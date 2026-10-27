@@ -12,8 +12,9 @@ use crate::{DisplayList, Kind};
 pub const VERTEX_SIZE: usize = 12;
 /// Wide-line / point instance: a, b (2 × f32 each) + colour (4 × u8) + width in points (f32).
 pub const INSTANCE_SIZE: usize = 24;
-/// Circle/arc ring instance: centre (2×f32) + (radius, start) + (sweep, width) + colour (4×u8) + pad.
-pub const RING_INSTANCE_SIZE: usize = 32;
+/// Circle / ellipse ring instance: centre + conjugate axes U/V (3 × vec2) + (start, sweep, width, pad)
+/// + colour (4 × u8) + pad. Circles use U=(r,0), V=(0,r).
+pub const RING_INSTANCE_SIZE: usize = 48;
 /// Point markers are 1.5 × 1.5 points (as on the CPU path).
 const POINT_SIZE: f32 = 1.5;
 
@@ -34,13 +35,19 @@ struct VOut {
     @location(1) pa: vec2<f32>,
     @location(2) pb: vec2<f32>,
     @location(3) hw: f32,
-    // 0 = segment stroke (pa/pb endpoints). >0 = ring: pa=centre_px, pb=(r_px, start), sweep=radians.
+    // 0 = segment stroke (pa/pb endpoints). >0 = ring/ellipse: pa=centre_px, pb=U_px, axis_v=V_px.
     @location(4) sweep: f32,
+    @location(5) axis_v: vec2<f32>,
+    @location(6) start: f32,
 };
 
 fn to_px(p: vec2<f32>) -> vec2<f32> {
     let w = (p + view.a.xy) * view.a.z;
     return vec2<f32>(view.b.x + w.x, view.b.y - w.y);
+}
+
+fn to_px_vec(v: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(v.x * view.a.z, -v.y * view.a.z);
 }
 
 fn px_to_clip(px: vec2<f32>) -> vec4<f32> {
@@ -69,6 +76,8 @@ fn solid(pos: vec4<f32>, color: vec4<f32>) -> VOut {
     o.pb = vec2<f32>(0.0, 0.0);
     o.hw = 0.0;
     o.sweep = 0.0;
+    o.axis_v = vec2<f32>(0.0, 0.0);
+    o.start = 0.0;
     return o;
 }
 
@@ -123,6 +132,8 @@ fn vs_quad(
     o.pb = pb;
     o.hw = hw;
     o.sweep = 0.0;
+    o.axis_v = vec2<f32>(0.0, 0.0);
+    o.start = 0.0;
     return o;
 }
 
@@ -130,30 +141,33 @@ fn vs_quad(
 fn vs_ring(
     @builtin(vertex_index) vi: u32,
     @location(0) center: vec2<f32>,
-    @location(1) rs: vec2<f32>,
-    @location(2) sw: vec2<f32>,
-    @location(3) color: vec4<f32>,
+    @location(1) u: vec2<f32>,
+    @location(2) v_axis: vec2<f32>,
+    @location(3) params: vec4<f32>, // start, sweep, width, pad
+    @location(4) color: vec4<f32>,
 ) -> VOut {
-    let radius = rs.x;
-    let start = rs.y;
-    let sweep = sw.x;
-    let width = sw.y;
+    let start = params.x;
+    let sweep = params.y;
+    let width = params.z;
     let px_w = stroke_px_w(width);
     let hw = 0.5 * px_w;
     let c = to_px(center);
-    let r_px = abs(radius) * view.a.z;
+    let u_px = to_px_vec(u);
+    let v_px = to_px_vec(v_axis);
     let pad = hw + 1.5;
-    let ext = r_px + pad;
+    let ext = vec2<f32>(abs(u_px.x) + abs(v_px.x), abs(u_px.y) + abs(v_px.y)) + vec2<f32>(pad, pad);
     let t = select(0.0, 1.0, vi == 1u || vi == 4u || vi == 5u);
     let s = select(-1.0, 1.0, vi == 2u || vi == 3u || vi == 5u);
-    let px = c + vec2<f32>((2.0 * t - 1.0) * ext, (2.0 * s - 1.0) * ext);
+    let px = c + vec2<f32>((2.0 * t - 1.0) * ext.x, (2.0 * s - 1.0) * ext.y);
     var o: VOut;
     o.pos = px_to_clip(px);
     o.color = out_color(color);
     o.pa = c;
-    o.pb = vec2<f32>(r_px, start);
+    o.pb = u_px;
     o.hw = hw;
     o.sweep = max(sweep, 1e-6);
+    o.axis_v = v_px;
+    o.start = start;
     return o;
 }
 
@@ -163,31 +177,43 @@ fn fs_main(v: VOut) -> @location(0) vec4<f32> {
     var d: f32;
     if (v.sweep > 0.0) {
         let c = v.pa;
-        let r = v.pb.x;
-        let start = v.pb.y;
+        let u = v.pb;
+        let vv = v.axis_v;
         let dxy = p - c;
-        let d_ring = abs(length(dxy) - r);
-        // Screen Y is flipped vs world; world angle θ maps to atan2(-dy, dx) = -θ.
-        let ang = -atan2(dxy.y, dxy.x);
+        let det = u.x * vv.y - u.y * vv.x;
         let tau = 6.28318530718;
-        let full = v.sweep >= (tau - 1e-3);
-        if (full) {
-            d = d_ring;
+        if (abs(det) < 1e-12) {
+            d = length(dxy);
         } else {
-            var a = ang - start;
-            a = a - floor(a / tau) * tau;
-            if (a < 0.0) {
-                a = a + tau;
-            }
-            if (a <= v.sweep) {
+            // Solve dxy = cosθ·U + sinθ·V for (cosθ, sinθ) in unit-circle parameter space.
+            let cos_t = (dxy.x * vv.y - dxy.y * vv.x) / det;
+            let sin_t = (u.x * dxy.y - u.y * dxy.x) / det;
+            let r = sqrt(cos_t * cos_t + sin_t * sin_t);
+            let d_unit = abs(r - 1.0);
+            let inv_r = select(0.0, 1.0 / max(r, 1e-6), r > 1e-6);
+            let dir = vec2<f32>(cos_t, sin_t) * inv_r;
+            // Radial Jacobian so stroke width stays near-constant in screen pixels.
+            let jac = length(u * dir.x + vv * dir.y);
+            let d_ring = d_unit * max(jac, 1e-6);
+            let full = v.sweep >= (tau - 1e-3);
+            if (full) {
                 d = d_ring;
             } else {
-                let a0 = start;
-                let a1 = start + v.sweep;
-                // World (cos θ, sin θ) → screen offset (cos θ, -sin θ) × r.
-                let p0 = c + vec2<f32>(cos(a0), -sin(a0)) * r;
-                let p1 = c + vec2<f32>(cos(a1), -sin(a1)) * r;
-                d = min(length(p - p0), length(p - p1));
+                let ang = atan2(sin_t, cos_t);
+                var a = ang - v.start;
+                a = a - floor(a / tau) * tau;
+                if (a < 0.0) {
+                    a = a + tau;
+                }
+                if (a <= v.sweep) {
+                    d = d_ring;
+                } else {
+                    let a0 = v.start;
+                    let a1 = v.start + v.sweep;
+                    let p0 = c + u * cos(a0) + vv * sin(a0);
+                    let p1 = c + u * cos(a1) + vv * sin(a1);
+                    d = min(length(p - p0), length(p - p1));
+                }
             }
         }
     } else {
@@ -214,7 +240,7 @@ pub struct MeshData {
     pub lines: Vec<u8>,
     pub tris: Vec<u8>,
     pub quads: Vec<u8>,
-    /// Distance-field circle/arc stroke instances ([`RING_INSTANCE_SIZE`] each).
+    /// Distance-field circle / ellipse stroke instances ([`RING_INSTANCE_SIZE`] each).
     pub rings: Vec<u8>,
     /// Draw-order breaks, one before each wipeout mask: fill / line / quad / ring counts drawn
     /// before it. Each group is drawn fills, lines, quads, rings in turn.
@@ -266,9 +292,9 @@ fn push_instance(out: &mut Vec<u8>, a: [f32; 2], b: [f32; 2], c: [u8; 4], width:
     out.extend_from_slice(&width.to_le_bytes());
 }
 
-fn push_ring(out: &mut Vec<u8>, center: [f32; 2], radius: f32, start: f32, sweep: f32, width: f32, c: [u8; 4]) {
-    for v in [center[0], center[1], radius, start, sweep, width] {
-        out.extend_from_slice(&v.to_le_bytes());
+fn push_ring(out: &mut Vec<u8>, center: [f32; 2], u: [f32; 2], v: [f32; 2], start: f32, sweep: f32, width: f32, c: [u8; 4]) {
+    for x in [center[0], center[1], u[0], u[1], v[0], v[1], start, sweep, width, 0.0] {
+        out.extend_from_slice(&x.to_le_bytes());
     }
     out.extend_from_slice(&c);
     out.extend_from_slice(&[0u8; 4]);
@@ -279,8 +305,23 @@ pub fn stroke_arc(out: &mut Vec<u8>, center: Vec2, radius: f64, start: f64, swee
     if !(center.is_finite() && radius.is_finite() && sweep.is_finite()) || radius <= 1e-12 || sweep <= 0.0 {
         return;
     }
+    stroke_ellipse(out, center, Vec2::new(radius, 0.0), Vec2::new(0.0, radius), start, sweep, origin, col, width);
+}
+
+/// Append one distance-field elliptical arc: `P(t) = center + u·cos(t) + v·sin(t)`.
+pub fn stroke_ellipse(out: &mut Vec<u8>, center: Vec2, u: Vec2, v: Vec2, start: f64, sweep: f64, origin: Vec2, col: [u8; 4], width: f32) {
+    if !(center.is_finite() && u.is_finite() && v.is_finite() && start.is_finite() && sweep.is_finite()) {
+        return;
+    }
+    if sweep <= 0.0 || u.len() <= 1e-12 || v.len() <= 1e-12 {
+        return;
+    }
+    // Degenerate (parallel axes) cannot form an ellipse.
+    if (u.x * v.y - u.y * v.x).abs() <= 1e-18 {
+        return;
+    }
     let width = if width.is_finite() && width > 0.0 { width } else { HAIRLINE_POINTS };
-    push_ring(out, rel(center, origin), radius as f32, start as f32, sweep as f32, width, col);
+    push_ring(out, rel(center, origin), [u.x as f32, u.y as f32], [v.x as f32, v.y as f32], start as f32, sweep as f32, width, col);
 }
 
 /// Screen-space stroke for a polyline: butt-ended edges plus round joins/caps.
@@ -353,9 +394,7 @@ pub enum LineweightMode {
 /// Screen mode: millimetres → points (`lw × 3.78`), never thinner than [`HAIRLINE_POINTS`].
 /// True scale: returns `lw` as world millimetres for the shader to scale with the view.
 pub fn wide_width(lw: f32, mode: Option<LineweightMode>) -> Option<f32> {
-    let Some(mode) = mode else {
-        return None;
-    };
+    let mode = mode?;
     if lw <= 0.0 {
         return None;
     }
@@ -393,7 +432,14 @@ pub fn build_mesh_mode(list: &DisplayList, origin: Vec2, bg: Rgb, lw: Option<Lin
                 if let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) {
                     let radius = center.dist(*rim);
                     let start = center.angle_to(*rim);
-                    stroke_arc(&mut m.rings, *center, radius, start, f64::from(sweep), origin, col, w);
+                    stroke_arc(&mut m.rings, *center, radius, start, crate::sweep_radians(sweep), origin, col, w);
+                }
+            }
+            Kind::Ellipse { start, sweep } => {
+                if let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                    let u = *u_tip - *center;
+                    let v = *v_tip - *center;
+                    stroke_ellipse(&mut m.rings, *center, u, v, f64::from(start), crate::sweep_radians(sweep), origin, col, w);
                 }
             }
             Kind::Tris => {
@@ -580,8 +626,55 @@ mod tests {
         let m = build_mesh(&list, Vec2::ZERO, Rgb(255, 255, 255), false);
         assert_eq!(m.ring_instances(), 1);
         assert_eq!(m.quad_instances(), 0);
-        let r = f32::from_le_bytes(m.rings[8..12].try_into().expect("radius"));
-        assert!((r - 5.0).abs() < 1e-5, "radius {r}");
+        // Circle packs as U=(r,0), V=(0,r) at bytes 8..24.
+        let ux = f32::from_le_bytes(m.rings[8..12].try_into().expect("ux"));
+        let uy = f32::from_le_bytes(m.rings[12..16].try_into().expect("uy"));
+        let vx = f32::from_le_bytes(m.rings[16..20].try_into().expect("vx"));
+        let vy = f32::from_le_bytes(m.rings[20..24].try_into().expect("vy"));
+        assert!((ux - 5.0).abs() < 1e-5 && uy.abs() < 1e-5, "U=({ux},{uy})");
+        assert!(vx.abs() < 1e-5 && (vy - 5.0).abs() < 1e-5, "V=({vx},{vy})");
+    }
+
+    #[test]
+    fn gpu_ellipse_emits_one_ring_instance() {
+        let mut list = DisplayList::default();
+        let c = Vec2::new(0.0, 0.0);
+        list.verts.extend([c, c + Vec2::new(10.0, 0.0), c + Vec2::new(0.0, 4.0)]);
+        list.prims.push(crate::DPrim {
+            handle: aad_doc::Handle(2),
+            color: Rgb(0, 0, 0),
+            aci7: false,
+            lw: 0.0,
+            kind: Kind::Ellipse { start: 0.0, sweep: std::f32::consts::TAU },
+            start: 0,
+            len: 3,
+        });
+        let m = build_mesh(&list, Vec2::ZERO, Rgb(255, 255, 255), false);
+        assert_eq!(m.ring_instances(), 1);
+        assert_eq!(m.quad_instances(), 0);
+        let ux = f32::from_le_bytes(m.rings[8..12].try_into().expect("ux"));
+        let vy = f32::from_le_bytes(m.rings[20..24].try_into().expect("vy"));
+        assert!((ux - 10.0).abs() < 1e-5, "ux {ux}");
+        assert!((vy - 4.0).abs() < 1e-5, "vy {vy}");
+    }
+
+    #[test]
+    fn dashed_style_keeps_ellipse_out_of_rings() {
+        // Mesh only sees Kind::Ellipse; dashed entities tessellate to polylines in the list builder.
+        let mut list = DisplayList::default();
+        list.verts.extend([Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0), Vec2::new(0.0, 1.0)]);
+        list.prims.push(crate::DPrim {
+            handle: aad_doc::Handle(3),
+            color: Rgb(0, 0, 0),
+            aci7: false,
+            lw: 0.0,
+            kind: Kind::Polyline,
+            start: 0,
+            len: 4,
+        });
+        let m = build_mesh(&list, Vec2::ZERO, Rgb(255, 255, 255), false);
+        assert_eq!(m.ring_instances(), 0);
+        assert!(m.quad_instances() > 0);
     }
 
     #[test]

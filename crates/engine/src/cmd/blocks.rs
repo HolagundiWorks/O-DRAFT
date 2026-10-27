@@ -364,7 +364,26 @@ fn preview_entities<'a>(d: &aad_doc::Drawing, entities: impl Iterator<Item = &'a
                     let radius = center.dist(*rim);
                     let start = center.angle_to(*rim);
                     let mut tess = Vec::new();
-                    aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                    aad_geom::Arc::new(*center, radius, start, start + aad_render::sweep_radians(sweep))
+                        .tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                    if tess.len() >= 2 {
+                        strokes.push((p.display_rgb(paper), tess));
+                    }
+                }
+            }
+            aad_render::Kind::Ellipse { start, sweep } => {
+                let pts = list.points(p);
+                if let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                    let u = *u_tip - *center;
+                    let v = *v_tip - *center;
+                    let sw = aad_render::sweep_radians(sweep);
+                    let a0 = f64::from(start);
+                    let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
+                    let mut tess = Vec::with_capacity(n + 1);
+                    for i in 0..=n {
+                        let t = a0 + sw * i as f64 / n as f64;
+                        tess.push(*center + u * t.cos() + v * t.sin());
+                    }
                     if tess.len() >= 2 {
                         strokes.push((p.display_rgb(paper), tess));
                     }

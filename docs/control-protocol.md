@@ -36,7 +36,7 @@ The server waits up to 60 s for the app to answer a request. After that it repli
 | `engine.execute` | `{command, params}` | Run any command with JSON parameters. Never opens a dialog. |
 | `engine.commands` | | Every command: id, label, menu path, shortcut, aliases, params doc, enabled. |
 | `drawing.inspect` | `{entities?, limit?}` | Drawing summary (counts, extents, layers, styles, blocks, layouts, selection, undo) and entities with handles and geometry. |
-| `ui.inspect` | | UI state, canvas rect, view, cursor; on WinUI also `shell: "winui"` (egui adds focus and performance counters). |
+| `ui.inspect` | | UI state, canvas rect, view, cursor; on WinUI also `shell: "winui"`. Both shells report `perf` with `buildMs`, `meshMs`, `prims`, `rings`, `meshBytes` (egui also `frameMs`, `drawMs`, `renderer`). |
 | `ui.elements` | `{label?, role?, focused?}` | Observed egui controls from the latest frame. WinUI: use `--egui`. |
 | `ui.menu.list` / `ui.menu.invoke` | `{command}` | The menu tree; invoke an item like a click (interactive). |
 | `ui.pointer` | `{x, y, space?: "world"\|"screen", button?, action?: "click"\|"move"}` | Click in the drawing area (world coordinates by default). Right button = Enter. Works on WinUI and egui. |
