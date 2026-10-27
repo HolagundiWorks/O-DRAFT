@@ -15,7 +15,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("layer", "Layers", run_list)
             .menu(&["Format", "Layers"])
             .alias(&["la", "layers", "-layer"])
-            .params("{} → layers, states, linetypes (typed -LAYER: option prompts)")
+            .params("{showFor?: \"all\" | \"level\" | \"sheetSet\"} → layers (each with used, onLevel, onSheetSet), states, linetypes, scope: {level, sheetSet} (typed -LAYER: option prompts). `level` keeps the layers used on the active level and its sheet sets' annotation of it; `sheetSet` those used by the active sheet set's annotation or named with its prefix.")
             .interactive(|_| Ok(Box::new(prompts::LayerM::default()))),
         CommandSpec::new("layer.new", "New Layer", run_new)
             .menu(&["Format", "Layer Tools", "New Layer"])
@@ -111,23 +111,83 @@ fn layer_json(l: &Layer, current: bool) -> Value {
     })
 }
 
-fn run_list(s: &mut Session, _p: &Value) -> Result<Value> {
+/// Lower-case names of the layers used on the active level (its design objects and every sheet
+/// set's annotation of it), and by the active sheet set (its annotation on any level, and layers
+/// named with its prefix). A drawing without levels counts all of model space as its one level.
+fn layer_scopes(d: &aad_doc::Drawing) -> (std::collections::HashSet<String>, std::collections::HashSet<String>) {
+    let mut level = std::collections::HashSet::new();
+    let mut sheet = std::collections::HashSet::new();
+    let add = |set: &mut std::collections::HashSet<String>, st: &aad_doc::EntityStore| {
+        for e in st.iter().take(5_000_000) {
+            set.insert(e.common.layer.to_ascii_lowercase());
+        }
+    };
+    match d.active_level {
+        Some(l) => {
+            if let Some(st) = d.level_store(l) {
+                add(&mut level, st);
+            }
+            for set in &d.sheet_sets {
+                if let Some(st) = d.annotation_store(set.id, l) {
+                    add(&mut level, st);
+                }
+            }
+        }
+        None => add(&mut level, &d.model),
+    }
+    if let Some(set) = d.active_sheet_ref() {
+        for l in &d.levels {
+            if let Some(st) = d.annotation_store(set.id, l.id) {
+                add(&mut sheet, st);
+            }
+        }
+        let prefix = set.layer_prefix.to_ascii_uppercase();
+        if !prefix.is_empty() {
+            sheet.extend(d.layers.iter().filter(|l| l.name.to_ascii_uppercase().starts_with(&prefix)).map(|l| l.name.to_ascii_lowercase()));
+        }
+    }
+    (level, sheet)
+}
+
+fn run_list(s: &mut Session, p: &Value) -> Result<Value> {
+    let show_for = match p.get("showFor") {
+        None | Some(Value::Null) => "all".to_string(),
+        Some(Value::String(t)) if matches!(t.to_ascii_lowercase().as_str(), "all" | "level" | "sheetset") => t.to_ascii_lowercase(),
+        Some(_) => return Err(bad("layer", "`showFor` is `all`, `level` or `sheetSet`")),
+    };
     let d = s.doc()?;
     let cur = d.header.str("CLAYER", "0");
     let used = used_layers(d);
+    let (on_level, on_sheet) = layer_scopes(d);
     let layers: Vec<Value> = d
         .layers
         .iter()
+        .filter(|l| {
+            let key = l.name.to_ascii_lowercase();
+            match show_for.as_str() {
+                "level" => on_level.contains(&key),
+                "sheetset" => on_sheet.contains(&key),
+                _ => true,
+            }
+        })
         .map(|l| {
+            let key = l.name.to_ascii_lowercase();
             let mut v = layer_json(l, l.name.eq_ignore_ascii_case(&cur));
             if let Some(o) = v.as_object_mut() {
-                o.insert("used".into(), json!(used.contains(&l.name.to_ascii_lowercase())));
+                o.insert("used".into(), json!(used.contains(&key)));
+                o.insert("onLevel".into(), json!(on_level.contains(&key)));
+                o.insert("onSheetSet".into(), json!(on_sheet.contains(&key)));
             }
             v
         })
         .collect();
     let linetypes: Vec<String> = d.linetypes.iter().take(1_024).map(|t| t.name.clone()).collect();
-    Ok(json!({ "layers": layers, "states": d.layer_states.iter().map(|st| st.name.clone()).collect::<Vec<_>>(), "linetypes": linetypes }))
+    Ok(json!({
+        "layers": layers,
+        "states": d.layer_states.iter().map(|st| st.name.clone()).collect::<Vec<_>>(),
+        "linetypes": linetypes,
+        "scope": { "level": d.active_level_ref().map(|l| l.name.clone()), "sheetSet": d.active_sheet_ref().map(|x| x.name.clone()) },
+    }))
 }
 
 /// Lower-case names of layers that have objects on them (model, layouts and block definitions).

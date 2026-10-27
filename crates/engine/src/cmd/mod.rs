@@ -35,6 +35,7 @@ mod legacytools;
 mod legend;
 mod levels;
 mod library;
+mod migrate;
 mod mleader_content;
 mod modify;
 pub(crate) mod modify2;
@@ -256,6 +257,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(levels::specs());
         v.extend(sheetset::specs());
         v.extend(exchange::specs());
+        v.extend(migrate::specs());
         v.extend(sheet::specs());
         v.extend(layout::specs());
         v.extend(props::specs());

@@ -47,6 +47,9 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Architecture", "Levels", "Previous Level"])
             .key("Cmd+PageUp")
             .params("{} → {active, objects}. Activates the level before the active one (the first wraps to the last)."),
+        CommandSpec::new("level.setup", "Levels for a New Drawing", run_setup)
+            .menu(&["Architecture", "Levels", "Levels for This Drawing"])
+            .params("{floors: [\"Name\" | {name, height? (m, default 3), elevation? (m)}] | {count, basements?, terrace?}, sheetSets? (default true: the five presets)} → {created, sheetSets, active}. Sets the drawing up with a level per floor, the floor list, and the sheet sets. One undo step; the drawing must not have levels yet."),
         CommandSpec::new("level.activate", "Activate Level", run_activate)
             .menu(&["Architecture", "Levels", "Activate Level"])
             .alias(&["levelactivate"])
@@ -357,6 +360,32 @@ fn run_copyto(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "copied": copied }))
 }
 
+/// Add an empty level for each floor of `floors` that has none; the existing objects become the
+/// first floor's level. A floor's elevation is its own `elevation` (metres) or the sum of the
+/// heights below it. Returns the names created.
+fn levels_from_floors(d: &mut aad_doc::Drawing, floors: &[Value]) -> Result<Vec<String>> {
+    let m = crate::annot::drawing_unit(d).map_or(0.001, |u| u.metres());
+    let mut created = Vec::new();
+    let mut running = 0.0;
+    for f in floors {
+        let Some(name) = f.get("name").and_then(Value::as_str).filter(|n| aad_doc::level_name_ok(n)) else { continue };
+        let ftf = f.get("floorToFloor").and_then(Value::as_f64).filter(|n| n.is_finite() && *n >= 0.0).unwrap_or(3.0);
+        let elevation = f.get("elevation").and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(running);
+        running = elevation + ftf;
+        if d.level_by_name(name).is_some() {
+            continue;
+        }
+        let (elev_du, height_du) = (elevation / m, ftf / m);
+        if !d.has_levels() {
+            d.materialize_levels(name, elev_du, height_du)?;
+        } else {
+            d.add_level(name, elev_du, height_du, None)?;
+        }
+        created.push(name.to_string());
+    }
+    Ok(created)
+}
+
 fn run_fromfloors(s: &mut Session, _p: &Value) -> Result<Value> {
     if s.block_edit.is_some() {
         return Err(bad("level.fromfloors", "close the block editor first"));
@@ -367,27 +396,108 @@ fn run_fromfloors(s: &mut Session, _p: &Value) -> Result<Value> {
     if floors.is_empty() || floors.len() > MAX_LEVELS {
         return Err(bad("level.fromfloors", format!("the floor list needs 1 to {MAX_LEVELS} floors")));
     }
-    let m = crate::annot::drawing_unit(s.doc()?).map_or(0.001, |u| u.metres());
-    let mut created = Vec::new();
-    let mut elevation = 0.0;
-    let d = s.doc_mut()?;
-    for f in &floors {
-        let Some(name) = f.get("name").and_then(Value::as_str).filter(|n| aad_doc::level_name_ok(n)) else { continue };
-        let ftf = f.get("floorToFloor").and_then(Value::as_f64).filter(|n| n.is_finite() && *n >= 0.0).unwrap_or(3.0);
-        let (elev_du, height_du) = (elevation / m, ftf / m);
-        elevation += ftf;
-        if d.level_by_name(name).is_some() {
-            continue;
+    let mut d = s.doc()?.clone();
+    let created = levels_from_floors(&mut d, &floors)?;
+    let out = all(&d);
+    *s.doc_mut()? = d;
+    Ok(json!({ "created": created, "levels": out }))
+}
+
+/// The floors `level.setup` was asked for, as floor-list entries (`name`, `floorToFloor` in
+/// metres, optional `elevation`, with the ceiling and lintel the floor list needs).
+fn setup_floors(p: &Value) -> Result<Vec<Value>> {
+    const CMD: &str = "level.setup";
+    let mut raw: Vec<(String, f64, Option<f64>)> = Vec::new();
+    match p.get("floors") {
+        Some(Value::Array(a)) => {
+            for f in a {
+                let (name, h, el) = match f {
+                    Value::String(n) => (n.clone(), 3.0, None),
+                    Value::Object(_) => (
+                        f.get("name").and_then(Value::as_str).unwrap_or("").to_string(),
+                        f.get("height")
+                            .or_else(|| f.get("floorToFloor"))
+                            .map_or(Some(3.0), Value::as_f64)
+                            .ok_or_else(|| bad(CMD, "a floor `height` is a number of metres"))?,
+                        f.get("elevation").map(|v| v.as_f64().ok_or_else(|| bad(CMD, "a floor `elevation` is a number of metres"))).transpose()?,
+                    ),
+                    _ => return Err(bad(CMD, "each floor is a name or {name, height?, elevation?}")),
+                };
+                raw.push((name, h, el));
+            }
         }
-        if !d.has_levels() {
-            // The existing objects become the first floor's level.
-            d.materialize_levels(name, elev_du, height_du)?;
-        } else {
-            d.add_level(name, elev_du, height_du, None)?;
+        Some(Value::Object(o)) => {
+            let count =
+                o.get("count").and_then(Value::as_u64).filter(|c| (1..=60).contains(c)).ok_or_else(|| bad(CMD, "`floors.count` is 1 to 60"))?;
+            let basements = o.get("basements").and_then(Value::as_u64).unwrap_or(0).min(10);
+            for b in (1..=basements).rev() {
+                raw.push((format!("Basement {b}"), 3.0, Some(-3.0 * b as f64)));
+            }
+            let ordinal = ["Ground", "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"];
+            for i in 0..count {
+                raw.push((ordinal.get(i as usize).map_or_else(|| format!("Floor {i}"), |n| format!("{n} Floor")), 3.0, None));
+            }
+            if o.get("terrace").and_then(Value::as_bool).unwrap_or(false) {
+                raw.push(("Terrace".into(), 3.0, None));
+            }
         }
-        created.push(name.to_string());
+        _ => return Err(bad(CMD, "`floors` is a list of floors or {count, basements?, terrace?}")),
     }
-    Ok(json!({ "created": created, "levels": all(d) }))
+    if raw.is_empty() || raw.len() > MAX_LEVELS {
+        return Err(bad(CMD, format!("between 1 and {MAX_LEVELS} floors")));
+    }
+    let mut seen = std::collections::HashSet::new();
+    raw.into_iter()
+        .map(|(name, h, el)| {
+            if !aad_doc::level_name_ok(&name) || !seen.insert(name.trim().to_ascii_lowercase()) {
+                return Err(bad(CMD, format!("floor `{name}`: a name is 1 to 64 characters and unique")));
+            }
+            if !(h.is_finite() && (2.0..=30.0).contains(&h)) || el.is_some_and(|e| !e.is_finite() || e.abs() > 1000.0) {
+                return Err(bad(CMD, format!("floor `{name}`: the height is 2 to 30 m and the elevation within 1000 m")));
+            }
+            let ceiling = (h - 0.15).min(2.85);
+            let mut f = json!({ "name": name.trim(), "floorToFloor": h, "ceiling": ceiling, "lintel": (ceiling - 0.3).min(2.1) });
+            if let Some(e) = el {
+                f["elevation"] = json!(e);
+            }
+            Ok(f)
+        })
+        .collect()
+}
+
+fn run_setup(s: &mut Session, p: &Value) -> Result<Value> {
+    if s.block_edit.is_some() {
+        return Err(bad("level.setup", "close the block editor first"));
+    }
+    if s.doc()?.has_levels() {
+        return Err(bad("level.setup", "the drawing already has levels; add floors with level.new or level.fromfloors"));
+    }
+    let floors = setup_floors(p)?;
+    let with_sets = bool_or(p, "sheetSets", true);
+    let mut d = s.doc()?.clone();
+    // What is already drawn stays on the ground floor, not on whichever floor is lowest.
+    let existing = std::mem::take(&mut d.model);
+    project::set(&mut d, "floors", &Value::Array(floors.clone()));
+    let created = levels_from_floors(&mut d, &floors)?;
+    let mut sets = Vec::new();
+    if with_sets {
+        for (name, prefix) in super::sheetset::PRESETS {
+            if d.sheet_set_by_name(name).is_none() {
+                d.add_sheet_set(name, prefix)?;
+                sets.push(name);
+            }
+        }
+    }
+    // Drafting starts on the ground floor (the lowest floor at or above zero), else the first.
+    let ground = d.levels.iter().find(|l| l.elevation >= 0.0).or_else(|| d.levels.first()).map(|l| (l.id, l.name.clone()));
+    if let Some((id, name)) = ground {
+        d.switch_level(id)?;
+        project::set(&mut d, "activeFloor", &json!(name));
+    }
+    d.model = existing;
+    let active = d.active_level_ref().map(|l| l.name.clone());
+    *s.doc_mut()? = d;
+    Ok(json!({ "created": created, "sheetSets": sets, "active": active }))
 }
 
 /// Levels named by a single value or a list, resolved to ids (at most `MAX_LEVELS`).

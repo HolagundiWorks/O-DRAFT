@@ -30,7 +30,7 @@ fn safe(name: &str) -> String {
 }
 
 /// The drawing as one plain level: `store` is the model space, no levels, sheet sets or layouts.
-fn plain(d: &Drawing, store: EntityStore) -> Drawing {
+pub(super) fn plain(d: &Drawing, store: EntityStore) -> Drawing {
     let mut w = d.clone();
     w.model = store;
     w.levels.clear();

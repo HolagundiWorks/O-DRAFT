@@ -1,9 +1,9 @@
 # Levels and sheet sets
 
-**Status: Phases 1, 3 and 4 and the non-UI parts of Phase 2 are done; the shell UI (level tabs, Trace
-flyout, sheet-set rail, annotation tool strip, a viewport Level / Sheet set / Traces editor) and
-Phase 5 are planned.** Only what the "Phase 1 status" to "Phase 4 status" sections list is
-implemented and tested.
+**Status: the engine side of all five phases is done; the shell UI (level tabs, Trace flyout, sheet-set
+rail, annotation tool strip, a viewport Level / Sheet set / Traces editor, a Show-for dropdown in the
+Layer manager, menu items for the new commands) is not built, nor are the take-off level ids and the
+egui tabs.** Only what the "Phase N status" sections list is implemented and tested.
 
 Summary: keep one drawing file, but split its single model space into named **levels** (each its own
 entity store at a shared origin) and add **sheet sets** (discipline annotation spaces that reference
@@ -150,7 +150,7 @@ rendering work). Each phase ends with `cargo xtask ci` and its named tests, and 
 | 2. Traces and level tabs | `level.trace`, trace rendering and cache, snaps, bottom level tabs and Trace flyout, `chrome_json` data | Three 25 000-object traces keep pans cached; a tab switch rebuilds no unchanged mesh |
 | 3. Sheet sets | `SheetSet`, per-level annotation stores, `sheetset.*`, `protect.rs` reference locking, annotation layer prefixes, left rail, annotation tool strip | In a sheet view a level object edit is refused naming the level; annotation of two sets on one level does not collide; presets create their spaces |
 | 4. Layouts and exchange | `Viewport.level/sheet_set/traces`, `viewport.set`, layout tessellation per store, `AAD_VP` data, Export for exchange | One layout holds the Electrical and Plumbing First-floor plans side by side and round-trips |
-| 5. Migration and polish | `level.import/export`, `project.merge`, take-off level ids, layer "Show for" filter, shortcuts, new-drawing and `project.setup` flow, egui tabs, memory load test (20 levels) | A floor project merges into one file in one undo step; docs and status complete |
+| 5. Migration and polish (engine done; take-off ids, shell UI and egui not) | `level.import/export`, `project.merge`, take-off level ids, layer "Show for" filter, shortcuts, new-drawing and `project.setup` flow, egui tabs, memory load test (20 levels) | A floor project merges into one file in one undo step; docs and status complete |
 
 ## Phase 1 status: done, with the limits below
 
@@ -315,6 +315,51 @@ Not built yet:
 - A layout viewport's content is not an editable preview of the sheet in other CAD programs: there
   a viewport bound to another level shows model space (the first level). Use the exchange files.
 - Exchange files carry no layouts; a bound layout sheet is exported as a PDF with `plot`.
+
+## Phase 5 status: migration and polish implemented in the engine, shell UI and some items not built
+
+Implemented and tested (`crates/engine/tests/migrate.rs`, `levels.rs`):
+
+- `level.import {path, name?, elevation?, height?, after?, sheetSet?, level?, ignoreUnits?}`: reads a
+  DXF or DWG through the same reader as Open (flattened to 2D; only DXF is covered by tests) and adds its model space as a new level, or, with `sheetSet`, as that
+  sheet set's annotation of a level. Handles are fresh, dimension associations are kept for objects
+  that came along, the blocks a level uses and the layers and styles it needs are copied (a name this
+  drawing already has keeps this drawing's definition). Units are never converted: a file in other
+  units than a non-blank drawing is refused unless `ignoreUnits` is given, and a blank drawing takes
+  the first file's unit and the file becomes its first level. All changes are made on a copy, so a
+  failure changes nothing, and a success is one undo step.
+- `level.export {level?, path, overwrite?}`: one level as a plain single-level DXF; an existing file
+  is never replaced without `overwrite`.
+- `project.merge {path?, annotation?, ignoreUnits?}`: every floor of a floor project (a folder or
+  its `project.aad.json`; default the project the drawing belongs to) becomes a level with the
+  floor's elevation and height (the manifest's metres or feet converted to drawing units). Each
+  discipline layout becomes the sheet set's annotation of that floor when it holds only annotation
+  (text, dimensions, leaders, hatches), a level of its own after its floor when it holds geometry, and
+  is skipped when empty or missing, with a reason. The first floor's floor list and project details
+  are kept when the drawing has none. A drawing with Xrefs (the project's main drawing) is refused.
+- `level.setup {floors, sheetSets?}`: the new-drawing flow. A list of floors or `{count, basements?,
+  terrace?}` becomes a level per floor (basements below zero), the matching floor list, the five sheet
+  set presets, and the ground floor active; what is already drawn stays on the ground floor. One undo
+  step; refused when the drawing has levels.
+- `layer` (the layer list) takes `showFor: all | level | sheetSet` and marks each layer `onLevel` and
+  `onSheetSet`, with the active level and sheet set under `scope`: the data for the Layer manager's
+  "Show for" filter.
+- Load: 20 levels of 25 000 objects each (500 000 objects, release build) take about 290 MB; 100
+  level switches with their undo snapshots add about 4 MB (the stores are shared); saving takes
+  about 1.2 s (66 MB DXF) and opening about 2.2 s. Probe: `cargo test --release -p aad-engine --test
+  levels -- --ignored --nocapture`.
+
+Not built, and why:
+
+- **Take-off and ShilpiDB rows do not carry a level id.** The record format (`(kind << 56) | (slot <<
+  32) | n`, [takeoff-shilpidb.md](takeoff-shilpidb.md)) is a contract with O-CoreOp; giving each level
+  its own slot or header changes what that program reads, so it needs agreement there first.
+  Take-off acts on the store being edited, so a recording covers one level at a time.
+- The shell: the Layer manager dropdown, the menu items, the new-drawing dialog's "Levels in this
+  drawing" option, level tabs and the rest of the Phase 2 to 4 controls.
+- egui tabs (the egui shell is the optional one).
+- `project.merge` merges into a new or ordinary drawing; there is no reverse (levels back out into a
+  floor project), only `level.export` per level and `exchange.export`.
 
 ## Risks
 

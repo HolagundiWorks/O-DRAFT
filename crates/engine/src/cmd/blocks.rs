@@ -522,6 +522,7 @@ impl BlockM {
 }
 
 mod insert_file;
+pub(crate) use insert_file::{adopt, block_names, merge_tables, read_drawing};
 
 /// Where the command-line INSERT is in its prompt sequence.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

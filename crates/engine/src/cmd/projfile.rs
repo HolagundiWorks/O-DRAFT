@@ -122,7 +122,7 @@ fn same_file(a: &Path, b: &Path) -> bool {
 
 // ---------------- the manifest ----------------
 
-fn read_manifest(path: &Path) -> Result<Value> {
+pub(super) fn read_manifest(path: &Path) -> Result<Value> {
     let meta = std::fs::metadata(path).map_err(|e| bad("project", format!("{}: {e}", path.display())))?;
     if meta.len() > MAX_MANIFEST {
         return Err(bad("project", "the project file is too large"));
@@ -159,7 +159,7 @@ fn write_manifest(path: &Path, m: &Value) -> Result<()> {
 }
 
 /// The manifest the active drawing belongs to: the one it points at, else the nearest above it.
-fn find_manifest(s: &Session) -> Result<(PathBuf, Value)> {
+pub(super) fn find_manifest(s: &Session) -> Result<(PathBuf, Value)> {
     let st = s.state()?;
     let doc_path = st.path.as_ref().map(PathBuf::from).ok_or_else(|| bad("floor", "save the drawing first: it is not in a project"))?;
     let dir = doc_path.parent().map(Path::to_path_buf).unwrap_or_default();

@@ -455,3 +455,222 @@ fn next_and_previous_level_cycle_through_the_tabs_and_have_shortcuts() {
     let key = |id: &str| aad_engine::find_command(id).and_then(|c| c.shortcut);
     assert_eq!((key("level.next"), key("level.prev")), (Some("Cmd+PageDown"), Some("Cmd+PageUp")));
 }
+
+fn layer_names(s: &mut Session, show_for: &str) -> Vec<String> {
+    let r = s.execute("layer", &json!({"showFor": show_for})).unwrap();
+    r["layers"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap().to_string()).collect()
+}
+
+#[test]
+fn the_layer_list_can_show_only_the_layers_of_this_level_or_this_sheet_set() {
+    let mut s = Session::new();
+    for l in ["G-WALL", "F-WALL", "E-TEXT", "E-EMPTY", "NOBODY"] {
+        s.execute("layer.new", &json!({"name": l})).unwrap();
+    }
+    let draw_on = |s: &mut Session, layer: &str| {
+        s.execute("layer.current", &json!({"name": layer})).unwrap();
+        line(s, 0.0);
+        s.execute("layer.current", &json!({"name": "0"})).unwrap();
+    };
+    draw_on(&mut s, "G-WALL");
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    s.execute("level.activate", &json!({"level": "First"})).unwrap();
+    draw_on(&mut s, "F-WALL");
+    s.execute("sheetset.new", &json!({"name": "Electrical", "layerPrefix": "E-"})).unwrap();
+
+    // Design on First: its own walls (not Ground's), nothing for a sheet set.
+    let has = |v: &[String], n: &str| v.iter().any(|x| x == n);
+    let level = layer_names(&mut s, "level");
+    assert!(has(&level, "F-WALL") && !has(&level, "G-WALL") && !has(&level, "NOBODY"), "{level:?}");
+    assert!(layer_names(&mut s, "sheetSet").is_empty(), "Design has no sheet set");
+    assert_eq!(layer_names(&mut s, "all").len(), s.doc().unwrap().layers.len());
+
+    // In the Electrical sheet view: the annotation's layers and anything with its prefix.
+    s.execute("sheetset.activate", &json!({"set": "Electrical"})).unwrap();
+    s.execute("text", &json!({"at": [1.0, 1.0], "text": "DB", "height": 0.5})).unwrap();
+    let sheet = layer_names(&mut s, "sheetSet");
+    assert!(has(&sheet, "E-TEXT") && has(&sheet, "E-EMPTY") && !has(&sheet, "F-WALL"), "{sheet:?}");
+    let level = layer_names(&mut s, "level");
+    assert!(has(&level, "E-TEXT") && has(&level, "F-WALL"), "this level includes the annotation drawn on it: {level:?}");
+
+    let r = s.execute("layer", &json!({})).unwrap();
+    assert_eq!((r["scope"]["level"].as_str(), r["scope"]["sheetSet"].as_str()), (Some("First"), Some("Electrical")));
+    let row = r["layers"].as_array().unwrap().iter().find(|l| l["name"] == "E-EMPTY").unwrap();
+    assert_eq!((row["used"].as_bool(), row["onSheetSet"].as_bool(), row["onLevel"].as_bool()), (Some(false), Some(true), Some(false)));
+
+    for bad in [json!({"showFor": "nope"}), json!({"showFor": 3}), json!({"showFor": ["all"]})] {
+        assert!(s.execute("layer", &bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn a_drawing_without_levels_counts_model_space_as_its_one_level() {
+    let mut s = Session::new();
+    s.execute("layer.new", &json!({"name": "USED"})).unwrap();
+    s.execute("layer.new", &json!({"name": "UNUSED"})).unwrap();
+    s.execute("layer.current", &json!({"name": "USED"})).unwrap();
+    line(&mut s, 0.0);
+    let level = layer_names(&mut s, "level");
+    assert!(level.contains(&"USED".to_string()) && !level.contains(&"UNUSED".to_string()));
+}
+
+fn mm_session() -> Session {
+    let mut s = Session::new();
+    s.execute("drawing.units", &json!({"units": "mm", "mode": "metadata"})).unwrap();
+    s
+}
+
+#[test]
+fn a_new_drawing_is_set_up_with_a_level_per_floor_the_floor_list_and_the_sheet_sets() {
+    let mut s = mm_session();
+    line(&mut s, 0.0); // already drawn: belongs on the ground floor
+    let r = s.execute("level.setup", &json!({"floors": {"count": 3, "basements": 1, "terrace": true}})).unwrap();
+    assert_eq!(r["active"], "Ground Floor");
+    let ls = levels(&mut s);
+    let row =
+        |ls: &[Value]| ls.iter().map(|l| (l["name"].as_str().unwrap().to_string(), l["elevation"].as_f64().unwrap(), objects(l))).collect::<Vec<_>>();
+    assert_eq!(
+        row(&ls),
+        [
+            ("Basement 1".to_string(), -3000.0, 0),
+            ("Ground Floor".to_string(), 0.0, 1),
+            ("First Floor".to_string(), 3000.0, 0),
+            ("Second Floor".to_string(), 6000.0, 0),
+            ("Terrace".to_string(), 9000.0, 0)
+        ],
+        "basements below zero, the drawing's objects on the ground floor"
+    );
+    assert_eq!(ls[1]["active"], true);
+    assert_eq!(s.doc().unwrap().sheet_sets.len(), 5, "the five presets");
+    let floors = s.execute("floors", &json!({})).unwrap();
+    let fl: Vec<&str> = floors["floors"].as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap()).collect();
+    assert_eq!(fl, ["Basement 1", "Ground Floor", "First Floor", "Second Floor", "Terrace"], "the floor list matches the levels");
+
+    // It survives a save and a reopen, and is one undo step.
+    let back = aad_io::read(&aad_io::write(s.doc().unwrap(), "a.dxf").unwrap(), "a.dxf").unwrap();
+    assert_eq!((back.levels.len(), back.sheet_sets.len()), (5, 5));
+    s.execute("undo", &json!({})).unwrap();
+    assert!(!s.doc().unwrap().has_levels() && s.doc().unwrap().sheet_sets.is_empty());
+    assert_eq!(s.doc().unwrap().model.len(), 1, "undo gives the plain drawing back");
+}
+
+#[test]
+fn level_setup_takes_a_floor_list_and_refuses_bad_input_without_changing_anything() {
+    let mut s = mm_session();
+    let r = s.execute("level.setup", &json!({"floors": ["Ground", {"name": "Mezzanine", "height": 2.4}, {"name": "Roof", "height": 3.5, "elevation": 6.0}], "sheetSets": false})).unwrap();
+    assert_eq!(r["sheetSets"], json!([]));
+    let ls = levels(&mut s);
+    assert_eq!(ls.iter().map(|l| l["elevation"].as_f64().unwrap()).collect::<Vec<_>>(), [0.0, 3000.0, 6000.0]);
+    assert_eq!(ls[1]["height"], 2400.0);
+    assert!(s.execute("level.setup", &json!({"floors": ["A"]})).is_err(), "already has levels");
+
+    let mut s = mm_session();
+    let before = s.doc().unwrap().clone();
+    let long = "x".repeat(100);
+    for p in [
+        json!({}),
+        json!({"floors": []}),
+        json!({"floors": "Ground"}),
+        json!({"floors": [1]}),
+        json!({"floors": ["A", "a"]}),
+        json!({"floors": [""]}),
+        json!({"floors": [long]}),
+        json!({"floors": [{"name": "A", "height": 1.0}]}),
+        json!({"floors": [{"name": "A", "height": 99.0}]}),
+        json!({"floors": [{"name": "A", "height": "tall"}]}),
+        json!({"floors": [{"name": "A", "elevation": 1e9}]}),
+        json!({"floors": {"count": 0}}),
+        json!({"floors": {"count": 61}}),
+        json!({"floors": {"count": 60, "basements": 10, "terrace": true}}),
+        json!({"floors": (0..70).map(|i| format!("F{i}")).collect::<Vec<_>>()}),
+    ] {
+        assert!(s.execute("level.setup", &p).is_err(), "{p}");
+        assert_eq!(*s.doc().unwrap(), before, "{p} changed nothing");
+    }
+}
+
+#[test]
+fn twenty_levels_switch_save_and_undo_without_copying_their_objects() {
+    let mut s = mm_session();
+    s.execute("level.setup", &json!({"floors": {"count": 20}, "sheetSets": false})).unwrap();
+    for i in 0..20 {
+        s.execute("level.activate", &json!({"level": i + 1})).unwrap();
+        for k in 0..200 {
+            let d = s.doc_mut().unwrap();
+            let handle = d.new_handle();
+            d.model.push(aad_engine::doc::Entity {
+                handle,
+                common: aad_engine::doc::Common::default(),
+                kind: aad_engine::doc::EntityKind::Line(aad_engine::doc::Line {
+                    a: aad_engine::geom::Vec3::new(0.0, f64::from(k), 0.0),
+                    b: aad_engine::geom::Vec3::new(10.0, f64::from(k), 0.0),
+                }),
+            });
+        }
+    }
+    assert_eq!(s.doc().unwrap().entity_count(), 4000);
+    // Switching is a swap of stores; the undo history of all those switches holds shared stores.
+    for i in 0..60 {
+        s.execute("level.activate", &json!({"level": (i % 20) + 1})).unwrap();
+    }
+    s.execute("undo", &json!({})).unwrap();
+    assert_eq!(s.doc().unwrap().entity_count(), 4000, "undo of a switch loses nothing");
+    let back = aad_io::read(&aad_io::write(s.doc().unwrap(), "a.dxf").unwrap(), "a.dxf").unwrap();
+    assert_eq!((back.levels.len(), back.entity_count()), (20, 4000));
+}
+
+/// Working set of this process in MB (Windows; 0 elsewhere).
+fn working_set_mb() -> f64 {
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &format!("(Get-Process -Id {}).WorkingSet64", std::process::id())])
+        .output();
+    out.ok().and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<f64>().ok()).map_or(0.0, |b| b / 1_048_576.0)
+}
+
+/// 20 levels of 25 000 objects (500 000 in all): memory, switching, undo, save and open. Run with
+/// `cargo test --release -p aad-engine --test levels -- --ignored --nocapture`.
+#[test]
+#[ignore = "load probe"]
+fn probe_twenty_levels_of_25000_objects() {
+    use std::time::Instant;
+    let base = working_set_mb();
+    let mut s = mm_session();
+    s.execute("level.setup", &json!({"floors": {"count": 20}, "sheetSets": false})).unwrap();
+    let t = Instant::now();
+    for i in 0..20 {
+        s.execute("level.activate", &json!({"level": i + 1})).unwrap();
+        let d = s.doc_mut().unwrap();
+        for k in 0..25_000 {
+            let handle = d.new_handle();
+            d.model.push(aad_engine::doc::Entity {
+                handle,
+                common: aad_engine::doc::Common::default(),
+                kind: aad_engine::doc::EntityKind::Line(aad_engine::doc::Line {
+                    a: aad_engine::geom::Vec3::new(f64::from(k % 500), f64::from(k / 500), 0.0),
+                    b: aad_engine::geom::Vec3::new(f64::from(k % 500) + 1.0, f64::from(k / 500), 0.0),
+                }),
+            });
+        }
+    }
+    let build = t.elapsed();
+    let loaded = working_set_mb();
+    let t = Instant::now();
+    for i in 0..100 {
+        s.execute("level.activate", &json!({"level": (i % 20) + 1})).unwrap();
+    }
+    let switching = t.elapsed();
+    let after_switches = working_set_mb();
+    let t = Instant::now();
+    let bytes = aad_io::write(s.doc().unwrap(), "a.dxf").unwrap();
+    let write = t.elapsed();
+    let t = Instant::now();
+    let back = aad_io::read(&bytes, "a.dxf").unwrap();
+    let read = t.elapsed();
+    eprintln!(
+        "{} objects in {} levels: build {build:?}; memory {base:.0} -> {loaded:.0} MB loaded, {after_switches:.0} MB after 100 switches (100 undo snapshots); 100 switches {switching:?}; save {write:?} ({} MB); open {read:?}",
+        s.doc().unwrap().entity_count(),
+        s.doc().unwrap().levels.len(),
+        bytes.len() / 1_048_576,
+    );
+    assert_eq!(back.entity_count(), 500_000);
+}

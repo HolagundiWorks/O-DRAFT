@@ -68,7 +68,7 @@ fn stem(path: &str) -> String {
 }
 
 /// Read a drawing file through the io hooks; a path without extension tries .dwg, then .dxf.
-fn read_drawing(path: &str) -> Result<Drawing> {
+pub(crate) fn read_drawing(path: &str) -> Result<Drawing> {
     let hooks = io().ok_or_else(|| bad("insert", "file formats are not available in this build"))?;
     let has_ext = stem(path) != path.rsplit(['/', '\\']).next().unwrap_or(path);
     let candidates = if has_ext { vec![path.to_string()] } else { vec![path.to_string(), format!("{path}.dwg"), format!("{path}.dxf")] };
@@ -135,7 +135,7 @@ fn define_from(s: &mut Session, src: &Drawing, name: &str) -> Result<String> {
 
 /// Add the source's layers, linetypes and styles that this drawing doesn't have (a name that
 /// exists keeps this drawing's definition).
-fn merge_tables(d: &mut Drawing, src: &Drawing) {
+pub(crate) fn merge_tables(d: &mut Drawing, src: &Drawing) {
     fn merge<T: Clone>(ours: &mut Vec<T>, theirs: &[T], name: fn(&T) -> &str) {
         for t in theirs {
             if !ours.iter().any(|o| name(o).eq_ignore_ascii_case(name(t))) {
@@ -154,7 +154,7 @@ fn merge_tables(d: &mut Drawing, src: &Drawing) {
 /// Which source blocks to copy, and under which name: new names keep theirs, generated
 /// (anonymous `*…`) blocks that collide get a fresh generated name, and a named block this drawing
 /// already has (or the block being defined) keeps this drawing's definition (not copied).
-fn block_names(d: &Drawing, src: &Drawing, defining: &str) -> BTreeMap<String, String> {
+pub(crate) fn block_names(d: &Drawing, src: &Drawing, defining: &str) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     let mut taken: BTreeSet<String> = d.blocks.keys().map(|k| k.to_ascii_uppercase()).collect();
     taken.insert(defining.to_ascii_uppercase());
@@ -182,7 +182,7 @@ fn block_names(d: &Drawing, src: &Drawing, defining: &str) -> BTreeMap<String, S
 
 /// A copy of a source entity for this drawing: a fresh handle, block references renamed, and
 /// links to other source objects (associative dimension points) dropped.
-fn adopt(d: &mut Drawing, e: &Entity, renames: &BTreeMap<String, String>) -> Entity {
+pub(crate) fn adopt(d: &mut Drawing, e: &Entity, renames: &BTreeMap<String, String>) -> Entity {
     let mut e = e.clone();
     e.handle = d.new_handle();
     match &mut e.kind {
