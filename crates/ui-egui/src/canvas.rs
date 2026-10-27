@@ -96,6 +96,10 @@ pub struct CanvasState {
     infinite: Vec<usize>,
     /// Milliseconds spent converting the display list to vertex data (last rebuild).
     pub mesh_ms: f64,
+    /// Ring instances in the last GPU mesh (for `ui.inspect` perf).
+    pub mesh_rings: usize,
+    /// Byte size of the last GPU mesh buffers (for `ui.inspect` perf).
+    pub mesh_bytes: usize,
     pub rect: Option<Rect>,
     pub xf: Option<Xf>,
     pub hover: Option<Handle>,
@@ -426,6 +430,8 @@ fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdis
         } else {
             crate::gpu::expand_hairlines(&mut mesh);
         }
+        c.mesh_rings = mesh.ring_instances();
+        c.mesh_bytes = mesh.lines.len() + mesh.tris.len() + mesh.quads.len() + mesh.rings.len();
         if let Ok(mut slot) = c.mesh_slot.lock() {
             *slot = Some(mesh);
         }

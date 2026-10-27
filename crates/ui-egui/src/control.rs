@@ -218,13 +218,6 @@ pub fn cmdline_state(app: &CadApp) -> Value {
 pub fn inspect(app: &CadApp, ctx: &egui::Context) -> Value {
     let r = ctx.content_rect();
     let view = app.session.state().map(|s| s.view()).ok();
-    let (rings, mesh_bytes) = match app.canvas.mesh_slot.lock() {
-        Ok(slot) => match slot.as_ref() {
-            Some(m) => (Some(m.ring_instances()), Some(m.lines.len() + m.tris.len() + m.quads.len() + m.rings.len())),
-            None => (None, None),
-        },
-        Err(_) => (None, None),
-    };
     json!({
         "ui": serde_json::to_value(&app.ui).unwrap_or_default(),
         "theme": if app.shown_theme() == egui::Theme::Light { "light" } else { "dark" },
@@ -243,8 +236,8 @@ pub fn inspect(app: &CadApp, ctx: &egui::Context) -> Value {
             "meshMs": app.canvas.mesh_ms,
             "renderer": if app.canvas.gpu.is_some() { "gpu" } else { "cpu" },
             "prims": app.canvas.list.as_ref().map(|l| l.prims.len()),
-            "rings": rings,
-            "meshBytes": mesh_bytes,
+            "rings": app.canvas.mesh_rings,
+            "meshBytes": app.canvas.mesh_bytes,
         },
     })
 }
