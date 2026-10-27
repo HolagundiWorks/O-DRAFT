@@ -73,6 +73,19 @@ public sealed partial class MainWindow
         {
             LevelTabs.Children.Add(MakeLevelTab(level, state.DesignMode));
         }
+        if (state.Levels.Count == 0)
+        {
+            // The drawing has one implicit level: show it as the tab it is, so the bar is never empty.
+            var only = SeamlessTab.Create(
+                new TextBlock { Text = "Level 1", FontSize = Density.FontCaption, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center },
+                true,
+                TabEdge.Bottom,
+                new Thickness(12, 0, 12, 0));
+            only.MinHeight = 26;
+            AutomationProperties.SetName(only, "Current level Level 1");
+            ToolTipService.SetToolTip(only, "The drawing's only level. Use + to add a level for each floor.");
+            LevelTabs.Children.Add(only);
+        }
         var sheet = state.SheetSets.FirstOrDefault(s => s.Active);
         ToolTipService.SetToolTip(LevelHint, sheet == null ? null : "The level underneath is a read-only reference: only " + sheet.Name + " annotation is edited.");
         LevelHint.Text = state.Levels.Count == 0
@@ -153,11 +166,7 @@ public sealed partial class MainWindow
         }
         _sheetKey = key;
         SheetRail.Children.Clear();
-        SheetRailHost.Visibility = state.SheetSets.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        if (state.SheetSets.Count == 0)
-        {
-            return;
-        }
+        SheetRailHost.Visibility = Visibility.Visible;
         SheetRail.Children.Add(MakeRailEntry(
             "Design",
             "Design: draw the building. Sheet-set annotation is not shown.",
@@ -168,6 +177,15 @@ public sealed partial class MainWindow
             var item = set;
             var tip = item.Name + ": annotation for each level" + (item.LayerPrefix.Length > 0 ? ", on layers starting " + item.LayerPrefix : "");
             SheetRail.Children.Add(MakeRailEntry(item.Name, tip, item.Active, () => RunShellCommand("sheetset.activate", new Dictionary<string, object> { ["set"] = item.Id })));
+        }
+        // Without tabs the rail would be empty: this makes the standard discipline tabs (and layers, symbols).
+        if (state.SheetSets.Count == 0)
+        {
+            SheetRail.Children.Add(MakeRailEntry(
+                "+ Drawing tabs",
+                "Add the standard tabs: Working drawing, Electrical, Plumbing, Interior and False ceiling, each with its layers and symbols.",
+                false,
+                () => RunShellCommand("sheetset.standard", new Dictionary<string, object>())));
         }
     }
 
