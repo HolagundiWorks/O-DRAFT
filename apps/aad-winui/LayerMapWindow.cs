@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -97,7 +96,7 @@ internal static class LayerMapWindow
                     {
                         continue; // empty layers carry nothing to map
                     }
-                    var combo = new ComboBox { MinWidth = 230, MinHeight = Density.ControlHeight };
+                    var combo = new ComboBox { MinHeight = Density.ControlHeight, HorizontalAlignment = HorizontalAlignment.Stretch };
                     combo.Items.Add(Keep);
                     foreach (var label in targetLabels)
                     {
@@ -110,7 +109,7 @@ internal static class LayerMapWindow
                     label2.VerticalAlignment = VerticalAlignment.Center;
                     var row = new Grid { ColumnSpacing = Density.SpaceSm };
                     row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                     Grid.SetColumn(combo, 1);
                     row.Children.Add(label2);
                     row.Children.Add(combo);
@@ -128,20 +127,21 @@ internal static class LayerMapWindow
         var levelName = Density.DialogField(stem, "Level name");
         var import = DialogLayout.Action("Import", primary: true);
         var cancel = DialogLayout.Action("Cancel");
-        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, MinWidth = 440, MaxWidth = 560 };
+        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin };
         root.Children.Add(DialogLayout.Heading("Import " + fileName));
         root.Children.Add(Density.Secondary("Choose the layer each of the file's layers goes on. Matches are suggested from the layer names; change any of them. The number is how many objects the layer holds.", TextWrapping.Wrap));
         root.Children.Add(DialogLayout.Labeled("Level name", levelName));
-        root.Children.Add(new ScrollViewer { Content = list, MaxHeight = 360 });
+        root.Children.Add(list);
         root.Children.Add(status);
         root.Children.Add(DialogLayout.ActionRow(import, cancel));
         Density.Apply(root);
 
-        var window = new Window { Title = "Import Level - Map Layers", Content = new Grid { RequestedTheme = theme, Children = { root } } };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
+        var window = new Window
         {
-            presenter.IsResizable = true;
-        }
+            Title = "Import Level - Map Layers",
+            Content = new ScrollViewer { Content = new Grid { RequestedTheme = theme, Children = { root } } },
+        };
+        StandardWindow.Present(window, owner, WindowTemplate.PropertyDialog, "layermap");
         import.Click += (_, _) =>
         {
             var map = new Dictionary<string, string>();
@@ -164,8 +164,6 @@ internal static class LayerMapWindow
             window.Close();
         };
         cancel.Click += (_, _) => window.Close();
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 460, minHeightDip: 320, maxWidthDip: 700, maxHeightDip: 760, persistKey: "layermap");
         return window;
     }
 }

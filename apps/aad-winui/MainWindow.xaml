@@ -35,9 +35,9 @@
                             AutomationProperties.Name="Current layer"
                             ToolTipService.ToolTip="Current layer (while a sheet-set tab is active, the layers of that tab)" />
                     </StackPanel>
-                    <Border Style="{StaticResource ArchBarDividerStyle}" Margin="4,0,4,0" />
+                    <Border Style="{StaticResource ArchBarDividerStyle}" Margin="{StaticResource PaddingSm}" />
                     <StackPanel x:Name="ToolStrip" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" />
-                    <Border x:Name="ArchToolsDivider" Style="{StaticResource ArchBarDividerStyle}" Margin="4,0,4,0" Visibility="Collapsed" />
+                    <Border x:Name="ArchToolsDivider" Style="{StaticResource ArchBarDividerStyle}" Margin="{StaticResource PaddingSm}" Visibility="Collapsed" />
                     <StackPanel x:Name="ArchBar" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center" Height="{StaticResource IconButtonSize}" />
                 </StackPanel>
             </ScrollViewer>
@@ -54,7 +54,7 @@
             <!-- Sheet sets: Design, then one entry per discipline. Shown only when the drawing has sheet sets. -->
             <Border x:Name="SheetRailHost" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" BorderThickness="0" AutomationProperties.Name="Sheet sets">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="SheetRail" Orientation="Vertical" Spacing="2" Margin="4,6,0,6" />
+                    <StackPanel x:Name="SheetRail" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="{StaticResource PaddingSm}" />
                 </ScrollViewer>
             </Border>
             <Border x:Name="CanvasHost" Grid.Column="2" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
@@ -200,7 +200,7 @@
             BorderThickness="0"
             PreviewKeyDown="OnAiKey"
             AutomationProperties.Name="AI command prompt">
-            <StackPanel Spacing="6" VerticalAlignment="Bottom">
+            <StackPanel Spacing="{StaticResource SpaceMd}" VerticalAlignment="Bottom">
                 <!-- Pill input only; height stays content-sized (no empty card below). -->
                 <Border
                     x:Name="AskInputPill"
@@ -213,7 +213,7 @@
                     BorderBrush="{ThemeResource BorderDefaultBrush}"
                     BorderThickness="1"
                     Padding="6,4,6,4">
-                    <Grid ColumnSpacing="6">
+                    <Grid ColumnSpacing="{StaticResource SpaceMd}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -312,14 +312,14 @@
             </StackPanel>
         </Border>
         <!-- Level tabs under the drawing; the bar is a row of its own because the canvas is a native child window. -->
-        <Border x:Name="LevelBarHost" Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderThickness="0" Padding="6,0,6,0" AutomationProperties.Name="Levels">
+        <Border x:Name="LevelBarHost" Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderThickness="0" Padding="{StaticResource PaddingSm}" AutomationProperties.Name="Levels">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
-                    <StackPanel x:Name="LevelTabs" Orientation="Horizontal" Spacing="2" AutomationProperties.Name="Level tabs" />
+                    <StackPanel x:Name="LevelTabs" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" AutomationProperties.Name="Level tabs" />
                     <Button x:Name="AddLevelButton" Click="OnAddLevel" AutomationProperties.Name="Add level" ToolTipService.ToolTip="Add a level" Style="{StaticResource IconButtonStyle}">
                         <local:DrawnIcon Kind="plus" />
                     </Button>
-                    <TextBlock x:Name="LevelHint" VerticalAlignment="Center" Margin="6,0,0,0" FontSize="{StaticResource FontSizeCaption}" Opacity="0.7" AutomationProperties.Name="Level mode" />
+                    <TextBlock x:Name="LevelHint" VerticalAlignment="Center" Margin="{StaticResource PaddingMd}" FontSize="{StaticResource FontSizeCaption}" Opacity="0.7" AutomationProperties.Name="Level mode" />
                 </StackPanel>
             </ScrollViewer>
         </Border>

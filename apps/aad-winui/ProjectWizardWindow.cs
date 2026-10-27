@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -86,7 +85,7 @@ internal static class ProjectWizardWindow
         page2.Children.Add(company);
 
         // ---- page 3: the building
-        var units = new ComboBox { MinWidth = 120, MinHeight = Density.ControlHeight };
+        var units = new ComboBox { MinHeight = Density.ControlHeight };
         foreach (var u in Units)
         {
             units.Items.Add(u);
@@ -142,11 +141,11 @@ internal static class ProjectWizardWindow
             {
                 var n = Density.DialogField(name, "Floor name");
                 var hh = Density.DialogField(height.ToString("0.###", CultureInfo.InvariantCulture), "Height of " + name);
-                hh.Width = 70;
+                hh.HorizontalAlignment = HorizontalAlignment.Stretch;
                 floorBoxes.Add((n, hh));
                 var row = new Grid { ColumnSpacing = Density.SpaceSm };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 Grid.SetColumn(hh, 1);
                 row.Children.Add(n);
                 row.Children.Add(hh);
@@ -473,7 +472,7 @@ internal static class ProjectWizardWindow
         back.Click += (_, _) => Show(current - 1);
         next.Click += (_, _) => Show(current + 1);
 
-        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, MinWidth = 440, MaxWidth = 520 };
+        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin };
         foreach (var page in pages)
         {
             root.Children.Add(page);
@@ -487,10 +486,7 @@ internal static class ProjectWizardWindow
             Title = edit ? "Edit Project" : "New Project Wizard",
             Content = new ScrollViewer { Content = new Grid { RequestedTheme = theme, Children = { root } } },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-        }
+        StandardWindow.Present(window, owner, WindowTemplate.PropertyDialog, "projectwizard", new WindowBounds(460, 420, 640, 860));
         create.Click += (_, _) =>
         {
             var json = JsonSerializer.Serialize(Collect());
@@ -503,8 +499,6 @@ internal static class ProjectWizardWindow
             window.Close();
         };
         cancel.Click += (_, _) => window.Close();
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 460, minHeightDip: 420, maxWidthDip: 640, maxHeightDip: 860, persistKey: "projectwizard");
         Show(0);
         return window;
     }

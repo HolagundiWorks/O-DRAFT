@@ -80,8 +80,8 @@ public sealed partial class MainWindow
                 new TextBlock { Text = "Level 1", FontSize = Density.FontCaption, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center },
                 true,
                 TabEdge.Bottom,
-                new Thickness(12, 0, 12, 0));
-            only.MinHeight = 26;
+                SeamlessTab.LabelPadding);
+            only.MinHeight = Density.ControlHeight;
             AutomationProperties.SetName(only, "Current level Level 1");
             ToolTipService.SetToolTip(only, "The drawing's only level. Use + to add a level for each floor.");
             LevelTabs.Children.Add(only);
@@ -111,8 +111,8 @@ public sealed partial class MainWindow
             VerticalAlignment = VerticalAlignment.Center,
             FontWeight = level.Active ? FontWeights.SemiBold : FontWeights.Normal,
         });
-        var tab = SeamlessTab.Create(label, level.Active, TabEdge.Bottom, new Thickness(12, 0, 12, 0));
-        tab.MinHeight = 26;
+        var tab = SeamlessTab.Create(label, level.Active, TabEdge.Bottom, SeamlessTab.LabelPadding);
+        tab.MinHeight = Density.ControlHeight;
         AutomationProperties.SetName(tab, (level.Active ? "Current level " : "Switch to level ") + level.Name);
         var tip = level.Name + "  elevation " + level.Elevation.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
         if (level.Traced)

@@ -4720,7 +4720,7 @@ public sealed partial class MainWindow : Window
                     tiles.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 }
                 var card = DesignCenterCard(false, "Insert smart block " + entry.Title, entry.Title + (entry.Description.Length > 0 ? ": " + entry.Description : ""));
-                var stack = new StackPanel { Spacing = 2 };
+                var stack = new StackPanel { Spacing = Density.SpaceXs };
                 stack.Children.Add(PreviewCanvas("Smart block preview " + entry.Title, CachedSmartBlockPreviewJson(entry.Id), 72));
                 stack.Children.Add(new TextBlock
                 {

@@ -40,6 +40,9 @@ internal static class SeamlessTab
         </ControlTemplate>
         """;
 
+    /// <summary>Side padding of a tab holding a text label.</summary>
+    public static readonly Thickness LabelPadding = new(Density.Space3, 0, Density.Space3, 0);
+
     public static Button Create(UIElement content, bool active, TabEdge edge, Thickness padding)
     {
         var button = new Button
@@ -77,16 +80,16 @@ internal static class SeamlessTab
         switch (edge)
         {
             case TabEdge.Bottom:
-                button.BorderThickness = new Thickness(0, 0, 0, 2);
-                button.CornerRadius = new CornerRadius(0, 0, 5, 5);
+                button.BorderThickness = new Thickness(0, 0, 0, Density.SpaceXs);
+                button.CornerRadius = new CornerRadius(0, 0, Density.Space1, Density.Space1);
                 break;
             case TabEdge.Left:
-                button.BorderThickness = new Thickness(2, 0, 0, 0);
-                button.CornerRadius = new CornerRadius(5, 0, 0, 5);
+                button.BorderThickness = new Thickness(Density.SpaceXs, 0, 0, 0);
+                button.CornerRadius = new CornerRadius(Density.Space1, 0, 0, Density.Space1);
                 break;
             default:
-                button.BorderThickness = new Thickness(0, 0, 2, 0);
-                button.CornerRadius = new CornerRadius(0, 5, 5, 0);
+                button.BorderThickness = new Thickness(0, 0, Density.SpaceXs, 0);
+                button.CornerRadius = new CornerRadius(0, Density.Space1, Density.Space1, 0);
                 break;
         }
     }
