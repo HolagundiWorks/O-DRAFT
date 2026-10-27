@@ -2712,6 +2712,23 @@ mod tests {
     }
 
     #[test]
+    fn the_blocks_panel_lists_the_smart_blocks_of_the_active_tab() {
+        let mut host = Host::create(false);
+        let library = |h: &Host| -> Vec<String> {
+            let v: Value = serde_json::from_str(&crate::panels::panels_json(&h.session, None)).unwrap();
+            v["library"].as_array().unwrap().iter().map(|b| b["id"].as_str().unwrap().to_string()).collect()
+        };
+        let design = library(&host);
+        assert!(design.len() > 30, "design lists every smart block: {}", design.len());
+        host.execute("sheetset.standard", &json!({})).unwrap();
+        host.execute("sheetset.activate", &json!({ "set": "Electrical" })).unwrap();
+        let electrical = library(&host);
+        assert!(!electrical.is_empty() && electrical.iter().all(|id| id.starts_with("elec.")), "{electrical:?}");
+        host.execute("layer.scope", &json!({ "mode": "all" })).unwrap();
+        assert_eq!(library(&host).len(), design.len(), "all layers shows every smart block");
+    }
+
+    #[test]
     fn double_click_edits_text_and_middle_double_zooms_extents() {
         let mut host = Host::create(false);
         host.execute("text", &json!({ "at": [0.0, 0.0], "text": "Hi", "height": 1.0 })).unwrap();

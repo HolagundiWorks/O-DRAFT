@@ -140,6 +140,12 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
         "layersTruncated": layers_truncated,
         "blocks": blocks,
         "blocksTruncated": blocks_truncated,
+        // Smart blocks that can be inserted: the active tab's own ones in a sheet view, all in design.
+        "library": aad_engine::cmd::smartblock::library_entries(doc, scope)
+            .iter()
+            .take(200)
+            .map(|b| json!({ "id": b["id"], "title": b["title"], "discipline": b["discipline"], "layer": b["layer"], "description": b["description"] }))
+            .collect::<Vec<_>>(),
         "quick": quick(doc, &state.selection),
         "hoverQuick": hover_quick,
     })

@@ -116,7 +116,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("smartblock.list", "List Smart Blocks", run_list)
             .menu(&["Insert", "Smart Block", "List"])
             .alias(&["sblist"])
-            .params("{discipline?: rcc|structural|plumbing|hvac|electrical|interior} → {blocks: [{id, title, discipline, layer, params: [{name, label, unit, default, min, max, integer, choices}]}]}")
+            .params("{discipline?: rcc|structural|plumbing|hvac|electrical|interior, sheetSet? (true: the active tab; or a sheet set name): only the smart blocks on layers that tab maps} → {blocks: [{id, title, discipline, layer, params: [{name, label, unit, default, min, max, integer, choices}]}]}")
             .enabled(always)
             .noundo(),
         CommandSpec::new("smartblock.insert", "Smart Block...", run_insert)
@@ -880,6 +880,33 @@ fn smart_ref(s: &Session, h: aad_doc::Handle) -> Result<Option<(String, String, 
     Ok(smart_of(b).map(|(id, p)| (i.block.clone(), id, p)))
 }
 
+/// The smart blocks a drawing can insert (the definitions kept in it, then the built-in library), as
+/// `smartblock.list` reports them. With a sheet set, only those whose layer the set maps: Electrical
+/// gets the electrical blocks (`E-*` layers), Plumbing the plumbing ones, and so on.
+pub fn library_entries(d: &aad_doc::Drawing, set: Option<&aad_doc::SheetSet>) -> Vec<Value> {
+    let mut blocks: Vec<Value> = Vec::new();
+    if let Some(m) = project::get(d, DEFS_KEY).as_object() {
+        for v in m.values() {
+            if let Ok(def) = serde_json::from_value::<Def>(v.clone()) {
+                let mut j = spec_json(&def);
+                j["stored"] = json!(true);
+                blocks.push(j);
+            }
+        }
+    }
+    if let Ok(lib) = library() {
+        for def in lib {
+            if !blocks.iter().any(|b| b["id"] == def.id.as_str()) {
+                blocks.push(spec_json(def));
+            }
+        }
+    }
+    if let Some(set) = set {
+        blocks.retain(|b| b["layer"].as_str().is_some_and(|layer| set.maps_layer(layer)));
+    }
+    blocks
+}
+
 fn spec_json(d: &Def) -> Value {
     json!({
         "id": d.id,
@@ -906,24 +933,16 @@ fn spec_json(d: &Def) -> Value {
 
 fn run_list(s: &mut Session, p: &Value) -> Result<Value> {
     let want = str_param(p, "discipline").map(str::to_ascii_lowercase);
-    let mut blocks: Vec<Value> = Vec::new();
-    if let Ok(d) = s.doc()
-        && let Some(m) = project::get(d, DEFS_KEY).as_object()
-    {
-        for v in m.values() {
-            if let Ok(def) = serde_json::from_value::<Def>(v.clone())
-                && want.as_ref().is_none_or(|w| def.discipline.eq_ignore_ascii_case(w))
-            {
-                let mut j = spec_json(&def);
-                j["stored"] = json!(true);
-                blocks.push(j);
-            }
-        }
-    }
-    for d in library().map_err(err)? {
-        if want.as_ref().is_none_or(|w| d.discipline.eq_ignore_ascii_case(w)) && !blocks.iter().any(|b| b["id"] == d.id.as_str()) {
-            blocks.push(spec_json(d));
-        }
+    let d = s.doc()?;
+    let set = match p.get("sheetSet") {
+        None | Some(Value::Null | Value::Bool(false)) => None,
+        Some(Value::Bool(true)) => Some(d.active_sheet_ref().ok_or_else(|| err("`sheetSet: true` needs a sheet set to be the active tab"))?),
+        Some(Value::String(name)) => Some(d.sheet_set_by_name(name).ok_or_else(|| err(format!("no sheet set `{name}`")))?),
+        Some(_) => return Err(err("`sheetSet` is true or a sheet set name")),
+    };
+    let mut blocks = library_entries(d, set);
+    if let Some(w) = &want {
+        blocks.retain(|b| b["discipline"].as_str().is_some_and(|x| x.eq_ignore_ascii_case(w)));
     }
     Ok(json!({ "blocks": blocks }))
 }

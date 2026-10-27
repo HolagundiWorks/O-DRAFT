@@ -19,7 +19,7 @@ the control channel, MCP and the agent reach the same code. Programmatic calls n
 
 | Command | Undo | Parameters → result |
 |---|---|---|
-| `smartblock.list` | no | `{discipline?}` → `{blocks: [{id, title, discipline, description, layer, params: [{name, label, unit, default, min, max, integer, choices}], stored?}]}` |
+| `smartblock.list` | no | `{discipline?, sheetSet?}` → `{blocks: [{id, title, discipline, description, layer, params: [{name, label, unit, default, min, max, integer, choices}], stored?}]}` |
 | `smartblock.insert` | yes | `{id \| definition, at: [x,y], params?, rotation?, scale?, layer?, units?}` → `{handle, block, id, params}` |
 | `smartblock.get` | no | `{handle?}` (else the first selected smart block) → `{handle, id, title, block, params, spec}` |
 | `smartblock.edit` | yes | `{handle? \| handles? (else the selection), params}` → `{edited, blocks}` |
@@ -218,3 +218,7 @@ the parametric library is O-Draft's own.
 - Discipline DXFs and a smart block picker in the egui window.
 - Reading AutoCAD dynamic-block data from DWG/DXF.
 - Take-off rows from smart block parameters (for example column or footing concrete).
+
+## Tabs
+
+`smartblock.list {sheetSet: true | "<name>"}` lists only the blocks whose layer the active (or named) sheet set maps. The standard tabs (`sheetset.standard`) map them by layer: Electrical gets `elec.*`, Plumbing `plumb.*`, Interior `int.*`, Working drawing `struct.*` and `rcc.*`, False ceiling `hvac.*` plus the three ceiling electrical fittings. The host's panel snapshot carries the same list as `library`. Verified by `smart_blocks_belong_to_the_tab_whose_layers_they_use` and the host test `the_blocks_panel_lists_the_smart_blocks_of_the_active_tab`; the WinUI Blocks panel does not render `library` yet.

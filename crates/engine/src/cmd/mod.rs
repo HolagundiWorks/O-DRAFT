@@ -57,7 +57,7 @@ mod settings;
 mod sheet;
 pub(crate) mod sheetset;
 pub mod sheetstd;
-pub(crate) mod smartblock;
+pub mod smartblock;
 mod space;
 mod spatialq;
 mod spline_opts;

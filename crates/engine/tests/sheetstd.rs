@@ -218,3 +218,49 @@ fn hostile_mapping_parameters_never_panic() {
     s.execute("sheetset.activate", &json!({"set": "Electrical"})).unwrap();
     let _ = s.execute("layer", &json!({"showFor": "sheetSet"})).unwrap();
 }
+
+#[test]
+fn smart_blocks_belong_to_the_tab_whose_layers_they_use() {
+    let mut s = Session::new();
+    s.execute("sheetset.standard", &json!({})).unwrap();
+    let ids = |s: &mut Session, tab: &str| -> Vec<String> {
+        s.execute("smartblock.list", &json!({"sheetSet": tab})).unwrap()["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let all = s.execute("smartblock.list", &json!({})).unwrap()["blocks"].as_array().unwrap().len();
+    let mut seen = std::collections::BTreeSet::new();
+    for (tab, prefixes) in [
+        ("Electrical", &["elec."][..]),
+        ("Plumbing", &["plumb."]),
+        ("Interior", &["int."]),
+        // Ducts and diffusers, and the electrical fittings that hang from the ceiling (layer E-CEIL).
+        ("False ceiling", &["hvac.", "elec."]),
+        ("Working drawing", &["struct.", "rcc."]),
+    ] {
+        let list = ids(&mut s, tab);
+        assert!(!list.is_empty() && list.iter().all(|id| prefixes.iter().any(|p| id.starts_with(p))), "{tab}: {list:?}");
+        seen.extend(list.iter().cloned());
+        // Whatever is inserted from a tab's list is a block that tab shows in the Blocks panel.
+        for id in &list {
+            let r = s.execute("smartblock.insert", &json!({"id": id, "at": [0.0, 0.0]})).unwrap();
+            let block = r["block"].as_str().unwrap().to_string();
+            assert!(s.doc().unwrap().sheet_set_by_name(tab).unwrap().maps_block(&block), "{tab} does not map {block} ({id})");
+        }
+    }
+    assert_eq!(seen.len(), all, "every smart block belongs to at least one standard tab");
+    let ceiling = ids(&mut s, "False ceiling");
+    assert_eq!(ceiling.iter().filter(|id| id.starts_with("elec.")).count(), 3, "{ceiling:?}");
+    // The tab the user is on decides `sheetSet: true`; a missing or odd value is refused.
+    assert!(s.execute("smartblock.list", &json!({"sheetSet": true})).is_err(), "no tab is active");
+    s.execute("sheetset.activate", &json!({"set": "Plumbing"})).unwrap();
+    assert_eq!(s.execute("smartblock.list", &json!({"sheetSet": true})).unwrap()["blocks"].as_array().unwrap().len(), ids(&mut s, "Plumbing").len());
+    assert!(s.execute("smartblock.list", &json!({"sheetSet": "Landscape"})).is_err());
+    assert!(s.execute("smartblock.list", &json!({"sheetSet": 5})).is_err());
+    // Its blocks land on a layer the tab maps, so they are not moved to the annotation layer.
+    s.execute("smartblock.insert", &json!({"id": "plumb.basin", "at": [10.0, 10.0]})).unwrap();
+    assert_eq!(s.doc().unwrap().model.iter().last().map(|e| e.common.layer.clone()).as_deref(), Some("P-FIXT"));
+}

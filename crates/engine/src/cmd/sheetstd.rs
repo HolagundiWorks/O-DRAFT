@@ -52,6 +52,10 @@ struct Tab {
     symbols: &'static [Symbol],
 }
 
+/// Structure drawn on the working drawing: the layers the RCC and steel smart blocks use.
+const WORKING_LAYERS: &[StdLayer] =
+    &[("S-RCC", 8, "Continuous", 35, "Reinforced concrete: columns, beams, slabs"), ("S-STEEL", 5, "Continuous", 25, "Steel sections")];
+
 const ELECTRICAL_LAYERS: &[StdLayer] = &[
     ("E-CEIL", 6, "Continuous", 18, "Ceiling fittings - lights, fans, AC, sensors"),
     ("E-POINT", 2, "Continuous", 18, "Wall points - power, data, switches"),
@@ -82,6 +86,7 @@ const CEILING_LAYERS: &[StdLayer] = &[
     ("FC-COVE", 4, "DASHED", 18, "Cove and recessed light lines"),
     ("FC-LITE", 2, "Continuous", 18, "Ceiling lights and diffusers"),
     ("FC-LEVL", 6, "Continuous", 13, "Ceiling level marks"),
+    ("M-HVAC", 4, "Continuous", 18, "Ducts, diffusers and grilles"),
 ];
 
 const ELECTRICAL_SYMBOLS: &[Symbol] = &[
@@ -204,9 +209,9 @@ const TABS: [Tab; 5] = [
     Tab {
         name: "Working drawing",
         prefix: "W-",
-        layers: &[],
-        layer_patterns: &["A-*", "AN-*", "W-*", "ROOM-LABELS", "MEASURE-*"],
-        block_patterns: &["AADOPEN-*", "DOOR*", "WIN*", "STAIR*", "NORTH*", "A-*"],
+        layers: WORKING_LAYERS,
+        layer_patterns: &["A-*", "AN-*", "W-*", "ROOM-LABELS", "MEASURE-*", "S-*"],
+        block_patterns: &["AADOPEN-*", "DOOR*", "WIN*", "STAIR*", "NORTH*", "A-*", "SB_STRUCT_*", "SB_RCC_*"],
         symbols: &[],
     },
     Tab {
@@ -214,7 +219,7 @@ const TABS: [Tab; 5] = [
         prefix: "E-",
         layers: ELECTRICAL_LAYERS,
         layer_patterns: &["E-*"],
-        block_patterns: &["E-*", "SW*", "SB*", "LP*", "FP*", "EF*", "SOCK*"],
+        block_patterns: &["E-*", "SW*", "SB*", "LP*", "FP*", "EF*", "SOCK*", "SB_ELEC_*"],
         symbols: ELECTRICAL_SYMBOLS,
     },
     Tab {
@@ -222,7 +227,7 @@ const TABS: [Tab; 5] = [
         prefix: "P-",
         layers: PLUMBING_LAYERS,
         layer_patterns: &["P-*"],
-        block_patterns: &["P-*", "WC*", "WB*", "SINK*", "SHOWER*", "TAP*"],
+        block_patterns: &["P-*", "WC*", "WB*", "SINK*", "SHOWER*", "TAP*", "SB_PLUMB_*"],
         symbols: PLUMBING_SYMBOLS,
     },
     Tab {
@@ -230,15 +235,16 @@ const TABS: [Tab; 5] = [
         prefix: "I-",
         layers: INTERIOR_LAYERS,
         layer_patterns: &["I-*", "A-FLR"],
-        block_patterns: &["FURN-*", "I-*"],
+        block_patterns: &["FURN-*", "I-*", "SB_INT_*"],
         symbols: INTERIOR_SYMBOLS,
     },
     Tab {
         name: "False ceiling",
         prefix: "FC-",
         layers: CEILING_LAYERS,
-        layer_patterns: &["FC-*", "A-CLNG", "E-CEIL"],
-        block_patterns: &["FC-*"],
+        layer_patterns: &["FC-*", "A-CLNG", "E-CEIL", "M-*"],
+        // The ceiling fittings of the electrical library are ceiling items too (layer E-CEIL).
+        block_patterns: &["FC-*", "SB_HVAC_*", "SB_ELEC_LIGHT_*", "SB_ELEC_FAN_CEILING_*", "SB_ELEC_DOWNLIGHT_*"],
         symbols: CEILING_SYMBOLS,
     },
 ];
