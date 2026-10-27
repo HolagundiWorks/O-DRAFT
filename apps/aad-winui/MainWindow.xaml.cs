@@ -5165,6 +5165,15 @@ public sealed partial class MainWindow : Window
             Native.SetUcs(_host, _ucs);
             return;
         }
+        if (run == "levelmove")
+        {
+            // "Move to Level": the entry's id is the target level's id.
+            if (long.TryParse(id, out var level))
+            {
+                RunShellCommand("level.moveto", new Dictionary<string, object> { ["level"] = level });
+            }
+            return;
+        }
         if (run == "type")
         {
             if (Native.CommandLine(_host, id) != 0)

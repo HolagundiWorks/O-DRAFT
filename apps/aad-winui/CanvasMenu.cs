@@ -101,7 +101,7 @@ internal static class CanvasMenu
         var body = new ScrollViewer
         {
             Content = stack,
-            MaxHeight = 360,
+            MaxHeight = 640,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             BorderThickness = new Thickness(0),
         };
@@ -142,7 +142,7 @@ internal static class CanvasMenu
         Density.Apply(frame);
         ShellWindows.Track(window);
         ShellChrome.Apply(window, theme);
-        ShellFit.ToContent(window, minWidthDip: 180, minHeightDip: 120, maxWidthDip: 320, maxHeightDip: 420);
+        ShellFit.ToContent(window, minWidthDip: 180, minHeightDip: 120, maxWidthDip: 320, maxHeightDip: 700);
         window.AppWindow.Move(new Windows.Graphics.PointInt32(x, y));
         window.Activate();
         var hwnd = WindowNative.GetWindowHandle(window);

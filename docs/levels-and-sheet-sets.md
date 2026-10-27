@@ -478,6 +478,13 @@ carried `levels`, `sheetSets` and `designMode`):
   are also what a typed `level.new`, `level.set`, `level.trace` or `level.delete` starts. To take what
   a dialog sends, `level.trace` accepts a whole-number float for `fade` and a comma-separated text
   (or `*`) for `layers`, besides the JSON forms it took before.
+- **Move selection to a level**: select objects, right-click the canvas (no command running), and
+  the shortcut menu has *Move to Level* with every other level listed; a click runs `level.moveto`
+  with that level, so the objects keep their coordinates and leave the active level (one undo
+  step; the selection is cleared). The entry is offered only in the design view of a drawing with
+  two or more levels, because `level.moveto` refuses a sheet view and a one-level drawing. The menu
+  window is taller than before (up to 640 px of items) so the whole menu shows. There is no
+  matching *Copy to Level* entry yet (`level.copyto` exists).
 - **Sheet-set rail** on the left edge as vertical tabs (the name rotated 90 degrees, reading
   upward): Design, then one tab per sheet set, the active one
   selected; a click runs `sheetset.activate`. The rail is hidden while the drawing has no sheet

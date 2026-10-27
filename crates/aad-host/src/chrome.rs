@@ -101,10 +101,31 @@ fn command_groups(session: &Session) -> Vec<Vec<serde_json::Value>> {
         if !rows.is_empty() {
             groups.push(rows);
         }
+        if let Some(menu) = level_move_menu(session) {
+            groups.push(vec![menu]);
+        }
     }
     push_row(&mut groups, session, &["u", "redo", "pan", "zoom"]);
     push_row(&mut groups, session, &["qselect", "find"]);
     groups
+}
+
+/// "Move to Level" for the selected objects: one entry per other level, each running `level.moveto`
+/// (the shell reads `run: "levelmove"` and the level id in `id`). Offered only where the command can
+/// work: the design view of a drawing with two or more levels.
+fn level_move_menu(session: &Session) -> Option<serde_json::Value> {
+    let d = session.doc().ok()?;
+    if d.active_sheet.is_some() || !d.has_levels() || session.selection().is_empty() {
+        return None;
+    }
+    let items: Vec<_> = d
+        .levels
+        .iter()
+        .filter(|l| Some(l.id) != d.active_level)
+        .take(aad_engine::doc::MAX_LEVELS)
+        .map(|l| serde_json::json!({ "label": l.name, "id": l.id.0.to_string(), "enabled": true, "run": "levelmove" }))
+        .collect();
+    if items.is_empty() { None } else { Some(serde_json::json!({ "label": "Move to Level", "enabled": true, "items": items })) }
 }
 
 fn snap_groups(session: &Session) -> Vec<Vec<serde_json::Value>> {
