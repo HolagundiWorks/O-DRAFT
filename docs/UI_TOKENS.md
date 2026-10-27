@@ -4,7 +4,8 @@ Canonical token system for `apps/aad-winui`. Visual direction: **compact CAD den
 (AutoCAD 2007–inspired chrome sizing) with **Fluent** restraint — graphite/charcoal dark
 workspace, neutral off-white light workspace, and a restrained Windows blue accent.
 
-Full inventory, acceptance checklist, and exceptions: [COMPACT_CAD_UI.md](COMPACT_CAD_UI.md).
+Window templates, components, hierarchy rules and the screen audit: [UI_STANDARDS.md](UI_STANDARDS.md).
+Density background, acceptance checklist and exceptions: [COMPACT_CAD_UI.md](COMPACT_CAD_UI.md).
 
 ## Resource dictionaries
 
@@ -54,18 +55,24 @@ Behaviour: [COMMAND_BAR.md](COMMAND_BAR.md).
 |---|---|
 | `MenuBarHeight` / `MenuItemHeight` | 24 / 22 |
 | `FileTabHeight` / `StatusBarHeight` / `CommandLineHeight` | 24 / 22 / 22 |
-| `ControlHeight` / `DialogButtonHeight` | 24 / 26 |
+| `ControlHeight` / `DialogButtonHeight` | 26 / 26 (inputs and buttons share a height) |
 | `IconButtonSize` / `IconSize` | 26 / 16 |
-| `PropertyRowHeight` / `PanelHeaderHeight` | 24 / 24 |
+| `PropertyRowHeight` / `PanelHeaderHeight` | 26 / 24 |
+| `CornerRadiusControl` / `CornerRadiusButton` | 4 / 4 |
 | `FontSizeCaption` / `FontSizeBody` / `FontSizeSection` | 11 / 12 / 13 |
 
 ## Spacing scale
 
-| Token | DIP |
-|---|---|
-| `SpaceXs` … `SpaceXxl` | 2, 4, 6, 10, 12, 14, 16 |
-| Panel padding | 6×4 (`PaddingPanel`) |
-| Dialog padding | 10 (`PaddingDialog` / `Density.DialogMargin`) |
+4 px base scale ([UI_STANDARDS.md](UI_STANDARDS.md#tokens)).
+
+| Token | DIP | Use |
+|---|---|---|
+| `Space1` … `Space6` | 4, 8, 12, 16, 20, 24 | tight, standard, group, section, major, large |
+| `SpaceXs` | 2 | icon strips only |
+| `SpaceSm` / `SpaceMd` / `SpaceLg` / `SpaceSection` | 4 / 8 / 12 / 16 | older names, aliases of the scale |
+| Panel padding | 8×4 (`PaddingPanel`) | side panels, toolbars |
+| Dialog padding | 12 (`PaddingDialog` / `Density.DialogMargin`) | dialog content |
+| Footer padding | 12×8 (`PaddingFooter`) | pinned dialog footers |
 
 ## Intentionally out of scope
 
@@ -75,7 +82,8 @@ Behaviour: [COMMAND_BAR.md](COMMAND_BAR.md).
 
 ## Related
 
-- [COMPACT_CAD_UI.md](COMPACT_CAD_UI.md) — audit, checklist, exceptions
+- [UI_STANDARDS.md](UI_STANDARDS.md) — window templates, components, hierarchy, screen audit
+- [COMPACT_CAD_UI.md](COMPACT_CAD_UI.md) — density background, checklist, exceptions
 - [WINDOW_SIZING.md](WINDOW_SIZING.md) — content-fit + persisted tool window sizes
 - [COMMAND_BAR.md](COMMAND_BAR.md)
 - [UI_UX.md](UI_UX.md)

@@ -50,8 +50,7 @@ internal static class CommandList
             }
         };
         _window = window;
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 360, minHeightDip: 280, maxWidthDip: 720, maxHeightDip: 800, persistKey: "commands");
+        StandardWindow.Present(window, owner, WindowTemplate.Floating, "commands", new WindowBounds(360, 280, 720, 800));
         window.Activate();
         Native.ShowWindow(WindowNative.GetWindowHandle(window), 8);
     }

@@ -46,8 +46,7 @@ internal sealed class CalcWindow : Window
         root.RequestedTheme = theme;
         Content = root;
         Density.Apply(root);
-        ShellIcon.Apply(this, theme);
-        ShellFit.ToContent(this, minWidthDip: 360, minHeightDip: 160, maxWidthDip: 520, maxHeightDip: 320);
+        StandardWindow.Present(this, owner, WindowTemplate.Dialog);
         _expr.KeyDown += (_, e) =>
         {
             if (e.Key == Windows.System.VirtualKey.Enter)

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -9,7 +8,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Aad.WinUi;
 
-/// <summary>Architecture &gt; Room Label Settings — <c>room.settings</c>.</summary>
+/// <summary>Architecture &gt; Room Label Settings â€” <c>room.settings</c>.</summary>
 internal static class RoomSettingsWindow
 {
     private static readonly (string Value, string Label)[] Units =
@@ -201,12 +200,7 @@ internal static class RoomSettingsWindow
                 Content = new Grid { RequestedTheme = theme, Children = { root } },
             },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = false;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.ToContent(window, minWidthDip: 360, minHeightDip: 280, maxWidthDip: 520, maxHeightDip: 480);
+        StandardWindow.Present(window, owner, WindowTemplate.Dialog);
         Load();
         return window;
     }

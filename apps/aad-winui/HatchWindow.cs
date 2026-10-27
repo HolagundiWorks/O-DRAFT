@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.UI;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -24,42 +23,34 @@ internal static class HatchWindow
     public static Window Open(Window owner, IntPtr host, Action changed)
     {
         var theme = owner.Content is FrameworkElement shell ? shell.RequestedTheme : ElementTheme.Default;
-        var status = Density.Secondary("", TextWrapping.Wrap);
-        AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
-        Density.Name(status, "Hatch status");
+        var status = Ui.Status("Hatch status");
 
         var grid = new GridView
         {
-            MinHeight = 280,
+            MinHeight = Density.ListMinHeight,
             SelectionMode = ListViewSelectionMode.Single,
             IsItemClickEnabled = true,
         };
         Density.Name(grid, "Hatch patterns");
-        var selectionLabel = Density.Secondary("Selection: ?", TextWrapping.Wrap);
+        var selectionLabel = Density.Secondary("Selection: —", TextWrapping.Wrap);
         Density.Name(selectionLabel, "Hatch selection");
-        var scale = new TextBox { MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
-        Density.Name(scale, "Hatch scale");
-        var angle = new TextBox { MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
-        Density.Name(angle, "Hatch angle");
-        var apply = ActionButton("Apply to selection");
-        var setDefaults = ActionButton("Set as defaults");
+        var scale = DialogLayout.Field("Hatch scale");
+        var angle = DialogLayout.Field("Hatch angle");
+        var apply = Ui.Action("Apply to selection", ActionKind.Primary);
+        var setDefaults = Ui.Action("Set as defaults");
 
-        var scaleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm };
-        scaleRow.Children.Add(new TextBlock { Text = "Scale", VerticalAlignment = VerticalAlignment.Center, FontSize = Density.FontBody });
-        scaleRow.Children.Add(scale);
-        scaleRow.Children.Add(new TextBlock { Text = "Angle", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(Density.SpaceLg, 0, 0, 0), FontSize = Density.FontBody });
-        scaleRow.Children.Add(angle);
-
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceSm, HorizontalAlignment = HorizontalAlignment.Right };
-        actions.Children.Add(apply);
-        actions.Children.Add(setDefaults);
-
-        var root = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin, MaxWidth = 560 };
-        root.Children.Add(selectionLabel);
-        root.Children.Add(grid);
-        root.Children.Add(scaleRow);
-        root.Children.Add(actions);
-        root.Children.Add(status);
+        // Manager template: the pattern grid takes the free space; properties and actions stay put.
+        var layout = new Grid { Padding = Density.DialogMargin, RowSpacing = Density.Space2 };
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var properties = Ui.Section("Pattern properties", Ui.Form(("Scale", scale), ("Angle", angle)));
+        layout.Children.Add(selectionLabel);
+        Grid.SetRow(grid, 1);
+        layout.Children.Add(grid);
+        Grid.SetRow(properties, 2);
+        layout.Children.Add(properties);
+        var root = Ui.ManagerPage(null, layout, Ui.Footer(status, setDefaults, apply));
 
         var handles = new List<string>();
 
@@ -271,26 +262,17 @@ internal static class HatchWindow
         };
 
         Density.Apply(root);
+        root.RequestedTheme = theme;
         var window = new Window
         {
             Title = "Hatch Editor",
-            Content = new ScrollViewer
-            {
-                Content = new Grid { RequestedTheme = theme, Children = { root } },
-            },
+            Content = root,
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 480, minHeightDip: 420, maxWidthDip: 780, maxHeightDip: 900, persistKey: "hatch");
+        StandardWindow.Present(window, owner, WindowTemplate.Manager, "hatch", new WindowBounds(480, 420, 1200, 1000));
         Reload();
         ShellFit.Invalidate(window);
         return window;
     }
-
-    private static Button ActionButton(string label) => DialogLayout.Action(label);
 
     private static FrameworkElement BuildTile(string name, string description, JsonElement preview)
     {
@@ -317,26 +299,26 @@ internal static class HatchWindow
             FontSize = Density.FontCaption,
             TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxWidth = SwatchDip + 8,
+            MaxWidth = SwatchDip + Density.Space2,
         };
         var stack = new StackPanel
         {
-            Spacing = 4,
-            Margin = new Thickness(4),
-            Width = SwatchDip + 12,
+            Spacing = Density.Space1,
+            Margin = new Thickness(Density.Space1),
+            Width = SwatchDip + Density.Space3,
             Tag = name,
             Children =
             {
                 new Border
                 {
                     BorderBrush = borderBrush,
-                    BorderThickness = new Thickness(1),
+                    BorderThickness = new Thickness(Density.DividerThickness),
                     Child = canvas,
                 },
                 label,
             },
         };
-        var tip = description.Length == 0 ? name : name + " ? " + description;
+        var tip = description.Length == 0 ? name : name + " — " + description;
         AutomationProperties.SetName(stack, tip);
         ToolTipService.SetToolTip(stack, tip);
         return stack;

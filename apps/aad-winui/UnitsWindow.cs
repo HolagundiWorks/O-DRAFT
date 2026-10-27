@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -10,7 +9,7 @@ namespace Aad.WinUi;
 
 /// <summary>
 /// Display units, plot scale and annotation. Drafting units are chosen on the status bar
-/// (geometry stays in those units; rescale is not offered here — scale at plot).
+/// (geometry stays in those units; rescale is not offered here â€” scale at plot).
 /// </summary>
 internal static class UnitsWindow
 {
@@ -34,7 +33,7 @@ internal static class UnitsWindow
         stack.Children.Add(Note(
             "Pick the drafting unit on the status bar. Geometry is stored in those units. " +
             "Typed distances already accept multi-unit suffixes (mm, cm, m, ', \"); they convert into the drafting unit. " +
-            "Use plot scale below when printing — not while drafting."));
+            "Use plot scale below when printing â€” not while drafting."));
         stack.Children.Add(Heading("Display units"));
         stack.Children.Add(Note("How dimensions show measurements. Geometry is not changed."));
         stack.Children.Add(display);
@@ -90,12 +89,7 @@ internal static class UnitsWindow
                 Content = new Grid { RequestedTheme = theme, Children = { stack } },
             },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = false;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.ToContent(window, minWidthDip: 400, minHeightDip: 320, maxWidthDip: 560, maxHeightDip: 560);
+        StandardWindow.Present(window, owner, WindowTemplate.Dialog);
         display.Tag = false;
         return window;
     }

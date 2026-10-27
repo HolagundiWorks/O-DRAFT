@@ -7,35 +7,51 @@ namespace Aad.WinUi;
 
 /// <summary>
 /// Design tokens and helpers for code-built UI. XAML counterparts live in <c>Themes/*.xaml</c>.
-/// Compact CAD density inspired by classic AutoCAD 2007 chrome (not tablet / Fluent default).
+/// Compact CAD density with native WinUI 3 controls. Targets and rules: <c>docs/UI_STANDARDS.md</c>.
 /// </summary>
 internal static class Density
 {
-    // --- Spacing (panel 4–6 · dialog 10–12) ---
+    // --- Spacing: 4 px scale (Space1 tight · Space2 standard · Space3 group · Space4 section
+    // · Space5 major · Space6 large) ---
+    public const double Space1 = 4;
+    public const double Space2 = 8;
+    public const double Space3 = 12;
+    public const double Space4 = 16;
+    public const double Space5 = 20;
+    public const double Space6 = 24;
+
+    // Older names, snapped to the scale. SpaceXs (2) is only for icon strips.
     public const double SpaceXs = 2;
-    public const double SpaceSm = 4;
-    public const double SpaceMd = 6;
-    public const double SpaceLg = 10;
-    public const double SpaceXl = 12;
-    public const double SpaceSection = 14;
-    public const double SpaceXxl = 16;
+    public const double SpaceSm = Space1;
+    public const double SpaceMd = Space2;
+    public const double SpaceLg = Space3;
+    public const double SpaceXl = Space3;
+    public const double SpaceSection = Space4;
+    public const double SpaceXxl = Space4;
 
-    public static Thickness DialogMargin { get; } = new Thickness(10, 10, 10, 10);
-    public static Thickness PanelPadding { get; } = new Thickness(6, 4, 6, 4);
-    public static Thickness PanelPaddingTight { get; } = new Thickness { Left = SpaceMd, Top = SpaceSm, Right = SpaceMd, Bottom = SpaceSm };
-    public static Thickness CommandBarPadding { get; } = new Thickness { Left = SpaceLg, Top = SpaceSm, Right = SpaceLg, Bottom = SpaceSm };
-    public static Thickness StatusPadding { get; } = new Thickness { Left = 8, Top = 2, Right = 8, Bottom = 2 };
-    public static Thickness LabelFieldGap { get; } = new Thickness { Left = 0, Top = 0, Right = 0, Bottom = SpaceXs };
-    public static Thickness ControlPadding { get; } = new Thickness(8, 2, 8, 2);
-    public static Thickness PageMargin { get; } = new Thickness(16, 12, 16, 16);
+    public static Thickness DialogMargin { get; } = new Thickness(Space3);
+    public static Thickness FooterPadding { get; } = new Thickness(Space3, Space2, Space3, Space2);
+    public static Thickness ToolbarPadding { get; } = new Thickness(Space1, SpaceXs, Space1, SpaceXs);
+    public static Thickness ButtonPadding { get; } = new Thickness(Space3, SpaceXs, Space3, SpaceXs);
+    public static Thickness PanelPadding { get; } = new Thickness(Space2, Space1, Space2, Space1);
+    public static Thickness PanelPaddingTight { get; } = new Thickness(Space2, Space1, Space2, Space1);
+    public static Thickness CommandBarPadding { get; } = new Thickness(Space3, Space1, Space3, Space1);
+    public static Thickness StatusPadding { get; } = new Thickness(Space2, SpaceXs, Space2, SpaceXs);
+    public static Thickness LabelFieldGap { get; } = new Thickness(0, 0, 0, Space1);
+    public static Thickness ControlPadding { get; } = new Thickness(Space2, SpaceXs, Space2, SpaceXs);
+    public static Thickness PageMargin { get; } = new Thickness(Space4);
+    /// <summary>Horizontal inset of text inside a table / list cell.</summary>
+    public static Thickness CellPadding { get; } = new Thickness(Space1, 0, Space1, 0);
 
-    // --- Control sizing (menu 24 · toolbar btn 26 · icon 16 · input 24 · pane 240) ---
+    // --- Control sizing (menu 24 · toolbar btn 26 · icon 16 · input/button 26 · pane 240) ---
     public const double MinTarget = 24;
-    public const double ControlHeight = 24;
+    public const double ControlHeight = 26;
     public const double ControlHeightCompact = 22;
     public const double IconButton = 26;
     public const double IconSize = 16;
     public const double IconSizeSm = 16;
+    /// <summary>Colour chip in a table cell or list row.</summary>
+    public const double SwatchSize = 14;
     public const double IconStroke = 1.5;
     public const double MenuBarHeight = 24;
     public const double MenuItemHeight = 22;
@@ -43,22 +59,31 @@ internal static class Density
     public const double ArchBarHeight = 28;
     public const double StatusBarHeight = 22;
     public const double CommandLineHeight = 22;
-    public const double PropertyRowHeight = 24;
+    public const double PropertyRowHeight = 26;
     public const double DialogButtonHeight = 26;
     public const double SplitterWidth = 4;
+    public const double DividerThickness = 1;
     /// <summary>Default docked side-panel width (matches <c>SidePanelWidth</c>).</summary>
     public const double SidePanelWidth = 240;
     /// <summary>Left list column in style / manager dialogs.</summary>
     public const double ManagerListWidth = 180;
+    /// <summary>Smallest useful height of a list in a dialog.</summary>
+    public const double ListMinHeight = 160;
     /// <summary>Numeric and short text fields in dialogs.</summary>
     public const double FieldWidth = 120;
+    /// <summary>Cell editor in an inline table row.</summary>
+    public const double TableCellWidth = 88;
     public const double DialogActionMinWidth = 72;
     /// <summary>Hatch pattern tile (readable, tighter than 72).</summary>
     public const double HatchSwatch = 56;
+    /// <summary>Application mark in About.</summary>
+    public const double LogoSize = 64;
+    /// <summary>Upper bound for a status / validation line beside footer actions.</summary>
+    public const double StatusMaxWidth = 420;
     public const double CornerChrome = 2;
-    public const double CornerControl = 2;
+    public const double CornerControl = 4;
 
-    // --- Typography (body 12 · section 13 · page title 18) ---
+    // --- Typography (caption 11 · body/label 12 · section 13 semibold · page title 18) ---
     public static double Font = FontBody;
     public static bool OverrideFace;
     public static string Face = "Segoe UI Variable";
@@ -68,6 +93,8 @@ internal static class Density
     public const double FontSection = 13;
     public const double FontHeading = 13;
     public const double FontPageTitle = 18;
+    /// <summary>Large read-out (timer, result), not a heading.</summary>
+    public const double FontDisplay = 22;
     /// <summary>Preferred UI face name; use <see cref="FontUiResolved"/> after <see cref="ShellFonts.Resolve"/>.</summary>
     public const string FontUi = "Segoe UI";
     /// <summary>Preferred mono face name; use <see cref="FontMonoResolved"/> after resolve.</summary>
@@ -143,31 +170,9 @@ internal static class Density
         }
     }
 
-    /// <summary>Primary/secondary dialog action — compact CAD height, body type, consistent padding.</summary>
-    public static Button DialogAction(string label, bool primary = false)
-    {
-        var button = new Button
-        {
-            Content = label,
-            MinWidth = 72,
-            MinHeight = DialogButtonHeight,
-            Padding = new Thickness(10, 2, 10, 2),
-            FontSize = FontBody,
-            CornerRadius = new CornerRadius(CornerControl),
-            BorderThickness = new Thickness(0),
-        };
-        if (TryFindStyle(primary ? "PrimaryActionStyle" : "CompactButtonStyle", out var style))
-        {
-            button.Style = style;
-            // Style setters can leave MinWidth unset on BasedOn chains — keep compact floor.
-            button.MinWidth = 72;
-            button.MinHeight = DialogButtonHeight;
-            button.Padding = new Thickness(10, 2, 10, 2);
-            button.FontSize = FontBody;
-        }
-        Name(button, label);
-        return button;
-    }
+    /// <summary>Primary/secondary dialog action. Kept for older call sites; prefer <see cref="Ui.Action"/>.</summary>
+    public static Button DialogAction(string label, bool primary = false) =>
+        Ui.Action(label, primary ? ActionKind.Primary : ActionKind.Secondary);
 
     public static TextBox DialogField(string text = "", string? name = null)
     {
@@ -230,7 +235,7 @@ internal static class Density
         }
         if (button.Padding.Top > 4 || button.Padding.Bottom > 4)
         {
-            button.Padding = new Thickness(10, 2, 10, 2);
+            button.Padding = ButtonPadding;
         }
         if (OverrideFace)
         {
@@ -375,25 +380,9 @@ internal static class Density
         return block;
     }
 
-    public static StackPanel DialogStack(params UIElement[] children)
-    {
-        var stack = new StackPanel { Spacing = SpaceMd, Margin = DialogMargin };
-        foreach (var child in children)
-        {
-            stack.Children.Add(child);
-        }
-        return stack;
-    }
+    public static StackPanel DialogStack(params UIElement[] children) => Ui.Stack(children);
 
-    public static StackPanel FieldRow(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = SpaceXs };
-        var text = new TextBlock { Text = label, FontSize = FontBody };
-        Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    public static StackPanel FieldRow(string label, FrameworkElement field) => Ui.Labeled(label, field);
 
     public static void Name(DependencyObject target, string name)
     {

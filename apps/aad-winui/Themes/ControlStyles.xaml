@@ -41,7 +41,7 @@
         <Setter Property="Width" Value="{StaticResource DividerThickness}" />
         <Setter Property="Height" Value="{StaticResource IconSize}" />
         <Setter Property="Background" Value="{ThemeResource BorderSubtleBrush}" />
-        <Setter Property="Margin" Value="2,0" />
+        <Setter Property="Margin" Value="{StaticResource MarginToolbarDivider}" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Opacity" Value="0.85" />
     </Style>
@@ -61,6 +61,25 @@
         <Setter Property="FontSize" Value="{StaticResource FontSizeSection}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{ThemeResource TextSecondaryBrush}" />
+    </Style>
+    <Style x:Key="ToolbarLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{ThemeResource TextSecondaryBrush}" />
+    </Style>
+    <Style x:Key="ManagerToolbarStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource SurfaceSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="{StaticResource PaddingToolbar}" />
+        <Setter Property="MinHeight" Value="{StaticResource PanelHeaderHeight}" />
+    </Style>
+    <Style x:Key="DialogFooterStyle" TargetType="Grid">
+        <Setter Property="Background" Value="{ThemeResource SurfaceSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="{StaticResource PaddingFooter}" />
+        <Setter Property="ColumnSpacing" Value="{StaticResource Space3}" />
     </Style>
     <Style x:Key="MutedCaptionStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeCaption}" />
@@ -84,14 +103,24 @@
         <Setter Property="BorderBrush" Value="{ThemeResource BorderSubtleBrush}" />
         <Setter Property="BorderThickness" Value="0,0,1,0" />
     </Style>
-    <Style x:Key="PrimaryActionStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+    <!--
+      Dialog actions (docs/UI_STANDARDS.md): one primary per footer (accent fill), secondary
+      (neutral), destructive (error-coloured text). Same height, padding and minimum width.
+    -->
+    <Style x:Key="PrimaryActionStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
         <Setter Property="MinHeight" Value="{StaticResource DialogButtonHeight}" />
-        <Setter Property="MinWidth" Value="72" />
-        <Setter Property="Padding" Value="10,2,10,2" />
+        <Setter Property="MinWidth" Value="{StaticResource DialogActionMinWidth}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingButton}" />
         <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusButton}" />
-        <Setter Property="BorderBrush" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+    </Style>
+    <Style x:Key="DestructiveActionStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="MinHeight" Value="{StaticResource DialogButtonHeight}" />
+        <Setter Property="MinWidth" Value="{StaticResource DialogActionMinWidth}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingButton}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusButton}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="Foreground" Value="{ThemeResource DestructiveBrush}" />
     </Style>
     <!-- Keyed compact styles — avoid implicit TargetType overrides that break MenuBar/TabView/Connect. -->
     <Style x:Key="CompactButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
@@ -99,13 +128,11 @@
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="MinHeight" Value="{StaticResource DialogButtonHeight}" />
-        <Setter Property="MinWidth" Value="72" />
-        <Setter Property="Padding" Value="10,2,10,2" />
+        <Setter Property="MinWidth" Value="{StaticResource DialogActionMinWidth}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingButton}" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
     </Style>
-    <Style x:Key="DialogSecondaryActionStyle" TargetType="Button" BasedOn="{StaticResource CompactButtonStyle}">
-        <Setter Property="MinWidth" Value="72" />
-    </Style>
+    <Style x:Key="DialogSecondaryActionStyle" TargetType="Button" BasedOn="{StaticResource CompactButtonStyle}" />
     <Style x:Key="CompactTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}" />
         <Setter Property="Padding" Value="{StaticResource PaddingControl}" />

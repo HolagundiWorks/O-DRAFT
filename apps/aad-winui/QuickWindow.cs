@@ -28,13 +28,8 @@ internal sealed class QuickWindow : Window
         var theme = ShellChrome.Resolve(themeSource?.RequestedTheme ?? Density.Theme);
         Content = new ScrollViewer { Content = new Grid { RequestedTheme = theme, Children = { _stack } } };
         Title = "Quick Properties";
-        ShellIcon.Apply(this, theme);
-        ShellFit.UserResizable(this, minWidthDip: 280, minHeightDip: 240, maxWidthDip: 420, maxHeightDip: 640, persistKey: "quickprops");
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsAlwaysOnTop = true;
-            presenter.IsResizable = false;
-        }
+        // Owned by the shell, so it stays above the drawing without being always-on-top system-wide.
+        StandardWindow.Present(this, null, WindowTemplate.Floating, "quickprops");
         _color.SelectionChanged += (_, _) => CommitChoice("color", _color);
         _layer.SelectionChanged += (_, _) => CommitChoice("layer", _layer);
         _linetype.SelectionChanged += (_, _) => CommitChoice("linetype", _linetype);

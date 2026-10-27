@@ -59,9 +59,8 @@ internal sealed class PomodoroWindow : Window
         root.RequestedTheme = theme;
         Content = root;
         Density.Apply(root);
-        _label.FontSize = 22;
-        ShellIcon.Apply(this, theme);
-        ShellFit.ToContent(this, minWidthDip: 320, minHeightDip: 120, maxWidthDip: 420, maxHeightDip: 220);
+        _label.FontSize = Density.FontDisplay;
+        StandardWindow.Present(this, owner, WindowTemplate.Dialog);
         _timer.Tick += (_, _) =>
         {
             Tick(1);

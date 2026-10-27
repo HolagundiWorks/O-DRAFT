@@ -38,7 +38,7 @@ jobs:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - name: cargo xtask ci (fmt, clippy -D warnings, tests, assets, layers, wasm)
+      - name: cargo xtask ci (fmt, clippy -D warnings, tests, assets, layers, licences, ui, wasm)
         run: cargo xtask ci
       - name: Mutation robustness (larger than the in-suite run)
         env:

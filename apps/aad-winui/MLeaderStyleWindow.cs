@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -27,7 +26,7 @@ internal static class MLeaderStyleWindow
 
         var list = new ListBox { MinHeight = 160, MinWidth = Density.ManagerListWidth };
         Density.Name(list, "Multileader styles");
-        var currentLabel = Density.Secondary("Current style: ?", TextWrapping.Wrap);
+        var currentLabel = Density.Secondary("Current style: —", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current multileader style");
         var setCurrent = ActionButton("Set Current");
         var newName = new TextBox { PlaceholderText = "New style name", MinHeight = Density.ControlHeight, Width = Density.FieldWidth };
@@ -299,12 +298,7 @@ internal static class MLeaderStyleWindow
                 Content = new Grid { RequestedTheme = theme, Children = { root } },
             },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 460, minHeightDip: 360, maxWidthDip: 720, maxHeightDip: 640, persistKey: "mleaderstyle");
+        StandardWindow.Present(window, owner, WindowTemplate.Manager, "mleaderstyle");
         Reload(null);
         return window;
     }

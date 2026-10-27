@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -26,9 +25,9 @@ internal static class LinetypeWindow
 
         var list = new ListBox { MinHeight = 220, MinWidth = 280 };
         Density.Name(list, "Linetypes");
-        var currentLabel = Density.Secondary("Current linetype: ?", TextWrapping.Wrap);
+        var currentLabel = Density.Secondary("Current linetype: —", TextWrapping.Wrap);
         Density.Name(currentLabel, "Current linetype");
-        var load = new ComboBox { MinWidth = 140, MinHeight = Density.ControlHeight, PlaceholderText = "Load?" };
+        var load = new ComboBox { MinWidth = 140, MinHeight = Density.ControlHeight, PlaceholderText = "Load…" };
         Density.Name(load, "Load linetype");
         var setCurrent = ActionButton("Current");
         var scale = new TextBox { MinHeight = Density.ControlHeight, Width = 100 };
@@ -142,7 +141,7 @@ internal static class LinetypeWindow
                             continue;
                         }
                         var desc = row.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
-                        list.Items.Add(desc.Length == 0 ? name : name + " ? " + desc);
+                        list.Items.Add(desc.Length == 0 ? name : name + " — " + desc);
                     }
                 }
                 library.Clear();
@@ -163,7 +162,7 @@ internal static class LinetypeWindow
                 }
                 var sel = list.Items.Cast<object>().Select(o => o as string ?? "").FirstOrDefault(item =>
                     item.Equals(current, StringComparison.OrdinalIgnoreCase)
-                    || item.StartsWith(current + " ?", StringComparison.OrdinalIgnoreCase));
+                    || item.StartsWith(current + " — ", StringComparison.OrdinalIgnoreCase));
                 if (sel != null)
                 {
                     list.SelectedItem = sel;
@@ -181,7 +180,7 @@ internal static class LinetypeWindow
         string SelectedName()
         {
             var item = list.SelectedItem as string ?? "";
-            var sep = item.IndexOf(" ?", StringComparison.Ordinal);
+            var sep = item.IndexOf(" — ", StringComparison.Ordinal);
             return sep < 0 ? item : item[..sep];
         }
 
@@ -238,12 +237,7 @@ internal static class LinetypeWindow
                 Content = new Grid { RequestedTheme = theme, Children = { root } },
             },
         };
-        if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = true;
-        }
-        ShellIcon.Apply(window, theme);
-        ShellFit.UserResizable(window, minWidthDip: 380, minHeightDip: 320, maxWidthDip: 600, maxHeightDip: 640, persistKey: "linetype");
+        StandardWindow.Present(window, owner, WindowTemplate.PropertyDialog, "linetype");
         Reload();
         return window;
     }

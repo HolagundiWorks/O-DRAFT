@@ -21,6 +21,18 @@ internal static class ShellWindows
         }
     }
 
+    /// <summary>The main shell, owner of every secondary window that is not given another owner.</summary>
+    public static Window? Main
+    {
+        get
+        {
+            lock (Gate)
+            {
+                return _main;
+            }
+        }
+    }
+
     public static bool IsMain(Window window)
     {
         lock (Gate)

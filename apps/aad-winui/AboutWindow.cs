@@ -12,7 +12,7 @@ internal static class AboutWindow
     public static void Show(Window owner, string version)
     {
         var theme = owner.Content is FrameworkElement shell ? shell.RequestedTheme : ElementTheme.Default;
-        var logo = new Image { Width = 64, Height = 64, HorizontalAlignment = HorizontalAlignment.Left, Source = ShellIcon.Logo() };
+        var logo = new Image { Width = Density.LogoSize, Height = Density.LogoSize, HorizontalAlignment = HorizontalAlignment.Left, Source = ShellIcon.Logo() };
         AutomationProperties.SetName(logo, "O-Draft");
         var stack = new StackPanel { Spacing = Density.SpaceSm, Margin = Density.DialogMargin };
         stack.Children.Add(logo);
@@ -47,8 +47,7 @@ internal static class AboutWindow
             Title = "About O-Draft",
             Content = new Grid { RequestedTheme = theme, Children = { stack } },
         };
-        ShellIcon.Apply(window, theme);
-        ShellFit.ToContent(window, minWidthDip: 320, minHeightDip: 180, maxWidthDip: 480, maxHeightDip: 360);
+        StandardWindow.Present(window, owner, WindowTemplate.Dialog);
         window.Closed += (_, _) =>
         {
             if (ReferenceEquals(_window, window))

@@ -6,7 +6,8 @@ using Microsoft.UI.Xaml.Controls;
 namespace Aad.WinUi;
 
 /// <summary>
-/// Shared compact dialog chrome for code-built windows. Tokens live in <see cref="Density"/>.
+/// Style-dialog helpers (list column + editor). Generic pieces delegate to <see cref="Ui"/> so
+/// there is one implementation of each component; tokens live in <see cref="Density"/>.
 /// </summary>
 internal static class DialogLayout
 {
@@ -19,15 +20,7 @@ internal static class DialogLayout
         return block;
     }
 
-    public static FrameworkElement Labeled(string label, FrameworkElement field)
-    {
-        var row = new StackPanel { Spacing = Density.SpaceXs };
-        var text = new TextBlock { Text = label, FontSize = Density.FontCaption };
-        Density.Name(text, label);
-        row.Children.Add(text);
-        row.Children.Add(field);
-        return row;
-    }
+    public static FrameworkElement Labeled(string label, FrameworkElement field) => Ui.Labeled(label, field);
 
     public static TextBox Field(string name, double? width = null)
     {
@@ -41,7 +34,7 @@ internal static class DialogLayout
     {
         var list = new ListBox
         {
-            MinHeight = 160,
+            MinHeight = Density.ListMinHeight,
             MinWidth = Density.ManagerListWidth,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
@@ -63,7 +56,7 @@ internal static class DialogLayout
 
     public static Grid Columns(FrameworkElement left, FrameworkElement right)
     {
-        var columns = new Grid { ColumnSpacing = Density.SpaceLg };
+        var columns = new Grid { ColumnSpacing = Density.Space3 };
         columns.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(left, 0);
@@ -73,15 +66,7 @@ internal static class DialogLayout
         return columns;
     }
 
-    public static StackPanel Root(params UIElement[] children)
-    {
-        var stack = new StackPanel { Spacing = Density.SpaceMd, Margin = Density.DialogMargin };
-        foreach (var child in children)
-        {
-            stack.Children.Add(child);
-        }
-        return stack;
-    }
+    public static StackPanel Root(params UIElement[] children) => Ui.Stack(children);
 
     /// <summary>Right-aligned actions. Put the primary button immediately before Cancel.</summary>
     public static StackPanel ActionRow(params Button[] buttons)
@@ -89,12 +74,11 @@ internal static class DialogLayout
         var row = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = Density.SpaceSm,
+            Spacing = Density.Space2,
             HorizontalAlignment = HorizontalAlignment.Right,
         };
         foreach (var button in buttons)
         {
-            button.HorizontalAlignment = HorizontalAlignment.Left;
             row.Children.Add(button);
         }
         return row;

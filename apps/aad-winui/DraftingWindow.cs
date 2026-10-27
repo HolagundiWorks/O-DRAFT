@@ -85,8 +85,7 @@ internal sealed class DraftingWindow : Window
         var theme = ShellChrome.Resolve(themeSource?.RequestedTheme ?? Density.Theme);
         Content = new ScrollViewer { Content = new Grid { RequestedTheme = theme, Children = { stack } } };
         Title = "Drafting Settings";
-        ShellIcon.Apply(this, theme);
-        ShellFit.UserResizable(this, minWidthDip: 380, minHeightDip: 480, maxWidthDip: 560, maxHeightDip: 900, persistKey: "drafting");
+        StandardWindow.Present(this, null, WindowTemplate.PropertyDialog, "drafting", new WindowBounds(400, 480, 720, 900));
         _polar.Click += (_, _) => Run("polar", new { on = _polar.IsChecked == true });
         _snap.Click += (_, _) => Run("osnap", new { on = _snap.IsChecked == true });
         _dyn.Click += (_, _) => Run("dynmode", new { on = _dyn.IsChecked == true });
