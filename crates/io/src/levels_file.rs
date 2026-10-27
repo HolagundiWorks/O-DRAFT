@@ -13,8 +13,8 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 
 use aad_doc::{
-    Common, Drawing, Entity, EntityKind, EntityStore, Insert, LEVELS_NOTE_KEY, Level, LevelId, MAX_LEVELS, MAX_SHEET_SETS, MAX_TRACES, SheetSet,
-    SheetSetId, Trace, TraceColour, TraceOrder, layer_prefix_ok, level_name_ok,
+    Common, Drawing, Entity, EntityKind, EntityStore, Insert, LEVELS_NOTE_KEY, Level, LevelId, MAX_LEVELS, MAX_MAP_PATTERNS, MAX_SHEET_SETS,
+    MAX_TRACES, SheetSet, SheetSetId, Trace, TraceColour, TraceOrder, layer_prefix_ok, level_name_ok, pattern_ok,
 };
 use aad_geom::Vec2;
 use serde::{Deserialize, Serialize};
@@ -73,6 +73,11 @@ struct SetMeta {
     dim_style: Option<String>,
     #[serde(default)]
     text_style: Option<String>,
+    /// Layer and block name patterns the set maps (see `SheetSet::layers`).
+    #[serde(default)]
+    layers: Vec<String>,
+    #[serde(default)]
+    blocks: Vec<String>,
 }
 
 fn block_name(id: LevelId) -> String {
@@ -116,6 +121,8 @@ pub(crate) fn to_file(d: &Drawing) -> Cow<'_, Drawing> {
                 space: s.space.clone(),
                 dim_style: s.dim_style.clone(),
                 text_style: s.text_style.clone(),
+                layers: s.layers.clone(),
+                blocks: s.blocks.clone(),
             })
             .collect(),
         levels: d
@@ -220,6 +227,9 @@ fn valid(meta: &Meta) -> bool {
         if !layer_prefix_ok(&s.prefix) {
             return false;
         }
+        if [&s.layers, &s.blocks].iter().any(|l| l.len() > MAX_MAP_PATTERNS || l.iter().any(|p| !pattern_ok(p))) {
+            return false;
+        }
     }
     if meta.active_sheet != 0 && !set_ids.contains(&meta.active_sheet) {
         return false;
@@ -277,6 +287,8 @@ pub(crate) fn from_file(mut d: Drawing) -> Drawing {
             space: s.space.clone(),
             dim_style: s.dim_style.clone(),
             text_style: s.text_style.clone(),
+            layers: s.layers.clone(),
+            blocks: s.blocks.clone(),
             annotations,
         });
     }

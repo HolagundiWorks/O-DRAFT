@@ -39,9 +39,17 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
         })
         .unwrap_or_default();
     let hover_handle = hover.filter(|h| !state.selection.iter().any(|s| s == h));
+    // While a sheet set is the active tab, only the layers and blocks it maps are listed (unless the
+    // drawing asks for all of them): Electrical lists its layers and symbols, Plumbing its own. The
+    // current layer always stays in the list.
+    let show_all = aad_engine::cmd::sheetstd::show_all(doc);
+    let scope = if show_all { None } else { doc.active_sheet_ref() };
     let mut layers_truncated = false;
     let mut layers = Vec::new();
     for layer in doc.layers.iter().take(MAX_LAYERS + 1) {
+        if scope.is_some_and(|s| !s.maps_layer(&layer.name) && !layer.name.eq_ignore_ascii_case(&current)) {
+            continue;
+        }
         if layers.len() == MAX_LAYERS {
             layers_truncated = true;
             break;
@@ -63,7 +71,9 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
     }
     let refs = reference_handles(doc);
     let mut blocks_truncated = false;
-    let mut blocks: Vec<&aad_engine::doc::Block> = doc.blocks.values().map(|b| b.as_ref()).filter(|b| !b.anonymous).collect();
+    let blocks_total = doc.blocks.values().filter(|b| !b.anonymous).count();
+    let mut blocks: Vec<&aad_engine::doc::Block> =
+        doc.blocks.values().map(|b| b.as_ref()).filter(|b| !b.anonymous && scope.is_none_or(|s| s.maps_block(&b.name))).collect();
     blocks.sort_by_key(|block| block.name.to_ascii_lowercase());
     if blocks.len() > MAX_BLOCKS {
         blocks.truncate(MAX_BLOCKS);
@@ -118,6 +128,14 @@ pub fn panels_json(session: &Session, hover: Option<Handle>) -> String {
         "cecolor": cecolor.name(),
         "celtype": doc.header.str("CELTYPE", "ByLayer"),
         "properties": properties(doc, &state.selection),
+        "scope": {
+            "sheetSet": doc.active_sheet_ref().map(|s| s.name.clone()),
+            "all": show_all,
+            "layersShown": layers.len(),
+            "layersTotal": doc.layers.len(),
+            "blocksShown": blocks.len(),
+            "blocksTotal": blocks_total,
+        },
         "layers": layers,
         "layersTruncated": layers_truncated,
         "blocks": blocks,

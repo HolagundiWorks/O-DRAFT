@@ -41,12 +41,72 @@ pub struct SheetSet {
     pub space: Option<String>,
     pub dim_style: Option<String>,
     pub text_style: Option<String>,
+    /// Layers that belong to this sheet set, as name patterns (`*` matches any run of characters,
+    /// case ignored); the layer prefix counts as one more pattern. The Layers panel shows only
+    /// these while the set is the sheet view.
+    pub layers: Vec<String>,
+    /// Blocks that belong to this sheet set, as name patterns; the Blocks panel shows only these.
+    pub blocks: Vec<String>,
     /// Annotation per level while it is not the one in `Drawing::model`.
     pub annotations: BTreeMap<LevelId, EntityStore>,
 }
 
 fn invalid(msg: impl Into<String>) -> DocError {
     DocError::Invalid(msg.into())
+}
+
+/// How many layer (or block) patterns one sheet set maps, and how long a pattern is.
+pub const MAX_MAP_PATTERNS: usize = 64;
+pub const MAX_PATTERN_LEN: usize = 64;
+
+/// Whether `p` is usable as a mapping pattern.
+pub fn pattern_ok(p: &str) -> bool {
+    !p.is_empty() && p.chars().count() <= MAX_PATTERN_LEN && !p.chars().any(char::is_control)
+}
+
+/// Case-insensitive match of `name` against `pattern`, where `*` matches any run of characters.
+/// Linear in the product of the lengths at worst; both are capped.
+pub fn glob_match(pattern: &str, name: &str) -> bool {
+    let p: Vec<char> = pattern.chars().flat_map(char::to_lowercase).take(256).collect();
+    let n: Vec<char> = name.chars().flat_map(char::to_lowercase).take(1024).collect();
+    let (mut pi, mut ni) = (0usize, 0usize);
+    // After a `*`: where the pattern resumes and the name position to retry from.
+    let mut retry: Option<(usize, usize)> = None;
+    while ni < n.len() {
+        match p.get(pi) {
+            Some('*') => {
+                pi += 1;
+                retry = Some((pi, ni));
+            }
+            Some(c) if Some(c) == n.get(ni) => {
+                pi += 1;
+                ni += 1;
+            }
+            _ => match retry {
+                Some((rp, rn)) => {
+                    pi = rp;
+                    ni = rn + 1;
+                    retry = Some((rp, rn + 1));
+                }
+                None => return false,
+            },
+        }
+    }
+    p.get(pi..).is_some_and(|rest| rest.iter().all(|c| *c == '*'))
+}
+
+impl SheetSet {
+    /// Whether the layer belongs to this sheet set: it starts with the layer prefix or matches a
+    /// mapped pattern.
+    pub fn maps_layer(&self, name: &str) -> bool {
+        let prefixed = !self.layer_prefix.is_empty() && name.to_ascii_uppercase().starts_with(&self.layer_prefix.to_ascii_uppercase());
+        prefixed || self.layers.iter().any(|p| glob_match(p, name))
+    }
+
+    /// Whether the block belongs to this sheet set (a mapped pattern matches its name).
+    pub fn maps_block(&self, name: &str) -> bool {
+        self.blocks.iter().any(|p| glob_match(p, name))
+    }
 }
 
 /// Whether `prefix` is usable as a layer prefix (empty is allowed).
@@ -149,6 +209,8 @@ impl Drawing {
             space: None,
             dim_style: None,
             text_style: None,
+            layers: Vec::new(),
+            blocks: Vec::new(),
             annotations: BTreeMap::new(),
         });
         Ok(id)

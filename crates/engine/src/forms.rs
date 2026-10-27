@@ -196,6 +196,18 @@ pub static FORMS: &[Form] = &[
         ],
     },
     Form {
+        id: "sheetset.set",
+        title: "Sheet Set: Layers and Blocks",
+        wrap: None,
+        fields: &[
+            field("set", "Sheet set (name)", Kind::Text).req(),
+            field("name", "New name (blank: keep)", Kind::Text),
+            field("layerPrefix", "Layer prefix for new annotation (for example E-; blank: keep)", Kind::Text),
+            field("layers", "Layers shown: name patterns separated by commas, * matches any run (blank: keep)", Kind::Text),
+            field("blocks", "Blocks shown: name patterns separated by commas, * matches any run (blank: keep)", Kind::Text),
+        ],
+    },
+    Form {
         id: "level.delete",
         title: "Delete Level",
         wrap: None,

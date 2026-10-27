@@ -489,11 +489,11 @@ fn run_setup(s: &mut Session, p: &Value) -> Result<Value> {
     let created = levels_from_floors(&mut d, &floors)?;
     let mut sets = Vec::new();
     if with_sets {
-        for (name, prefix) in super::sheetset::PRESETS {
-            if d.sheet_set_by_name(name).is_none() {
-                d.add_sheet_set(name, prefix)?;
-                sets.push(name);
-            }
+        // The standard tabs with their layer and block mapping, layers and symbols.
+        let missing: Vec<String> =
+            super::sheetset::PRESETS.iter().filter(|(n, _)| d.sheet_set_by_name(n).is_none()).map(|(n, _)| (*n).to_string()).collect();
+        if !missing.is_empty() {
+            sets = super::sheetstd::apply_standard(&mut d, Some(&missing), true, true)?.sets;
         }
     }
     // Drafting starts on the ground floor (the lowest floor at or above zero), else the first.

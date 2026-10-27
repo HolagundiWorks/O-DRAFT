@@ -141,10 +141,8 @@ fn layer_scopes(d: &aad_doc::Drawing) -> (std::collections::HashSet<String>, std
                 add(&mut sheet, st);
             }
         }
-        let prefix = set.layer_prefix.to_ascii_uppercase();
-        if !prefix.is_empty() {
-            sheet.extend(d.layers.iter().filter(|l| l.name.to_ascii_uppercase().starts_with(&prefix)).map(|l| l.name.to_ascii_lowercase()));
-        }
+        // The layers the set maps (its prefix and its patterns).
+        sheet.extend(d.layers.iter().filter(|l| set.maps_layer(&l.name)).map(|l| l.name.to_ascii_lowercase()));
     }
     (level, sheet)
 }

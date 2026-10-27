@@ -56,6 +56,7 @@ mod selectmore;
 mod settings;
 mod sheet;
 pub(crate) mod sheetset;
+pub mod sheetstd;
 mod space;
 mod spatialq;
 mod spline_opts;
@@ -256,6 +257,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(vdb::specs());
         v.extend(levels::specs());
         v.extend(sheetset::specs());
+        v.extend(sheetstd::specs());
         v.extend(exchange::specs());
         v.extend(migrate::specs());
         v.extend(sheet::specs());

@@ -424,3 +424,28 @@ fn invisible_dimblock_entity_is_ignored_in_dimension_extents() {
     dim(&mut d, far_line("0"));
     assert_eq!(d.extents(&Space::Model).max, Vec2::new(6000.0, 6000.0));
 }
+
+#[test]
+fn glob_patterns_match_names_ignoring_case_and_stay_bounded() {
+    use crate::{SheetSet, SheetSetId, glob_match};
+    assert!(glob_match("E-*", "e-lite") && glob_match("*lite", "E-LITE") && glob_match("E-L*E", "E-LITE"));
+    assert!(glob_match("*", "") && glob_match("**a**", "bab") && glob_match("abc", "ABC"));
+    assert!(!glob_match("E-*", "A-WALL") && !glob_match("abc", "abcd") && !glob_match("a*b", "a") && !glob_match("", "x"));
+    // A hostile pattern and name finish at once (no exponential backtracking).
+    let nasty = "a*".repeat(100) + "b";
+    assert!(!glob_match(&nasty, &"a".repeat(2000)));
+    let set = SheetSet {
+        id: SheetSetId(1),
+        name: "Electrical".into(),
+        layer_prefix: "E-".into(),
+        space: None,
+        dim_style: None,
+        text_style: None,
+        layers: vec!["LIGHT*".into()],
+        blocks: vec!["SW*".into(), "fan-?".into()],
+        annotations: Default::default(),
+    };
+    assert!(set.maps_layer("E-POWR") && set.maps_layer("light-1") && !set.maps_layer("A-WALL"));
+    assert!(set.maps_block("sw1") && !set.maps_block("WC"), "`?` is not a wildcard");
+    assert!(!set.maps_block("fan-1"));
+}

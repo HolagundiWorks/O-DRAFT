@@ -22,14 +22,14 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("sheetset.list", "List Sheet Sets", run_list)
             .menu(&["Architecture", "Sheet Sets", "List"])
-            .params("{} → {sheetSets: [{id, name, layerPrefix, space, dimStyle, textStyle, active, objects}], active}")
+            .params("{} → {sheetSets: [{id, name, layerPrefix, layers, blocks, space, dimStyle, textStyle, active, objects}], active}")
             .noundo(),
         CommandSpec::new("sheetset.new", "New Sheet Set", run_new)
             .menu(&["Architecture", "Sheet Sets", "New Sheet Set"])
-            .params("{name, layerPrefix? (default the first letter and `-`), space?, dimStyle?, textStyle?} or {preset: true} for Working drawing, Electrical, Plumbing, Interior and False ceiling → {created}"),
+            .params("{name, layerPrefix? (default the first letter and `-`), space?, dimStyle?, textStyle?} or {preset: true} for Working drawing, Electrical, Plumbing, Interior and False ceiling with their standard layer and block mapping, layers and symbols (see sheetset.standard), `layers`? and `blocks`? as for sheetset.set → {created}"),
         CommandSpec::new("sheetset.set", "Sheet Set Settings", run_set)
             .menu(&["Architecture", "Sheet Sets", "Sheet Set Settings"])
-            .params("{set (id or name), name?, layerPrefix?, space? (text or null), dimStyle? (text or null), textStyle? (text or null)} → {sheetSet}"),
+            .params("{set (id or name), name?, layerPrefix?, layers? (layer name patterns, a list or comma-separated text; `*` matches any run; replaces the mapping), blocks? (block name patterns, likewise), space? (text or null), dimStyle? (text or null), textStyle? (text or null)} → {sheetSet}. `layers` and `blocks` decide what the Layers and Blocks panels show while the set is the active tab."),
         CommandSpec::new("sheetset.delete", "Delete Sheet Set", run_delete)
             .menu(&["Architecture", "Sheet Sets", "Delete Sheet Set"])
             .params("{set, force? (delete although it holds annotation)} → {deleted}"),
@@ -72,7 +72,7 @@ fn objects_of(d: &Drawing, set: &SheetSet) -> usize {
 
 fn set_json(d: &Drawing, x: &SheetSet) -> Value {
     json!({
-        "id": x.id.0, "name": x.name, "layerPrefix": x.layer_prefix, "space": x.space,
+        "id": x.id.0, "name": x.name, "layerPrefix": x.layer_prefix, "layers": x.layers, "blocks": x.blocks, "space": x.space,
         "dimStyle": x.dim_style, "textStyle": x.text_style,
         "active": d.active_sheet == Some(x.id), "objects": objects_of(d, x),
     })
@@ -95,21 +95,53 @@ fn opt_text(p: &Value, cmd: &str, key: &str) -> Result<Option<Option<String>>> {
     }
 }
 
+/// Name patterns given as a list or as comma-separated text: `None` = not given; null clears.
+fn patterns(p: &Value, cmd: &str, key: &str) -> Result<Option<Vec<String>>> {
+    let raw: Vec<String> = match p.get(key) {
+        None => return Ok(None),
+        Some(Value::Null) => Vec::new(),
+        Some(Value::String(t)) => t.split(',').map(|x| x.trim().to_string()).collect(),
+        Some(Value::Array(a)) if a.len() <= aad_doc::MAX_MAP_PATTERNS * 2 => {
+            let mut v = Vec::new();
+            for x in a {
+                v.push(x.as_str().ok_or_else(|| bad(cmd, format!("`{key}` is a list of text patterns")))?.trim().to_string());
+            }
+            v
+        }
+        Some(_) => return Err(bad(cmd, format!("`{key}` is a list of patterns or comma-separated text"))),
+    };
+    let mut out: Vec<String> = Vec::new();
+    for x in raw.into_iter().filter(|x| !x.is_empty()) {
+        if !aad_doc::pattern_ok(&x) {
+            return Err(bad(cmd, format!("`{key}`: a pattern is 1 to {} characters without control characters", aad_doc::MAX_PATTERN_LEN)));
+        }
+        if !out.iter().any(|o| o.eq_ignore_ascii_case(&x)) {
+            out.push(x);
+        }
+    }
+    if out.len() > aad_doc::MAX_MAP_PATTERNS {
+        return Err(bad(cmd, format!("`{key}` has at most {} patterns", aad_doc::MAX_MAP_PATTERNS)));
+    }
+    Ok(Some(out))
+}
+
 fn default_prefix(name: &str) -> String {
     name.trim().chars().next().filter(|c| c.is_alphanumeric()).map(|c| format!("{}-", c.to_ascii_uppercase())).unwrap_or_default()
 }
 
 fn run_new(s: &mut Session, p: &Value) -> Result<Value> {
     if bool_or(p, "preset", false) {
-        let d = s.doc_mut()?;
-        let mut created = Vec::new();
-        for (name, prefix) in PRESETS {
-            if d.sheet_set_by_name(name).is_none() {
-                d.add_sheet_set(name, prefix)?;
-                created.push(name);
-            }
-        }
-        return Ok(json!({ "created": created }));
+        // The standard tabs with their mapping, layers and symbols; sets that exist keep their
+        // own mapping (use sheetset.standard to reset it).
+        let mut d = s.doc()?.clone();
+        let missing: Vec<String> = PRESETS.iter().filter(|(n, _)| d.sheet_set_by_name(n).is_none()).map(|(n, _)| (*n).to_string()).collect();
+        let r = if missing.is_empty() {
+            super::sheetstd::Report::default()
+        } else {
+            super::sheetstd::apply_standard(&mut d, Some(&missing), true, true)?
+        };
+        *s.doc_mut()? = d;
+        return Ok(json!({ "created": r.sets, "layersCreated": r.layers_created, "blocksCreated": r.blocks_created }));
     }
     let name = str_param(p, "name").ok_or_else(|| bad("sheetset.new", "`name` (or `preset: true`) is required"))?.to_string();
     let prefix = match p.get("layerPrefix") {
@@ -119,9 +151,12 @@ fn run_new(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let (space, dim, text) =
         (opt_text(p, "sheetset.new", "space")?, opt_text(p, "sheetset.new", "dimStyle")?, opt_text(p, "sheetset.new", "textStyle")?);
+    let (layers, blocks) = (patterns(p, "sheetset.new", "layers")?, patterns(p, "sheetset.new", "blocks")?);
     let d = s.doc_mut()?;
     let id = d.add_sheet_set(&name, &prefix)?;
     if let Some(x) = d.sheet_sets.iter_mut().find(|x| x.id == id) {
+        x.layers = layers.unwrap_or_default();
+        x.blocks = blocks.unwrap_or_default();
         x.space = space.flatten();
         x.dim_style = dim.flatten();
         x.text_style = text.flatten();
@@ -138,6 +173,7 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
         Some(Value::String(t)) if aad_doc::layer_prefix_ok(t) => Some(t.clone()),
         Some(_) => return Err(bad("sheetset.set", "`layerPrefix` is at most 8 characters without spaces")),
     };
+    let (layers, blocks) = (patterns(p, "sheetset.set", "layers")?, patterns(p, "sheetset.set", "blocks")?);
     let d = s.doc_mut()?;
     if let Some(n) = str_param(p, "name") {
         d.rename_sheet_set(id, n)?;
@@ -145,6 +181,12 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(x) = d.sheet_sets.iter_mut().find(|x| x.id == id) {
         if let Some(pre) = prefix {
             x.layer_prefix = pre;
+        }
+        if let Some(v) = layers {
+            x.layers = v;
+        }
+        if let Some(v) = blocks {
+            x.blocks = v;
         }
         if let Some(v) = space {
             x.space = v;
@@ -202,11 +244,26 @@ fn go(s: &mut Session, cmd: &str, to: Option<SheetSetId>) -> Result<Value> {
             s.doc_mut()?.materialize_levels(&name, 0.0, 0.0)?;
         }
         s.doc_mut()?.enter_sheet_view(id)?;
+        follow_with_current_layer(s.doc_mut()?, id);
     } else {
         s.doc_mut()?.leave_sheet_view()?;
     }
     s.set_selection(Vec::new());
     state_json(s)
+}
+
+/// Entering a tab: when the current layer is not one of the tab's layers, the first layer that is
+/// (and is usable: on, thawed, unlocked) becomes current, so new objects land where they belong.
+fn follow_with_current_layer(d: &mut Drawing, id: SheetSetId) {
+    let Some(set) = d.sheet_set(id) else { return };
+    let current = d.header.str("CLAYER", "0");
+    if set.maps_layer(&current) {
+        return;
+    }
+    let pick = d.layers.iter().find(|l| l.on && !l.frozen && !l.locked && set.maps_layer(&l.name)).map(|l| l.name.clone());
+    if let Some(name) = pick {
+        d.header.set_str("CLAYER", &name);
+    }
 }
 
 fn run_activate(s: &mut Session, p: &Value) -> Result<Value> {
@@ -240,6 +297,12 @@ fn run_prev(s: &mut Session, _p: &Value) -> Result<Value> {
 
 // ---------------- what a sheet view does to the commands ----------------
 
+/// Whether the kind is annotation proper (text, dimension, leader, hatch), as opposed to a symbol
+/// or a line drawn in a sheet view.
+fn is_annotation(kind: &EntityKind) -> bool {
+    matches!(kind, EntityKind::Dimension(_) | EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::MLeader(_) | EntityKind::Hatch(_))
+}
+
 /// The layer new annotation of this kind goes on in a sheet set with `prefix`.
 fn layer_for(prefix: &str, kind: &EntityKind) -> String {
     let what = match kind {
@@ -261,12 +324,25 @@ pub(crate) fn route_new_objects(doc: &mut Arc<Drawing>, before: &Drawing) {
         return;
     }
     let prefix = set.layer_prefix.clone();
+    // Text, dimensions, leaders and hatches go to the set's annotation layer for their kind
+    // (`E-TEXT`, `E-DIM`, ...) when they were drawn on a layer outside the set or on one of the
+    // standard object layers (`E-CEIL`, `P-FIXT`, ...) that entering the tab may have made current;
+    // on any other layer with the set's prefix they stay. Anything else (a symbol insert, a line)
+    // stays on a layer the set maps, and moves to `<prefix>ANNO` when it is on a layer it does not.
     let moves: Vec<(aad_doc::Handle, String)> = doc
         .model
         .changed_since(&before.model)
         .into_iter()
-        .filter(|e| before.model.get(e.handle).is_none() && !e.common.layer.to_ascii_uppercase().starts_with(&prefix.to_ascii_uppercase()))
-        .map(|e| (e.handle, layer_for(&prefix, &e.kind)))
+        .filter(|e| before.model.get(e.handle).is_none())
+        .map(|e| (e.handle, layer_for(&prefix, &e.kind), is_annotation(&e.kind), set.maps_layer(&e.common.layer), e.common.layer.clone()))
+        .filter(|(_, _, annotation, mapped, on)| {
+            if *annotation {
+                !on.to_ascii_uppercase().starts_with(&prefix.to_ascii_uppercase()) || super::sheetstd::is_object_layer(on)
+            } else {
+                !mapped
+            }
+        })
+        .map(|(h, wanted, ..)| (h, wanted))
         .collect();
     if moves.is_empty() {
         return;

@@ -243,7 +243,7 @@ pub fn chrome_json(session: &Session, cursor: Option<aad_geom::Vec2>, draft: &st
             .sheet_sets
             .iter()
             .take(aad_engine::doc::MAX_SHEET_SETS)
-            .map(|s| serde_json::json!({ "id": s.id.0, "name": s.name, "active": state.doc.active_sheet == Some(s.id), "layerPrefix": s.layer_prefix }))
+            .map(|s| serde_json::json!({ "id": s.id.0, "name": s.name, "active": state.doc.active_sheet == Some(s.id), "layerPrefix": s.layer_prefix, "layers": s.layers, "blocks": s.blocks }))
             .collect();
     }
     let cursor = cursor.filter(|point| point.is_finite());
