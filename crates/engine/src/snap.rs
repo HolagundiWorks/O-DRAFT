@@ -199,6 +199,10 @@ fn trace_candidates<'a>(d: &'a Drawing, space: &Space) -> Vec<(&'a aad_doc::Enti
     if !matches!(space, Space::Model) {
         return out;
     }
+    // In a sheet view the level's own objects are the reference annotation is dimensioned against.
+    if let Some(store) = d.reference_store() {
+        out.extend(store.iter().take(MAX_TRACE_SCAN).map(|e| (e.as_ref(), None)));
+    }
     let Some(level) = d.active_level_ref() else { return out };
     for t in level.traces.iter().filter(|t| t.snap) {
         let Some(store) = d.level_store(t.level) else { continue };

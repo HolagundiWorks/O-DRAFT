@@ -109,6 +109,22 @@ impl Session {
     /// After command `cmd` changed the drawing from `before`: when it changed a protected object,
     /// put the drawing and selection back and return the error to report.
     pub(crate) fn refuse_protected(&mut self, uid: Option<u64>, before: &Arc<Drawing>, selection: &[Handle], cmd: &str) -> crate::Result<()> {
+        // In a sheet view, new annotation goes on the sheet set's layers and the level shown for
+        // reference cannot change.
+        {
+            let st = match uid {
+                Some(uid) => self.docs.iter_mut().find(|d| d.uid == uid),
+                None => self.state_mut().ok(),
+            };
+            if let Some(st) = st.filter(|st| !Arc::ptr_eq(before, &st.doc)) {
+                if let Some(msg) = crate::cmd::sheetset::reference_changed(cmd, before, &st.doc) {
+                    st.doc = before.clone();
+                    st.selection = selection.to_vec();
+                    return Err(EngineError::BadParams { cmd: cmd.into(), msg });
+                }
+                crate::cmd::sheetset::route_new_objects(&mut st.doc, before);
+            }
+        }
         // Layer table commands: renaming a layer re-points its objects, which is not an edit of them.
         // External reference and floor/project commands manage the locked overlay layers of other
         // drawings (attaching, reloading and detaching xrefs adds and removes the objects on them).

@@ -1,17 +1,20 @@
-//! Levels in DXF/DWG files (design: `docs/levels-and-sheet-sets.md`, "DXF and DWG round-trip").
+//! Levels and sheet sets in DXF/DWG files (design: `docs/levels-and-sheet-sets.md`, "DXF and DWG
+//! round-trip").
 //!
 //! The file stays an ordinary DXF: the first level in tab order is model space, every other level
-//! is a block `ODRAFT$LVL$<id>`, one INSERT of each such block sits in model space on the frozen,
-//! non-plotting layer `ODRAFT-STORES` (so `PURGE` elsewhere keeps the blocks), and the level
-//! records ride in the project data under `levels2`. Reading reverses this. Damaged or missing
-//! metadata never fails the open: the file then loads as one level and the blocks stay blocks.
+//! is a block `ODRAFT$LVL$<id>`, a sheet set's annotation of a level is a block
+//! `ODRAFT$ANN$<set>$<level>`, one INSERT of each such block sits in model space on the frozen,
+//! non-plotting layer `ODRAFT-STORES` (so `PURGE` elsewhere keeps the blocks), and the level and
+//! sheet-set records ride in the project data under `levels2`. Reading reverses this. Damaged or
+//! missing metadata never fails the open: the file then loads as one level and the blocks stay
+//! blocks.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use aad_doc::{
-    Common, Drawing, Entity, EntityKind, EntityStore, Insert, LEVELS_NOTE_KEY, Level, LevelId, MAX_LEVELS, MAX_TRACES, Trace, TraceColour,
-    TraceOrder, level_name_ok,
+    Common, Drawing, Entity, EntityKind, EntityStore, Insert, LEVELS_NOTE_KEY, Level, LevelId, MAX_LEVELS, MAX_SHEET_SETS, MAX_TRACES, SheetSet,
+    SheetSetId, Trace, TraceColour, TraceOrder, layer_prefix_ok, level_name_ok,
 };
 use aad_geom::Vec2;
 use serde::{Deserialize, Serialize};
@@ -19,6 +22,7 @@ use serde::{Deserialize, Serialize};
 const KEY: &str = "levels2";
 const STORES_LAYER: &str = "ODRAFT-STORES";
 const BLOCK_PREFIX: &str = "ODRAFT$LVL$";
+const ANN_PREFIX: &str = "ODRAFT$ANN$";
 
 #[derive(Serialize, Deserialize)]
 struct Meta {
@@ -26,6 +30,13 @@ struct Meta {
     seed: u32,
     active: u32,
     levels: Vec<LevelMeta>,
+    #[serde(default)]
+    sheet_seed: u32,
+    /// The sheet set of the sheet view being edited; 0 is design mode.
+    #[serde(default)]
+    active_sheet: u32,
+    #[serde(default)]
+    sets: Vec<SetMeta>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -51,13 +62,40 @@ struct TraceMeta {
     layers: Option<Vec<String>>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct SetMeta {
+    id: u32,
+    name: String,
+    prefix: String,
+    #[serde(default)]
+    space: Option<String>,
+    #[serde(default)]
+    dim_style: Option<String>,
+    #[serde(default)]
+    text_style: Option<String>,
+}
+
 fn block_name(id: LevelId) -> String {
     format!("{BLOCK_PREFIX}{}", id.0)
 }
 
-/// The drawing as it is written: unchanged unless it has two or more levels.
+fn ann_name(set: u32, level: u32) -> String {
+    format!("{ANN_PREFIX}{set}${level}")
+}
+
+/// Put `store` in a block of the written drawing, kept alive by a hidden INSERT.
+fn park(w: &mut Drawing, name: String, store: EntityStore) {
+    let mut b = aad_doc::Block::new(&name);
+    b.entities = store;
+    w.blocks.insert(name.clone(), std::sync::Arc::new(b));
+    let handle = w.new_handle();
+    let common = Common { layer: STORES_LAYER.into(), ..Common::default() };
+    w.model.push(Entity { handle, common, kind: EntityKind::Insert(Insert { block: name, ..Insert::default() }) });
+}
+
+/// The drawing as it is written: unchanged unless it has two or more levels or any sheet set.
 pub(crate) fn to_file(d: &Drawing) -> Cow<'_, Drawing> {
-    if d.levels.len() < 2 {
+    if d.levels.len() < 2 && d.sheet_sets.is_empty() {
         return Cow::Borrowed(d);
     }
     let mut w = d.clone();
@@ -66,6 +104,20 @@ pub(crate) fn to_file(d: &Drawing) -> Cow<'_, Drawing> {
         version: 1,
         seed: d.level_seed,
         active: d.active_level.map_or(0, |a| a.0),
+        sheet_seed: d.sheet_seed,
+        active_sheet: d.active_sheet.map_or(0, |a| a.0),
+        sets: d
+            .sheet_sets
+            .iter()
+            .map(|s| SetMeta {
+                id: s.id.0,
+                name: s.name.clone(),
+                prefix: s.layer_prefix.clone(),
+                space: s.space.clone(),
+                dim_style: s.dim_style.clone(),
+                text_style: s.text_style.clone(),
+            })
+            .collect(),
         levels: d
             .levels
             .iter()
@@ -90,23 +142,35 @@ pub(crate) fn to_file(d: &Drawing) -> Cow<'_, Drawing> {
             })
             .collect(),
     };
+    // Annotation first (needs the sheet sets), then clear the in-memory structure.
+    let annotations: Vec<(String, EntityStore)> = d
+        .sheet_sets
+        .iter()
+        .flat_map(|s| {
+            d.levels
+                .iter()
+                .filter_map(move |l| d.annotation_store(s.id, l.id).filter(|st| !st.is_empty()).map(|st| (ann_name(s.id.0, l.id.0), st.clone())))
+        })
+        .collect();
     w.levels.clear();
     w.active_level = None;
+    w.sheet_sets.clear();
+    w.active_sheet = None;
     let mut stores = stores.into_iter();
     if let Some((_, first)) = stores.next() {
         w.model = first;
+    } else if d.active_sheet.is_some() {
+        // Cannot happen (a sheet view needs a level), but never write annotation as design.
+        w.model = EntityStore::new();
     }
     if w.layer(STORES_LAYER).is_none() {
         w.layers.push(aad_doc::Layer { name: STORES_LAYER.into(), frozen: true, plot: false, ..aad_doc::Layer::default() });
     }
     for (id, store) in stores {
-        let name = block_name(id);
-        let mut b = aad_doc::Block::new(&name);
-        b.entities = store;
-        w.blocks.insert(name.clone(), std::sync::Arc::new(b));
-        let handle = w.new_handle();
-        let common = Common { layer: STORES_LAYER.into(), ..Common::default() };
-        w.model.push(Entity { handle, common, kind: EntityKind::Insert(Insert { block: name, ..Insert::default() }) });
+        park(&mut w, block_name(id), store);
+    }
+    for (name, store) in annotations {
+        park(&mut w, name, store);
     }
     if let Ok(json) = serde_json::to_string(&meta) {
         w.project.insert(KEY.into(), json);
@@ -115,7 +179,11 @@ pub(crate) fn to_file(d: &Drawing) -> Cow<'_, Drawing> {
 }
 
 fn valid(meta: &Meta) -> bool {
-    if meta.version != 1 || meta.levels.len() < 2 || meta.levels.len() > MAX_LEVELS {
+    if meta.version != 1 || meta.levels.len() > MAX_LEVELS || meta.sets.len() > MAX_SHEET_SETS {
+        return false;
+    }
+    // Level data is written for two or more levels, or for any sheet set.
+    if meta.levels.len() < 2 && meta.sets.is_empty() {
         return false;
     }
     let mut ids = HashSet::new();
@@ -131,14 +199,36 @@ fn valid(meta: &Meta) -> bool {
             return false;
         }
     }
-    if !ids.contains(&meta.active) {
+    if meta.levels.is_empty() {
+        if meta.active != 0 || meta.active_sheet != 0 {
+            return false;
+        }
+    } else if !ids.contains(&meta.active) {
+        return false;
+    }
+    let mut set_ids = HashSet::new();
+    let mut set_names = HashSet::new();
+    for s in &meta.sets {
+        if s.id == 0
+            || s.id > meta.sheet_seed
+            || !set_ids.insert(s.id)
+            || !level_name_ok(&s.name)
+            || !set_names.insert(s.name.trim().to_ascii_lowercase())
+        {
+            return false;
+        }
+        if !layer_prefix_ok(&s.prefix) {
+            return false;
+        }
+    }
+    if meta.active_sheet != 0 && !set_ids.contains(&meta.active_sheet) {
         return false;
     }
     meta.levels.iter().all(|l| l.traces.iter().all(|t| t.level != l.id && ids.contains(&t.level) && t.fade <= 90))
 }
 
-/// Rebuild the levels of a drawing read from a file. A file without valid `levels2` data is
-/// returned unchanged.
+/// Rebuild the levels and sheet sets of a drawing read from a file. A file without valid
+/// `levels2` data is returned unchanged.
 pub(crate) fn from_file(mut d: Drawing) -> Drawing {
     let Some(text) = d.project.get(KEY).cloned() else { return d };
     d.project.remove(KEY);
@@ -153,7 +243,12 @@ pub(crate) fn from_file(mut d: Drawing) -> Drawing {
     }
     let mut missing = Vec::new();
     // The keep-alive INSERTs and their layer are file plumbing, not drawing content.
-    let names: HashSet<String> = meta.levels.iter().skip(1).map(|l| block_name(LevelId(l.id))).collect();
+    let mut names: HashSet<String> = meta.levels.iter().skip(1).map(|l| block_name(LevelId(l.id))).collect();
+    for s in &meta.sets {
+        for l in &meta.levels {
+            names.insert(ann_name(s.id, l.id));
+        }
+    }
     let keep: Vec<_> = d
         .model
         .iter()
@@ -165,6 +260,31 @@ pub(crate) fn from_file(mut d: Drawing) -> Drawing {
     }
     if !d.model.iter().any(|e| e.common.layer.eq_ignore_ascii_case(STORES_LAYER)) {
         d.layers.retain(|l| !l.name.eq_ignore_ascii_case(STORES_LAYER));
+    }
+    // Sheet sets and their annotation (a level without a block has none).
+    let mut sets = Vec::with_capacity(meta.sets.len());
+    for s in &meta.sets {
+        let mut annotations = BTreeMap::new();
+        for l in &meta.levels {
+            if let Some(b) = d.blocks.remove(&ann_name(s.id, l.id)) {
+                annotations.insert(LevelId(l.id), b.entities.clone());
+            }
+        }
+        sets.push(SheetSet {
+            id: SheetSetId(s.id),
+            name: s.name.trim().to_string(),
+            layer_prefix: s.prefix.clone(),
+            space: s.space.clone(),
+            dim_style: s.dim_style.clone(),
+            text_style: s.text_style.clone(),
+            annotations,
+        });
+    }
+    d.sheet_sets = sets;
+    d.sheet_seed = meta.sheet_seed;
+    if meta.levels.is_empty() {
+        // Sheet sets of a drawing that has only its implicit level.
+        return d;
     }
     let first_store = std::mem::take(&mut d.model);
     let mut levels = Vec::with_capacity(meta.levels.len());
@@ -202,7 +322,7 @@ pub(crate) fn from_file(mut d: Drawing) -> Drawing {
             entities,
         });
     }
-    // Level 0 owns `model` (its slot stays empty), then the saved active level takes over.
+    // Level 0 owns `model` (its slot stays empty), then the saved view takes over.
     if let Some(first) = levels.first_mut() {
         d.model = std::mem::take(&mut first.entities);
         d.active_level = Some(first.id);
@@ -210,6 +330,9 @@ pub(crate) fn from_file(mut d: Drawing) -> Drawing {
     d.levels = levels;
     d.level_seed = meta.seed;
     let _ = d.switch_level(LevelId(meta.active));
+    if meta.active_sheet != 0 {
+        let _ = d.enter_sheet_view(SheetSetId(meta.active_sheet));
+    }
     if !missing.is_empty() {
         let note = format!("The file has no objects for level {}; the level opened empty.", missing.join(", "));
         d.project.insert(LEVELS_NOTE_KEY.into(), note);
@@ -352,5 +475,61 @@ mod tests {
         v["active"] = 1.into();
         w.project.insert(KEY.into(), v.to_string());
         assert!(from_file(w).levels.is_empty());
+    }
+
+    /// Ground and First, a set `E` with a note on each level, First active in the sheet view.
+    fn with_sheet_sets() -> Drawing {
+        let (mut d, _) = three_levels();
+        let e = d.add_sheet_set("Electrical", "E-").unwrap();
+        d.add_sheet_set("Plumbing", "P-").unwrap();
+        d.enter_sheet_view(e).unwrap();
+        line(&mut d, 7.0);
+        d.switch_level(d.level_by_name("Ground").unwrap().id).unwrap();
+        line(&mut d, 8.0);
+        d
+    }
+
+    #[test]
+    fn sheet_sets_round_trip_through_blocks_and_the_project_record() {
+        let d = with_sheet_sets();
+        let r = crate::read_dxf(crate::write_dxf(&d).as_bytes()).unwrap();
+        assert_eq!(r.sheet_sets.len(), 2);
+        assert_eq!(r.active_sheet_ref().unwrap().name, "Electrical");
+        assert_eq!(r.active_level_ref().unwrap().name, "Ground");
+        assert_eq!(r.model.len(), 1, "the Ground annotation is the store being edited");
+        let first = r.level_by_name("First").unwrap().id;
+        assert_eq!(r.annotation_store(r.active_sheet.unwrap(), first).map(EntityStore::len), Some(1));
+        assert_eq!(r.entity_count(), d.entity_count());
+        assert!(r.blocks.keys().all(|k| !k.starts_with("ODRAFT$")));
+        assert!(r.sheet_seed >= 2 && r.level_seed >= 3, "ids are never reused after a reopen");
+    }
+
+    #[test]
+    fn damaged_sheet_set_records_open_as_one_level_without_the_sets() {
+        let good = to_file(&with_sheet_sets()).into_owned();
+        let damaged = |f: &dyn Fn(&mut serde_json::Value)| {
+            let mut w = good.clone();
+            let mut v: serde_json::Value = serde_json::from_str(&w.project[KEY]).unwrap();
+            f(&mut v);
+            w.project.insert(KEY.into(), v.to_string());
+            from_file(w)
+        };
+        let cases = [
+            damaged(&|v| v["sets"][1]["id"] = v["sets"][0]["id"].clone()),
+            damaged(&|v| v["sets"][1]["name"] = v["sets"][0]["name"].clone()),
+            damaged(&|v| v["sets"][0]["prefix"] = "has space".into()),
+            damaged(&|v| v["sets"][0]["prefix"] = "WAY-TOO-LONG".into()),
+            damaged(&|v| v["sets"][0]["id"] = 0.into()),
+            damaged(&|v| v["sheet_seed"] = 0.into()),
+            damaged(&|v| v["active_sheet"] = 99.into()),
+            damaged(&|v| {
+                v["sets"] =
+                    serde_json::json!((0..40).map(|i| serde_json::json!({"id": i + 1, "name": format!("S{i}"), "prefix": ""})).collect::<Vec<_>>())
+            }),
+        ];
+        for (i, r) in cases.into_iter().enumerate() {
+            assert!(r.levels.is_empty() && r.sheet_sets.is_empty() && r.active_sheet.is_none(), "case {i} opens as plain design");
+            assert!(r.project.contains_key(LEVELS_NOTE_KEY), "case {i}: the user is told");
+        }
     }
 }

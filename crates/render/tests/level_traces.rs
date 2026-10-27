@@ -161,3 +161,30 @@ fn probe_three_traces_of_25000_objects() {
     let t_with = t.elapsed();
     eprintln!("plain {:?} ({} prims); with 3 traces {:?} ({} prims)", t_plain, plain.prims.len(), t_with, with.prims.len());
 }
+
+#[test]
+fn a_sheet_view_draws_the_level_faded_under_its_annotation() {
+    let (mut d, _g, f) = two_levels();
+    let set = d.add_sheet_set("Electrical", "E-").unwrap();
+    d.switch_level(f).unwrap();
+    d.enter_sheet_view(set).unwrap();
+    line(&mut d, 300.0, "E-ANNO", 1);
+    let l = build_with_traces(&d, &Options::default(), BG);
+    assert_eq!(l.prims.len(), 2, "the level's one line for reference and the annotation");
+    assert_eq!(l.prims[0].handle, VIEWPORT_CONTENT, "the reference is drawn first and is not selectable");
+    assert_ne!(l.prims[1].handle, VIEWPORT_CONTENT);
+    assert_eq!(l.prims[1].display_rgb(BG), Rgb(255, 0, 0), "annotation keeps its colour");
+    let c = l.prims[0].display_rgb(BG);
+    assert!(c.2 > c.0 && c.2 < 255, "the level keeps its hue (blue) but is lightly faded: {c:?}");
+}
+
+#[test]
+fn design_mode_after_a_sheet_view_is_the_plain_list_again() {
+    let (mut d, _g, f) = two_levels();
+    let set = d.add_sheet_set("Electrical", "E-").unwrap();
+    d.switch_level(f).unwrap();
+    d.enter_sheet_view(set).unwrap();
+    d.leave_sheet_view().unwrap();
+    let plain = build(&d, &Space::Model, &Options::default());
+    assert_eq!(build_with_traces(&d, &Options::default(), BG).prims.len(), plain.prims.len());
+}

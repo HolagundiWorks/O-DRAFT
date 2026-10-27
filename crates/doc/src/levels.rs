@@ -107,20 +107,22 @@ impl Drawing {
     /// Every entity store that belongs to model space: the active one (`model`) first, then the
     /// stores of the other levels. For drawing-wide work (purge, audit, extraction).
     pub fn model_stores(&self) -> impl Iterator<Item = &EntityStore> + '_ {
-        std::iter::once(&self.model).chain(self.levels.iter().filter(|l| Some(l.id) != self.active_level).map(|l| &l.entities))
+        // The slot of whatever is in `model` is empty, so every slot can be listed.
+        std::iter::once(&self.model).chain(self.levels.iter().map(|l| &l.entities)).chain(self.sheet_sets.iter().flat_map(|s| s.annotations.values()))
     }
 
     /// Mutable access to every model-space store (the active one first), for drawing-wide edits
     /// such as renaming a layer.
     pub fn model_stores_mut(&mut self) -> impl Iterator<Item = &mut EntityStore> + '_ {
-        let active = self.active_level;
-        std::iter::once(&mut self.model).chain(self.levels.iter_mut().filter(move |l| Some(l.id) != active).map(|l| &mut l.entities))
+        std::iter::once(&mut self.model)
+            .chain(self.levels.iter_mut().map(|l| &mut l.entities))
+            .chain(self.sheet_sets.iter_mut().flat_map(|s| s.annotations.values_mut()))
     }
 
     /// The objects of a level, whether or not it is the active one.
     pub fn level_store(&self, id: LevelId) -> Option<&EntityStore> {
         let l = self.level(id)?;
-        Some(if self.active_level == Some(id) { &self.model } else { &l.entities })
+        Some(if self.target() == Some(crate::EditTarget::Level(id)) { &self.model } else { &l.entities })
     }
 
     fn check_unique(&self, name: &str, except: Option<LevelId>) -> Result<()> {
@@ -192,20 +194,12 @@ impl Drawing {
     /// Make `id` the level being edited: the current level's objects go back to its slot and the
     /// new level's objects become `model`.
     pub fn switch_level(&mut self, id: LevelId) -> Result<()> {
-        if self.active_level == Some(id) {
-            return Ok(());
-        }
-        let to = self.levels.iter().position(|l| l.id == id).ok_or_else(|| invalid("no such level"))?;
-        if let Some(cur) = self.active_level.and_then(|a| self.levels.iter().position(|l| l.id == a))
-            && let Some(slot) = self.levels.get_mut(cur)
-        {
-            slot.entities = std::mem::take(&mut self.model);
-        }
-        if let Some(slot) = self.levels.get_mut(to) {
-            self.model = std::mem::take(&mut slot.entities);
-        }
-        self.active_level = Some(id);
-        Ok(())
+        // In a sheet view the sheet set stays: the same discipline on another level.
+        let to = match self.active_sheet {
+            Some(s) => crate::EditTarget::Sheet(s, id),
+            None => crate::EditTarget::Level(id),
+        };
+        self.switch_target(to)
     }
 
     /// Remove a level and its objects, and every trace of it. The last level cannot be removed;
@@ -224,6 +218,9 @@ impl Drawing {
         self.levels.retain(|l| l.id != id);
         for l in &mut self.levels {
             l.traces.retain(|t| t.level != id);
+        }
+        for s in &mut self.sheet_sets {
+            s.annotations.remove(&id);
         }
         Ok(())
     }

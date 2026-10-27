@@ -88,14 +88,27 @@ fn candidates(kind: &EntityKind) -> Vec<(AssocSnap, Vec2)> {
     }
 }
 
+/// The stores a dimension in `space` can attach to: the space itself and, for model space in a
+/// sheet view, the level shown for reference (dimensions measure the level's geometry).
+fn assoc_stores<'a>(d: &'a Drawing, space: &Space) -> Vec<&'a aad_doc::EntityStore> {
+    let mut v: Vec<_> = d.space(space).into_iter().collect();
+    if matches!(space, Space::Model) {
+        v.extend(d.reference_store());
+    }
+    v
+}
+
 /// An object point exactly at `p` (an endpoint, vertex, centre or midpoint) to attach to.
 pub fn find_snap(d: &Drawing, space: &Space, p: Vec2) -> Option<(Handle, AssocSnap)> {
     if !p.is_finite() {
         return None;
     }
-    let store = d.space(space)?;
+    let stores = assoc_stores(d, space);
+    if stores.is_empty() {
+        return None;
+    }
     let mut best: Option<(usize, Handle, AssocSnap)> = None;
-    for e in store.iter() {
+    for e in stores.into_iter().flat_map(|s| s.iter()) {
         for (i, (snap, q)) in candidates(&e.kind).into_iter().enumerate() {
             let rank = snap_rank(&snap, i);
             if close(p, q) && best.as_ref().is_none_or(|b| rank < b.0) {
@@ -132,7 +145,7 @@ pub struct SnapIndex {
 impl SnapIndex {
     pub fn new(d: &Drawing, space: &Space) -> Self {
         let mut pts = Vec::new();
-        for e in d.space(space).into_iter().flat_map(|st| st.iter()) {
+        for e in assoc_stores(d, space).into_iter().flat_map(|st| st.iter()) {
             for (i, (snap, q)) in candidates(&e.kind).into_iter().enumerate() {
                 if q.is_finite() {
                     pts.push((q, snap_rank(&snap, i), pts.len(), e.handle, snap));
@@ -172,7 +185,7 @@ fn circle_of(d: &Drawing, h: Handle) -> Option<(Vec2, f64)> {
 
 /// A circle or arc whose centre is at `c` (and radius `r`, when given).
 fn circle_at(d: &Drawing, space: &Space, c: Vec2, r: Option<f64>) -> Option<Handle> {
-    d.space(space)?.iter().find_map(|e| {
+    assoc_stores(d, space).into_iter().flat_map(|s| s.iter()).find_map(|e| {
         let (cc, rr) = match &e.kind {
             EntityKind::Circle(x) => (x.center.xy(), x.radius),
             EntityKind::Arc(x) => (x.center.xy(), x.radius),
@@ -297,7 +310,7 @@ pub fn update(after: &mut Arc<Drawing>, before: &Drawing) -> usize {
     let mut changes: Vec<(Handle, Dimension)> = Vec::new();
     {
         let d: &Drawing = after;
-        let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities));
+        let stores = d.model_stores().chain(d.layouts.iter().map(|l| &l.entities));
         for store in stores {
             for e in store.iter() {
                 let EntityKind::Dimension(dm) = &e.kind else { continue };
@@ -327,7 +340,12 @@ pub fn update(after: &mut Arc<Drawing>, before: &Drawing) -> usize {
     let d = Arc::make_mut(after);
     let n = changes.len();
     for (h, nd) in changes {
-        let _ = d.modify_entity(h, |e| e.kind = EntityKind::Dimension(nd));
+        if d.modify_entity(h, |e| e.kind = EntityKind::Dimension(nd.clone())).is_err() {
+            // A dimension in the annotation of another level or sheet set.
+            if let Some(store) = d.model_stores_mut().find(|st| st.contains(h)) {
+                store.modify(h, |e| e.kind = EntityKind::Dimension(nd));
+            }
+        }
     }
     n
 }

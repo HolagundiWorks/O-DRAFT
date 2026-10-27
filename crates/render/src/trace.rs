@@ -58,13 +58,30 @@ fn trace_list(d: &Drawing, t: &Trace, opts: &Options, background: Rgb) -> Option
     Some(list)
 }
 
-/// Model space of the active level with its traces: Below traces, the level, Above traces. A
-/// drawing without levels, or a level without traces, gives exactly [`build`].
+/// How faded the level shown for reference in a sheet view is (percent).
+pub const REFERENCE_FADE: u8 = 35;
+
+/// The level shown for reference in a sheet view: its visible objects in their own colours,
+/// lightly faded, so the annotation drawn over it stands out.
+fn reference_list(d: &Drawing, opts: &Options, background: Rgb) -> Option<DisplayList> {
+    let store = d.reference_store()?;
+    let mut list = build_entities(d, store.iter().map(|e| e.as_ref()).filter(|e| d.is_visible(e)), opts);
+    stylize_trace(&mut list, REFERENCE_FADE, true, background);
+    Some(list)
+}
+
+/// Model space of the edit target with what is shown around it: Below traces, the level shown
+/// for reference (in a sheet view), the edit target, Above traces. A drawing without levels, or
+/// a level without traces or sheet view, gives exactly [`build`].
 pub fn build_with_traces(d: &Drawing, opts: &Options, background: Rgb) -> DisplayList {
     let main = build(d, &Space::Model, opts);
-    let Some(level) = d.active_level_ref().filter(|l| !l.traces.is_empty()) else { return main };
+    let reference = reference_list(d, opts, background);
+    let traces = d.active_level_ref().map(|l| l.traces.as_slice()).unwrap_or(&[]);
+    if reference.is_none() && traces.is_empty() {
+        return main;
+    }
     let (mut below, mut above) = (Vec::new(), Vec::new());
-    for t in &level.traces {
+    for t in traces {
         if let Some(l) = trace_list(d, t, opts, background) {
             if t.order == TraceOrder::Below { below.push(l) } else { above.push(l) }
         }
@@ -72,6 +89,9 @@ pub fn build_with_traces(d: &Drawing, opts: &Options, background: Rgb) -> Displa
     let mut out = DisplayList::default();
     for l in below {
         append(&mut out, l);
+    }
+    if let Some(r) = reference {
+        append(&mut out, r);
     }
     append(&mut out, main);
     for l in above {

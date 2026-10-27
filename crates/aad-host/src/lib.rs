@@ -121,9 +121,10 @@ impl Default for FrameCache {
     }
 }
 
-/// Whether the level being edited traces other levels.
+/// Whether model space is drawn with other stores around it: traces of the level being edited,
+/// or the level shown for reference in a sheet view.
 fn has_traces(doc: &Drawing) -> bool {
-    doc.active_level_ref().is_some_and(|l| !l.traces.is_empty())
+    doc.active_sheet.is_some() || doc.active_level_ref().is_some_and(|l| !l.traces.is_empty())
 }
 
 /// The display list of `space`; model space of a level with traces is built with its traces,
@@ -2608,6 +2609,31 @@ mod tests {
         assert_eq!(tabs.iter().map(|t| t["name"].as_str().unwrap()).collect::<Vec<_>>(), ["Ground", "First", "Terrace"]);
         assert_eq!((row("First")["active"].as_bool(), row("Ground")["active"].as_bool()), (Some(true), Some(false)));
         assert_eq!((row("Ground")["traced"].as_bool(), row("Terrace")["traced"].as_bool()), (Some(true), Some(false)));
+    }
+
+    #[test]
+    fn a_sheet_view_draws_the_level_for_reference_and_the_rail_data_lists_the_sets() {
+        let mut host = Host::create(false);
+        host.execute("line", &json!({ "points": [[0.0, 0.0], [100.0, 0.0]] })).unwrap();
+        host.execute("sheetset.new", &json!({ "preset": true })).unwrap();
+        let rail = |h: &Host| -> Value { serde_json::from_str(&crate::chrome::chrome_json(&h.session, None, "")).unwrap() };
+        let v = rail(&host);
+        assert_eq!(v["sheetSets"].as_array().map(Vec::len), Some(5));
+        assert_eq!(v["designMode"], true);
+        host.execute("sheetset.activate", &json!({ "set": "Electrical" })).unwrap();
+        host.execute("text", &json!({ "at": [10.0, 10.0], "text": "DB", "height": 5.0 })).unwrap();
+        host.execute("zoom.extents", &json!({})).unwrap();
+        host.mesh().unwrap();
+        let list = host.frame.list.as_ref().unwrap();
+        let reference = list.prims.iter().filter(|p| p.handle == aad_render::VIEWPORT_CONTENT).count();
+        assert_eq!(reference, 1, "the level's line is drawn for reference");
+        assert!(list.prims.len() > 1, "and the annotation over it");
+        let v = rail(&host);
+        assert_eq!(v["designMode"], false);
+        assert!(v["sheetSets"].as_array().unwrap().iter().any(|s| s["name"] == "Electrical" && s["active"] == true));
+        host.execute("sheetset.activate", &json!({ "set": null })).unwrap();
+        host.mesh().unwrap();
+        assert_eq!(host.frame.list.as_ref().unwrap().prims.iter().filter(|p| p.handle == aad_render::VIEWPORT_CONTENT).count(), 0);
     }
 
     #[test]

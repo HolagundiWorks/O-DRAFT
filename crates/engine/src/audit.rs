@@ -101,6 +101,8 @@ enum Loc {
     Model,
     /// A level that is not the one being edited (its objects wait in its slot).
     Level(aad_doc::LevelId),
+    /// A sheet set's annotation of a level that is not the one being edited.
+    Sheet(aad_doc::SheetSetId, aad_doc::LevelId),
     Layout(usize),
     Block(String),
 }
@@ -110,6 +112,11 @@ impl Loc {
         match self {
             Loc::Model => "Model".into(),
             Loc::Level(id) => format!("level {}", d.level(*id).map(|l| l.name.as_str()).unwrap_or("?")),
+            Loc::Sheet(s, l) => format!(
+                "sheet set {} on level {}",
+                d.sheet_set(*s).map(|x| x.name.as_str()).unwrap_or("?"),
+                d.level(*l).map(|x| x.name.as_str()).unwrap_or("?")
+            ),
             Loc::Layout(i) => format!("layout {}", d.layouts.get(*i).map(|l| l.name.as_str()).unwrap_or("?")),
             Loc::Block(n) => format!("block {n}"),
         }
@@ -118,7 +125,8 @@ impl Loc {
 
 fn locations(d: &Drawing) -> Vec<Loc> {
     std::iter::once(Loc::Model)
-        .chain(d.levels.iter().filter(|l| Some(l.id) != d.active_level).map(|l| Loc::Level(l.id)))
+        .chain(d.levels.iter().filter(|l| d.target() != Some(aad_doc::EditTarget::Level(l.id))).map(|l| Loc::Level(l.id)))
+        .chain(d.sheet_sets.iter().flat_map(|s| s.annotations.keys().map(move |l| Loc::Sheet(s.id, *l))))
         .chain((0..d.layouts.len()).map(Loc::Layout))
         .chain(d.blocks.keys().cloned().map(Loc::Block))
         .collect()
@@ -128,6 +136,7 @@ fn store<'a>(d: &'a Drawing, l: &Loc) -> Option<&'a EntityStore> {
     match l {
         Loc::Model => Some(&d.model),
         Loc::Level(id) => d.levels.iter().find(|l| l.id == *id).map(|l| &l.entities),
+        Loc::Sheet(s, l) => d.sheet_sets.iter().find(|x| x.id == *s).and_then(|x| x.annotations.get(l)),
         Loc::Layout(i) => d.layouts.get(*i).map(|l| &l.entities),
         Loc::Block(n) => d.blocks.get(n).map(|b| &b.entities),
     }
@@ -137,6 +146,7 @@ fn store_mut<'a>(d: &'a mut Drawing, l: &Loc) -> Option<&'a mut EntityStore> {
     match l {
         Loc::Model => Some(&mut d.model),
         Loc::Level(id) => d.levels.iter_mut().find(|l| l.id == *id).map(|l| &mut l.entities),
+        Loc::Sheet(s, l) => d.sheet_sets.iter_mut().find(|x| x.id == *s).and_then(|x| x.annotations.get_mut(l)),
         Loc::Layout(i) => d.layouts.get_mut(*i).map(|l| &mut l.entities),
         Loc::Block(n) => d.blocks.get_mut(n).map(|b| &mut Arc::make_mut(b).entities),
     }

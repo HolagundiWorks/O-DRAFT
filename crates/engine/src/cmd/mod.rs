@@ -53,6 +53,7 @@ mod scriptcmd;
 mod selectmore;
 mod settings;
 mod sheet;
+pub(crate) mod sheetset;
 mod space;
 mod spatialq;
 mod spline_opts;
@@ -252,6 +253,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(aicards::specs());
         v.extend(vdb::specs());
         v.extend(levels::specs());
+        v.extend(sheetset::specs());
         v.extend(sheet::specs());
         v.extend(layout::specs());
         v.extend(props::specs());

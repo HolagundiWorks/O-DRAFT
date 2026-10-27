@@ -110,7 +110,7 @@ fn run_list(s: &mut Session, _p: &Value) -> Result<Value> {
 }
 
 /// The name an implicit level takes when it becomes explicit: the current floor, else `Level 1`.
-fn implicit_name(d: &aad_doc::Drawing) -> String {
+pub(super) fn implicit_name(d: &aad_doc::Drawing) -> String {
     project::active_floor(d).map(|(_, n)| n).filter(|n| aad_doc::level_name_ok(n)).unwrap_or_else(|| "Level 1".to_string())
 }
 
@@ -272,6 +272,12 @@ fn sync_floor_name(d: &mut aad_doc::Drawing, old: &str, new: &str) {
 
 /// The objects to carry to another level: `handles` or the selection, kept to the active level.
 fn objects_of_active(s: &Session, cmd: &str, p: &Value) -> Result<Vec<aad_doc::Handle>> {
+    if s.doc()?.active_sheet.is_some() {
+        return Err(bad(
+            cmd,
+            "this is a sheet view: the objects are annotation, not level geometry. Switch to Design first (sheetset.activate with null)",
+        ));
+    }
     if !s.doc()?.has_levels() {
         return Err(bad(cmd, "the drawing has one level; add another with level.new first"));
     }

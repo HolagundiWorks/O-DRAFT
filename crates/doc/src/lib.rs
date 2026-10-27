@@ -12,6 +12,7 @@ mod header;
 mod levels;
 pub mod library;
 mod plotstyle;
+mod sheetset;
 mod store;
 mod tables;
 
@@ -24,6 +25,7 @@ pub use extents::{MAX_BLOCK_DEPTH, entity_bounds};
 pub use header::{HVal, Header};
 pub use levels::*;
 pub use plotstyle::*;
+pub use sheetset::*;
 pub use store::EntityStore;
 pub use tables::*;
 
@@ -67,6 +69,12 @@ pub struct Drawing {
     pub active_level: Option<LevelId>,
     /// Last level id handed out (ids are never reused).
     pub level_seed: u32,
+    /// Discipline annotation spaces that sit on top of the levels.
+    pub sheet_sets: Vec<SheetSet>,
+    /// The sheet set of the sheet view being edited; `None` is design mode.
+    pub active_sheet: Option<SheetSetId>,
+    /// Last sheet-set id handed out (ids are never reused).
+    pub sheet_seed: u32,
     pub layouts: Vec<Layout>,
     pub views: Vec<NamedView>,
     pub ucss: Vec<Ucs>,
@@ -120,6 +128,9 @@ impl Drawing {
             levels: Vec::new(),
             active_level: None,
             level_seed: 0,
+            sheet_sets: Vec::new(),
+            active_sheet: None,
+            sheet_seed: 0,
             layouts: vec![Layout::new("Layout1", 1), Layout::new("Layout2", 2)],
             views: Vec::new(),
             ucss: Vec::new(),

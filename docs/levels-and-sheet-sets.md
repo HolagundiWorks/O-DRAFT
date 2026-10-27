@@ -1,8 +1,8 @@
 # Levels and sheet sets
 
-**Status: Phase 1 done; Phase 2 engine, render and host data done, shell UI not built; Phases 3 to 5
-planned.** Only what "Phase 1 status" and "Phase 2 status" list is implemented and tested. Capability matrix: [status.md](status.md). Source: the implementation plan "Level model spaces
-and sheet sets" (2026-10-26), taken as the decision record below.
+**Status: Phases 1 and 3 and the non-UI parts of Phase 2 are done; the shell UI (level tabs, Trace
+flyout, sheet-set rail, annotation tool strip), Phases 4 and 5 are planned.** Only what the "Phase 1
+status", "Phase 2 status" and "Phase 3 status" sections list is implemented and tested.
 
 Summary: keep one drawing file, but split its single model space into named **levels** (each its own
 entity store at a shared origin) and add **sheet sets** (discipline annotation spaces that reference
@@ -230,6 +230,51 @@ Not built yet (so the Phase 2 done-when is only partly met):
 - Trace snaps scan the traced level linearly (no spatial index for inactive levels); snap markers
   on a trace are not drawn in the quiet colour yet; traced layers' colour overrides and the
   per-viewport use of traces belong to Phase 4.
+
+## Phase 3 status: sheet sets implemented in the engine, shell UI not built
+
+Implemented and tested (`crates/engine/tests/sheetsets.rs`, `level_trace_snap.rs`,
+`crates/render/tests/level_traces.rs`, unit tests in `crates/io/src/levels_file.rs` and
+`crates/engine/src/cmd/sheetset.rs`):
+
+- `crates/doc/src/sheetset.rs`: `SheetSet`, `EditTarget`, and on `Drawing` `sheet_sets`,
+  `active_sheet`, `target`, `switch_target` (the one place stores are swapped), `enter_sheet_view`,
+  `leave_sheet_view`, `reference_store`, `annotation_store`. In a sheet view `model` holds the sheet
+  set's annotation of the active level and the level's own objects wait in the level's slot.
+  Switching level keeps the sheet set. Deleting a level or a sheet set removes its annotation.
+  Limits: 32 sheet sets, 64-character unique names, layer prefix up to 8 characters.
+- Commands: `sheetset.list`, `sheetset.new` (one set, or `preset: true` for Working drawing `W-`,
+  Electrical `E-`, Plumbing `P-`, Interior `I-`, False ceiling `FC-`), `sheetset.set`,
+  `sheetset.delete` (`force` for a set that holds annotation), `sheetset.activate {set|null}`,
+  `sheetset.next` / `sheetset.prev` (Ctrl+Shift+PageDown / PageUp, cycling Design and the sets).
+  Entering a sheet view on a drawing with one implicit level makes that level explicit first.
+- Layer routing: after any command in a sheet view, new objects not already on one of the set's
+  layers move to `<prefix>DIM`, `TEXT`, `LEADER`, `HATCH` or `ANNO` by kind (created on first use),
+  whatever layer was current.
+- Protection: `refuse_protected` refuses a command, naming the level and the sheet set, if it
+  changed the level shown for reference (layer, audit, purge, `level.*` and `sheetset.*` commands
+  are exempt). `level.moveto` / `level.copyto` are refused in a sheet view.
+- The level is drawn lightly faded (35 percent, true colour) under the annotation, not selectable
+  (`build_with_traces`); traces still apply. Object snaps use the level's geometry in a sheet view,
+  and dimensions attach to it and follow it when the level is edited in Design (the annotation
+  stores are searched and updated by `assoc`).
+- Drawing-wide commands see the annotation of every sheet set (purge, layer in-use, rename and
+  merge, audit finds and repairs it, extraction).
+- File format: a sheet set's annotation of a level is a block `ODRAFT$ANN$<set>$<level>`, the set
+  records and the active sheet view ride in `levels2`. A drawing with sheet sets and one implicit
+  level round-trips as well. Damaged set records open the file as plain design with a note.
+- `chrome_json` carries `sheetSets` (`id`, `name`, `active`, `layerPrefix`) and `designMode` for the
+  rail.
+
+Not built yet:
+
+- **The WinUI left rail, the annotation tool strip and hiding the Architecture bar in a sheet
+  view.** The data and every command they need exist.
+- A new drawing does not create the five presets on its own (decision 3 asks for it in the UI).
+- A sheet set's `space`, `dimStyle` and `textStyle` are stored, saved and shown, but not applied on
+  entering the set (no layer visibility from a drawing space, no current styles yet).
+- Take-off is unchanged: it acts on the store being edited, so it never counts annotation in
+  Design; the Layer manager "Show for" filter and viewport binding are Phases 5 and 4.
 
 ## Risks
 

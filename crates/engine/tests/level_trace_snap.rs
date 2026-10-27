@@ -50,3 +50,16 @@ fn the_trace_layer_list_limits_the_snap_points() {
     s.execute("level.trace", &json!({"set": "Ground", "layers": ["0"]})).unwrap();
     assert!(endpoint_near(&s, Vec2::new(10.1, 0.1)).is_some());
 }
+
+#[test]
+fn in_a_sheet_view_annotation_snaps_to_the_level_geometry_but_cannot_pick_it() {
+    let mut s = Session::new();
+    s.execute("line", &json!({"points": [[0, 0], [10, 0]]})).unwrap();
+    s.execute("sheetset.new", &json!({"name": "Electrical"})).unwrap();
+    s.execute("sheetset.activate", &json!({"set": "Electrical"})).unwrap();
+    assert_eq!(endpoint_near(&s, Vec2::new(10.1, 0.1)), Some(Vec2::new(10.0, 0.0)), "a dimension can pick up the wall's end");
+    let d = s.doc().unwrap();
+    assert!(aad_engine::select::pick(d, &Space::Model, Vec2::new(5.0, 0.0), 0.5).is_none(), "but the wall is not selectable here");
+    s.execute("sheetset.activate", &json!({"set": null})).unwrap();
+    assert!(aad_engine::select::pick(s.doc().unwrap(), &Space::Model, Vec2::new(5.0, 0.0), 0.5).is_some(), "it is in Design");
+}
