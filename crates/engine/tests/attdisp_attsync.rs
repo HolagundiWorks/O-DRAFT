@@ -28,10 +28,11 @@ fn attribs(s: &Session, h: Handle) -> Vec<Attrib> {
     i.attribs.clone()
 }
 
-fn segments(s: &Session) -> usize {
-    // Text may be stroked (polylines) or filled (triangles), so count all drawn geometry.
-    let dl = aad_render::build(s.doc().unwrap(), &Space::Model, &aad_render::Options::default());
-    dl.segment_count() + dl.tris.len()
+/// How much geometry the display list draws. Prefer prim count over polyline segment count:
+/// drawing text resolves to Segoe UI / Arial when installed, and filled TrueType glyphs are tris
+/// (not polylines), so Windows CI would otherwise report the same count for every ATTMODE.
+fn draw_prims(s: &Session) -> usize {
+    aad_render::build(s.doc().unwrap(), &Space::Model, &aad_render::Options::default()).prims.len()
 }
 
 #[test]
