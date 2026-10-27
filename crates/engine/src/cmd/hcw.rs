@@ -300,7 +300,7 @@ fn normalize_layer_set(raw: &str) -> Option<&'static str> {
     }
 }
 
-fn run_layers(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn run_layers(s: &mut Session, p: &Value) -> Result<Value> {
     let set = normalize_layer_set(str_param(p, "set").unwrap_or("standard"))
         .ok_or_else(|| bad("hcwlayers", "`set` must be standard, permit, presentation, both or all"))?;
     let d = s.doc_mut()?;

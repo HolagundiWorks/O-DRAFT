@@ -251,8 +251,7 @@ pub fn is_object_layer(name: &str) -> bool {
 }
 
 /// The names and prefixes of the standard tabs, in order (the presets of `sheetset.new`).
-#[cfg(test)]
-fn tab_names() -> impl Iterator<Item = (&'static str, &'static str)> {
+pub(super) fn tab_names() -> impl Iterator<Item = (&'static str, &'static str)> {
     TABS.iter().map(|t| (t.name, t.prefix))
 }
 

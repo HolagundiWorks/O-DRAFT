@@ -73,6 +73,7 @@ mod utility;
 mod vdb;
 mod view;
 mod walls;
+mod wizard;
 mod xref;
 
 pub mod curves;
@@ -258,6 +259,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(levels::specs());
         v.extend(sheetset::specs());
         v.extend(sheetstd::specs());
+        v.extend(wizard::specs());
         v.extend(exchange::specs());
         v.extend(migrate::specs());
         v.extend(sheet::specs());

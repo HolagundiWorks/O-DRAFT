@@ -40,7 +40,7 @@ fn drawn_unit(s: &Session, cmd: &str) -> Result<Unit> {
     annot::drawing_unit(s.doc()?).ok_or_else(|| bad(cmd, "the drawing's units are not set: set them first with `drawing.units` (mode metadata)"))
 }
 
-fn run_drawing_units(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn run_drawing_units(s: &mut Session, p: &Value) -> Result<Value> {
     let new = str_param(p, "units")
         .and_then(Unit::parse)
         .and_then(|u| u.insunits().map(|_| u))

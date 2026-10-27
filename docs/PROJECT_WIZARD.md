@@ -91,6 +91,24 @@ the naming rules only for when DWG writing exists.
    serialisation, rendering, relative paths, export). The nameplate text (`nameplate_lines`) is
    complete without it, and storing a logo changes none of its lines.
 
+## New Project Wizard for one drawing (built)
+
+File > New Project Wizard (`apps/aad-winui/ProjectWizardWindow.cs`, engine command `project.wizard`,
+`cmd/wizard.rs`) sets up a new single drawing in five pages: the project (name, client, location,
+site address, property ID, site area, plot use, authority, date, summary); the team and company
+(architect, engineer, and a button that reads the OSAS company file); the building (drawing unit,
+floors above ground, basements, terrace, a default floor-to-floor height and an editable list of
+floor names and heights, slab and beam defaults, one level per floor or not); the standards
+(architectural, permit and presentation layer sets, the five discipline tabs, symbol blocks); and a
+review. Create runs one `project.wizard` call: `project`, `drawing.units`, `level.setup`,
+`hcwlayers` and `sheetset.standard` in order, as one undo step; a refused part puts the drawing back
+as it was. It is for a new drawing (it refuses one that already has levels or sheet sets). This is
+separate from the folder-and-manifest wizard in the table below, which stays unbuilt.
+Tested: `crates/engine/tests/project_wizard.rs` (whole flow and undo, skipping parts, refusals leave
+nothing behind, hostile parameters). The window was driven by hand through all five pages and Create.
+Not built in it: plot scale, per-floor elevations other than the running sum, templates and saved
+drafts, the logo and several architects (the company file supplies neither).
+
 ## Not built yet
 
 | Step | Item |

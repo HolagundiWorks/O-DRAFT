@@ -682,6 +682,11 @@ public sealed partial class MainWindow : Window
             OpenMLeaderStyle();
             return;
         }
+        if (id == "project.wizard")
+        {
+            OpenProjectWizard();
+            return;
+        }
         if (id == "room.settings")
         {
             OpenRoomSettings();

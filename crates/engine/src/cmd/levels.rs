@@ -413,7 +413,7 @@ fn run_fromfloors(s: &mut Session, _p: &Value) -> Result<Value> {
 
 /// The floors `level.setup` was asked for, as floor-list entries (`name`, `floorToFloor` in
 /// metres, optional `elevation`, with the ceiling and lintel the floor list needs).
-fn setup_floors(p: &Value) -> Result<Vec<Value>> {
+pub(super) fn setup_floors(p: &Value) -> Result<Vec<Value>> {
     const CMD: &str = "level.setup";
     let mut raw: Vec<(String, f64, Option<f64>)> = Vec::new();
     match p.get("floors") {
@@ -438,15 +438,22 @@ fn setup_floors(p: &Value) -> Result<Vec<Value>> {
             let count =
                 o.get("count").and_then(Value::as_u64).filter(|c| (1..=60).contains(c)).ok_or_else(|| bad(CMD, "`floors.count` is 1 to 60"))?;
             let basements = o.get("basements").and_then(Value::as_u64).unwrap_or(0).min(10);
+            // One floor-to-floor height (metres) for every floor of the count form; 3 m by default.
+            let h = match o.get("floorToFloor").or_else(|| o.get("height")) {
+                None | Some(Value::Null) => 3.0,
+                Some(v) => {
+                    v.as_f64().filter(|n| n.is_finite() && (2.0..=30.0).contains(n)).ok_or_else(|| bad(CMD, "`floorToFloor` is 2 to 30 metres"))?
+                }
+            };
             for b in (1..=basements).rev() {
-                raw.push((format!("Basement {b}"), 3.0, Some(-3.0 * b as f64)));
+                raw.push((format!("Basement {b}"), h, Some(-h * b as f64)));
             }
             let ordinal = ["Ground", "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"];
             for i in 0..count {
-                raw.push((ordinal.get(i as usize).map_or_else(|| format!("Floor {i}"), |n| format!("{n} Floor")), 3.0, None));
+                raw.push((ordinal.get(i as usize).map_or_else(|| format!("Floor {i}"), |n| format!("{n} Floor")), h, None));
             }
             if o.get("terrace").and_then(Value::as_bool).unwrap_or(false) {
-                raw.push(("Terrace".into(), 3.0, None));
+                raw.push(("Terrace".into(), h, None));
             }
         }
         _ => return Err(bad(CMD, "`floors` is a list of floors or {count, basements?, terrace?}")),
@@ -473,7 +480,7 @@ fn setup_floors(p: &Value) -> Result<Vec<Value>> {
         .collect()
 }
 
-fn run_setup(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn run_setup(s: &mut Session, p: &Value) -> Result<Value> {
     if s.block_edit.is_some() {
         return Err(bad("level.setup", "close the block editor first"));
     }
