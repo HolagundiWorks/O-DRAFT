@@ -1,7 +1,7 @@
 # Levels and sheet sets
 
-**Status: Phase 1 done; Phases 2 to 5 planned.** Only what "Phase 1 status" lists is implemented and
-tested. Capability matrix: [status.md](status.md). Source: the implementation plan "Level model spaces
+**Status: Phase 1 done; Phase 2 engine, render and host data done, shell UI not built; Phases 3 to 5
+planned.** Only what "Phase 1 status" and "Phase 2 status" list is implemented and tested. Capability matrix: [status.md](status.md). Source: the implementation plan "Level model spaces
 and sheet sets" (2026-10-26), taken as the decision record below.
 
 Summary: keep one drawing file, but split its single model space into named **levels** (each its own
@@ -192,6 +192,44 @@ Damaged or incomplete level data opens the file as one level (or a level empty) 
 
 Known limits: the viewer shows the active level only (no tabs, traces or sheet sets yet, Phases 2 and 3); in
 another CAD program a level other than the first is a block definition.
+
+## Phase 2 status: traces implemented, shell UI not built
+
+Implemented and tested:
+
+- `level.trace {level?, add?, remove?, set?, fade?, colour?, order?, snap?, layers?}`: a level traces
+  up to 8 others, each with its own fade (0 to 90), grey or true colour, below or above, snap switch
+  and optional layer list. All changes are applied to a scratch copy first, so a refused change (the
+  cap, a bad level, a bad value) leaves the drawing as it was. A level cannot trace itself; deleting
+  a level removes the traces of it. `level.next` / `level.prev` (Ctrl+PageDown / Ctrl+PageUp) cycle
+  through the levels. Tests: `crates/engine/tests/levels.rs`.
+- Rendering (`crates/render/src/trace.rs`, `build_with_traces`): each trace is a display list of the
+  traced level's visible objects, greyed or kept in colour, blended towards the background by the
+  fade, drawn at the thinnest weight, with wipeouts dropped and `VIEWPORT_CONTENT` as the handle so
+  selection never matches it. They are merged Below, edit target, Above into one ordinary list, so
+  the GPU mesh needs no change. The fade bakes in the background, so the host rebuilds the list on a
+  theme change. Tests: `crates/render/tests/level_traces.rs`.
+- Host (`aad-host`): model space of a level with traces is built with its traces, the incremental
+  `rebuild` is skipped for such levels, and a pan stays on the cached list and mesh. `chrome_json`
+  carries `levels` (`id`, `name`, `active`, `traced`, `elevation`) for the status-bar tabs.
+- Snaps: a trace with `snap` on offers its snap points (`crates/engine/tests/level_trace_snap.rs`);
+  traced objects are never picked or selected.
+- Measured (release build, three traces of 25 000 lines each): a model-space build takes about 47 ms
+  against 4 ms without traces. It is paid when the drawing changes or the zoom band changes, not on
+  a pan. Probe: `cargo test --release -p aad-render --test level_traces -- --ignored --nocapture`.
+
+Not built yet (so the Phase 2 done-when is only partly met):
+
+- **WinUI level tabs and the Trace flyout.** The shell does not draw a layout-tab strip today
+  (`layouts` is parsed into `ChromeState` and never shown), so a level strip must be built, not
+  extended. The data and every command it needs exist.
+- The egui canvas does not draw traces.
+- No per-store display-list or mesh cache: every rebuild re-tessellates every trace, and switching
+  level tabs rebuilds everything. The plan's budget that a tab switch rebuilds no unchanged mesh
+  needs that cache.
+- Trace snaps scan the traced level linearly (no spatial index for inactive levels); snap markers
+  on a trace are not drawn in the quiet colour yet; traced layers' colour overrides and the
+  per-viewport use of traces belong to Phase 4.
 
 ## Risks
 

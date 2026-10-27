@@ -131,3 +131,33 @@ fn several_traces_merge_in_order_with_valid_vertex_references() {
     let ys: Vec<f64> = l.prims.iter().map(|p| l.points(p)[0].y).collect();
     assert_eq!(ys, [0.0, 1.0, 100.0, 200.0], "below traces, the level, then above traces");
 }
+
+/// Cost of three traces of 25 000 objects each (plan budget). Run with
+/// `cargo test --release -p aad-render --test level_traces -- --ignored --nocapture`.
+#[test]
+#[ignore = "timing probe"]
+fn probe_three_traces_of_25000_objects() {
+    use std::time::Instant;
+    let mut d = Drawing::new_metric();
+    let mut ids = Vec::new();
+    for lv in 0..4 {
+        let id = if lv == 0 { d.materialize_levels("L0", 0.0, 0.0).unwrap() } else { d.add_level(&format!("L{lv}"), 0.0, 0.0, None).unwrap() };
+        d.switch_level(id).unwrap();
+        for i in 0..25_000 {
+            line(&mut d, f64::from(i) * 0.01 + f64::from(lv), "WALL", 7);
+        }
+        ids.push(id);
+    }
+    d.switch_level(ids[3]).unwrap();
+    for id in &ids[..3] {
+        d.set_trace(ids[3], Trace::new(*id)).unwrap();
+    }
+    let opts = Options::default();
+    let t = Instant::now();
+    let plain = build(&d, &Space::Model, &opts);
+    let t_plain = t.elapsed();
+    let t = Instant::now();
+    let with = build_with_traces(&d, &opts, BG);
+    let t_with = t.elapsed();
+    eprintln!("plain {:?} ({} prims); with 3 traces {:?} ({} prims)", t_plain, plain.prims.len(), t_with, with.prims.len());
+}

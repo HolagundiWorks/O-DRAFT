@@ -2528,6 +2528,27 @@ mod tests {
     }
 
     #[test]
+    fn panning_a_level_with_traces_stays_on_the_cached_list_and_mesh() {
+        let mut host = Host::create(false);
+        host.execute("line", &json!({ "points": [[0.0, 0.0], [100.0, 0.0]] })).unwrap();
+        host.execute("level.new", &json!({ "name": "First", "first": "Ground" })).unwrap();
+        host.execute("level.activate", &json!({ "level": "First" })).unwrap();
+        host.execute("line", &json!({ "points": [[0.0, 50.0], [100.0, 50.0]] })).unwrap();
+        host.execute("level.trace", &json!({ "add": "Ground" })).unwrap();
+        host.execute("zoom.extents", &json!({})).unwrap();
+        let (key_a, uniform_a, _) = host.mesh().unwrap();
+        let (list_key, prims) = (host.frame.list_key, host.frame.list.as_ref().map(|l| l.prims.len()));
+        host.pointer(Pointer { x: 200.0, y: 200.0, action: POINTER_MIDDLE_DOWN, wheel: 0.0, mods: 0 }).unwrap();
+        host.pointer(Pointer { x: 208.0, y: 200.0, action: POINTER_MOVE, wheel: 0.0, mods: 0 }).unwrap();
+        host.pointer(Pointer { x: 208.0, y: 200.0, action: POINTER_MIDDLE_UP, wheel: 0.0, mods: 0 }).unwrap();
+        let (key_b, uniform_b, _) = host.mesh().unwrap();
+        assert_eq!(host.frame.list_key, list_key, "a pan must not rebuild the list, traces included");
+        assert_eq!(host.frame.list.as_ref().map(|l| l.prims.len()), prims);
+        assert_eq!(key_b, key_a, "a fine pan keeps the mesh upload");
+        assert_ne!(uniform_a[0], uniform_b[0]);
+    }
+
+    #[test]
     fn fine_pan_keeps_the_cached_mesh() {
         let mut host = Host::create(false);
         host.execute("line", &json!({ "points": [[0.0, 0.0], [100.0, 0.0]] })).unwrap();
