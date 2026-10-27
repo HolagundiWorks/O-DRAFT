@@ -388,11 +388,8 @@ fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay:
 fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdisplay: bool, true_scale: bool) {
     let Some(list) = &c.list else { return };
     let origin = crate::gpu::choose_origin(&list.bounds, xf.center, f64::from(xf.rect.height()) / xf.scale.max(1e-300));
-    let lw_mode = lwdisplay.then_some(if true_scale {
-        aad_render::mesh::LineweightMode::TrueScale
-    } else {
-        aad_render::mesh::LineweightMode::Screen
-    });
+    let lw_mode =
+        lwdisplay.then_some(if true_scale { aad_render::mesh::LineweightMode::TrueScale } else { aad_render::mesh::LineweightMode::Screen });
     let key = {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();

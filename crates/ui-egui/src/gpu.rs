@@ -285,14 +285,10 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
         let all = [total(&res.tris), total(&res.lines), total(&res.quads), total(&res.rings)];
         let mut from = [0usize; 4];
         for to in res.breaks.iter().copied().chain(std::iter::once(all)) {
-            for (i, (pipeline, batches)) in [
-                (&res.tri_pipeline, &res.tris),
-                (&res.line_pipeline, &res.lines),
-                (&res.quad_pipeline, &res.quads),
-                (&res.ring_pipeline, &res.rings),
-            ]
-            .into_iter()
-            .enumerate()
+            for (i, (pipeline, batches)) in
+                [(&res.tri_pipeline, &res.tris), (&res.line_pipeline, &res.lines), (&res.quad_pipeline, &res.quads), (&res.ring_pipeline, &res.rings)]
+                    .into_iter()
+                    .enumerate()
             {
                 let parts = batch_ranges(batches.iter().map(|b| b.count), from[i]..to[i]);
                 if parts.is_empty() {
@@ -303,11 +299,7 @@ impl egui_wgpu::CallbackTrait for CanvasCallback {
                     let Some(b) = batches.get(j) else { continue };
                     pass.set_vertex_buffer(0, b.buffer.slice(..));
                     // Quads and rings are instanced: six vertices per instance.
-                    if i >= 2 {
-                        pass.draw(0..6, r)
-                    } else {
-                        pass.draw(r, 0..1)
-                    }
+                    if i >= 2 { pass.draw(0..6, r) } else { pass.draw(r, 0..1) }
                 }
             }
             from = to;

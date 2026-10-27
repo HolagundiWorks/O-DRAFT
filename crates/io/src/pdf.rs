@@ -285,8 +285,7 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
                             let radius = center.dist(*rim);
                             let start = center.angle_to(*rim);
                             let mut tess = Vec::new();
-                            aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep))
-                                .tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                            aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
                             tess.iter().map(|q| map.pt(*q)).collect()
                         }
                         _ => continue,
