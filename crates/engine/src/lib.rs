@@ -528,6 +528,8 @@ pub struct Session {
     pub vdb_addr: Option<String>,
     /// Node results of the last parametric evaluation (`param.*`); disposable, never saved.
     pub param_cache: aad_param::Cache,
+    /// O-Dynamo companion pipe state (`companion.*`); disposable, never saved.
+    pub companion: cmd::companion::CompanionState,
     /// Open 2D block editor (`bedit` / `refedit`); `None` when not editing.
     pub block_edit: Option<cmd::bedit::BlockEdit>,
 }
@@ -573,6 +575,7 @@ impl Session {
             plot_request: None,
             vdb_addr: None,
             param_cache: aad_param::Cache::default(),
+            companion: cmd::companion::CompanionState::default(),
             block_edit: None,
         }
     }
