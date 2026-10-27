@@ -78,7 +78,40 @@ fn a_refused_part_changes_nothing_and_a_second_run_is_refused() {
         assert!(!s.doc().unwrap().has_levels() && s.doc().unwrap().sheet_sets.is_empty());
     }
     s.execute("project.wizard", &json!({})).unwrap();
-    assert!(s.execute("project.wizard", &json!({})).is_err(), "the wizard is for a new drawing");
+    // A second run edits the project: it may not redo the floors, levels or unit.
+    for key in [("floors", json!({"count": 2})), ("levels", json!(false)), ("units", json!("m"))] {
+        assert!(s.execute("project.wizard", &json!({ key.0: key.1 })).is_err(), "{}", key.0);
+    }
+}
+
+#[test]
+fn a_project_that_is_set_up_is_edited_not_set_up_again() {
+    let mut s = Session::new();
+    s.execute("project.wizard", &json!({"details": {"title": "Old"}, "sheetSets": ["Electrical"], "floors": {"count": 1}})).unwrap();
+    s.execute("sheetset.set", &json!({"set": "Electrical", "layers": "E-*, MINE"})).unwrap();
+    let levels_before = names(&mut s, "level.list", "levels");
+    let r = s
+        .execute(
+            "project.wizard",
+            &json!({"details": {"title": "New", "owner": "S. Rao"}, "sheetSets": ["Electrical", "Plumbing"], "layers": ["permit"], "slabMm": 200}),
+        )
+        .unwrap();
+    assert_eq!(r["mode"], "edit");
+    let p = s.execute("project", &json!({})).unwrap();
+    assert_eq!(
+        (p["details"]["title"].as_str(), p["details"]["owner"].as_str(), p["structure"]["slabMm"].as_f64()),
+        (Some("New"), Some("S. Rao"), Some(200.0))
+    );
+    assert_eq!(names(&mut s, "level.list", "levels"), levels_before, "the floors are untouched");
+    let sets = names(&mut s, "sheetset.list", "sheetSets");
+    assert_eq!(sets, ["Electrical", "Plumbing"].map(String::from), "the missing tab was added");
+    let electrical = s.execute("sheetset.list", &json!({})).unwrap()["sheetSets"][0].clone();
+    assert_eq!(electrical["layers"], json!(["E-*", "MINE"]), "an existing tab keeps its edited mapping");
+    assert!(s.doc().unwrap().layer("BP-SITE-BOUNDARY").is_some(), "the extra layer set was added");
+    s.execute("u", &json!({})).unwrap();
+    let p = s.execute("project", &json!({})).unwrap();
+    assert_eq!(p["details"]["title"], "Old", "one undo takes the edit back");
+    assert_eq!(names(&mut s, "sheetset.list", "sheetSets"), ["Electrical"].map(String::from));
 }
 
 #[test]

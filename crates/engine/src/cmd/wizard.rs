@@ -14,10 +14,10 @@ const LAYER_SETS: [&str; 3] = ["standard", "permit", "presentation"];
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("project.wizard", "New Project Wizard", run_wizard)
-            .menu(&["File", "New Project Wizard"])
+        CommandSpec::new("project.wizard", "Project Wizard", run_wizard)
+            .menu(&["File", "Project Wizard"])
             .alias(&["projectwizard"])
-            .params("{details?: {title, owner, location, address, pid, siteArea, plotUse, authority, architect, engineer, date, summary}, units?: mm|cm|m|in|ft (the drawing unit; sets the unit only), floors?: [{name, height?, elevation?}] | {count (1..60, default 1), basements?, terrace?, floorToFloor? (metres, 2..30, default 3)}, levels?: bool (default true: one level per floor), slabMm?, beamMm?, layers?: [\"standard\"|\"permit\"|\"presentation\"] (default [\"standard\"]), sheetSets?: bool | [names] (default true: Working drawing, Electrical, Plumbing, Interior, False ceiling with their layers and mapping), symbols?: bool (default true)} → {floors, levels, layersCreated, sheetSets, blocksCreated}. For a new drawing only: one undo step, and a refused part changes nothing."),
+            .params("{details?: {title, owner, location, address, pid, siteArea, plotUse, authority, architect, engineer, date, summary}, units?: mm|cm|m|in|ft (the drawing unit; sets the unit only), floors?: [{name, height?, elevation?}] | {count (1..60, default 1), basements?, terrace?, floorToFloor? (metres, 2..30, default 3)}, levels?: bool (default true: one level per floor), slabMm?, beamMm?, layers?: [\"standard\"|\"permit\"|\"presentation\"] (default [\"standard\"]), sheetSets?: bool | [names] (default true: Working drawing, Electrical, Plumbing, Interior, False ceiling with their layers and mapping), symbols?: bool (default true)} → {floors, levels, layersCreated, sheetSets, blocksCreated}. On a new drawing it sets everything up; on a drawing that already has floors or tabs it edits: details, structure, layer sets and the standard tabs it lacks (existing tabs keep their mapping), while `units`, `floors` and `levels` are refused (floors are changed on the level tabs, the unit with drawing.units). One undo step, and a refused part changes nothing."),
     ]
 }
 
@@ -26,14 +26,24 @@ fn run_wizard(s: &mut Session, p: &Value) -> Result<Value> {
     if s.block_edit.is_some() {
         return Err(bad(CMD, "close the block editor first"));
     }
-    {
+    // A drawing that has floors or tabs is edited; its floors, levels and unit were chosen when the
+    // project was made.
+    let edit = {
         let d = s.doc()?;
-        if d.has_levels() || !d.sheet_sets.is_empty() {
-            return Err(bad(CMD, "this drawing already has levels or sheet sets; run the wizard on a new drawing"));
+        d.has_levels() || !d.sheet_sets.is_empty()
+    };
+    if edit {
+        for key in ["units", "floors", "levels"] {
+            if p.get(key).is_some() {
+                return Err(bad(
+                    CMD,
+                    format!("`{key}` is chosen when the project is created: change floors on the level tabs and the unit with drawing.units"),
+                ));
+            }
         }
     }
     let backup = s.doc()?.clone();
-    let result = apply(s, p);
+    let result = apply(s, p, edit);
     if result.is_err() {
         // A part was refused: the drawing goes back exactly as it was.
         *s.doc_mut()? = backup;
@@ -41,7 +51,7 @@ fn run_wizard(s: &mut Session, p: &Value) -> Result<Value> {
     result
 }
 
-fn apply(s: &mut Session, p: &Value) -> Result<Value> {
+fn apply(s: &mut Session, p: &Value, edit: bool) -> Result<Value> {
     const CMD: &str = "project.wizard";
     let layer_sets: Vec<&str> = match p.get("layers") {
         None => vec!["standard"],
@@ -74,15 +84,15 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let symbols = bool_or(p, "symbols", true);
     let floors_param = p.get("floors").cloned().unwrap_or_else(|| json!({ "count": 1 }));
-    // Check the floors before anything changes.
-    let floors = super::levels::setup_floors(&json!({ "floors": floors_param }))?;
+    // Check the floors before anything changes (an edit leaves them alone).
+    let floors = if edit { Vec::new() } else { super::levels::setup_floors(&json!({ "floors": floors_param }))? };
     let details = match p.get("details") {
         None | Some(Value::Null) => None,
         Some(v @ Value::Object(_)) => Some(v.clone()),
         Some(_) => return Err(bad(CMD, "`details` is an object of project details")),
     };
 
-    if let Some(units) = str_param(p, "units") {
+    if let Some(units) = str_param(p, "units").filter(|_| !edit) {
         super::annot::run_drawing_units(s, &json!({ "units": units, "mode": "metadata" }))?;
     }
     let mut project = serde_json::Map::new();
@@ -97,7 +107,9 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
     if !project.is_empty() {
         super::project::run_project(s, &Value::Object(project))?;
     }
-    let levels = if bool_or(p, "levels", true) {
+    let levels = if edit {
+        json!([])
+    } else if bool_or(p, "levels", true) {
         let r = super::levels::run_setup(s, &json!({ "floors": floors_param, "sheetSets": false }))?;
         r["created"].clone()
     } else {
@@ -109,7 +121,12 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
         layers_created += super::hcw::run_layers(s, &json!({ "set": set }))?["created"].as_u64().unwrap_or(0);
     }
     let (mut sheet_sets, mut blocks_created) = (Vec::new(), 0usize);
-    if let Some(names) = tabs {
+    // An edit adds only the tabs the drawing lacks: a tab that exists keeps the mapping it has.
+    let tabs = tabs.map(|names| {
+        let have: Vec<String> = s.doc().map(|d| d.sheet_sets.iter().map(|x| x.name.to_ascii_lowercase()).collect()).unwrap_or_default();
+        names.into_iter().filter(|n| !edit || !have.contains(&n.to_ascii_lowercase())).collect::<Vec<_>>()
+    });
+    if let Some(names) = tabs.filter(|n| !n.is_empty()) {
         let mut d = s.doc()?.clone();
         let r = super::sheetstd::apply_standard(&mut d, Some(&names), true, symbols)?;
         *s.doc_mut()? = d;
@@ -117,5 +134,7 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
         layers_created += r.layers_created as u64;
         blocks_created = r.blocks_created;
     }
-    Ok(json!({ "floors": floors.len(), "levels": levels, "layersCreated": layers_created, "sheetSets": sheet_sets, "blocksCreated": blocks_created }))
+    Ok(
+        json!({ "mode": if edit { "edit" } else { "new" }, "floors": floors.len(), "levels": levels, "layersCreated": layers_created, "sheetSets": sheet_sets, "blocksCreated": blocks_created }),
+    )
 }

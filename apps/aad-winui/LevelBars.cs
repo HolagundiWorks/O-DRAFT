@@ -82,7 +82,7 @@ public sealed partial class MainWindow
                 : "";
     }
 
-    private ToggleButton MakeLevelTab(LevelTab level, bool design)
+    private Button MakeLevelTab(LevelTab level, bool design)
     {
         var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Density.SpaceXs };
         if (level.Traced)
@@ -98,13 +98,8 @@ public sealed partial class MainWindow
             VerticalAlignment = VerticalAlignment.Center,
             FontWeight = level.Active ? FontWeights.SemiBold : FontWeights.Normal,
         });
-        var tab = new ToggleButton
-        {
-            Content = label,
-            IsChecked = level.Active,
-            MinHeight = Density.ControlHeight,
-            Padding = new Thickness(8, 2, 8, 2),
-        };
+        var tab = SeamlessTab.Create(label, level.Active, TabEdge.Bottom, new Thickness(12, 0, 12, 0));
+        tab.MinHeight = 26;
         AutomationProperties.SetName(tab, (level.Active ? "Current level " : "Switch to level ") + level.Name);
         var tip = level.Name + "  elevation " + level.Elevation.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
         if (level.Traced)
@@ -114,7 +109,6 @@ public sealed partial class MainWindow
         ToolTipService.SetToolTip(tab, tip + "  (right-click for more)");
         tab.Click += (_, _) =>
         {
-            tab.IsChecked = level.Active; // the engine decides; the next refresh sets the real state
             RunShellCommand("level.activate", new Dictionary<string, object> { ["level"] = level.Id });
         };
         // Opened by hand: the bar is at the window bottom, and a context flyout does not always honour its placement.
@@ -181,7 +175,7 @@ public sealed partial class MainWindow
     /// A vertical tab: the name is rotated 90 degrees (reading upward) inside a canvas of fixed size,
     /// because a render transform does not change layout and the canvas does not clip.
     /// </summary>
-    private static ToggleButton MakeRailEntry(string name, string tip, bool active, Action activate)
+    private static Button MakeRailEntry(string name, string tip, bool active, Action activate)
     {
         const double width = 26;
         const double lineHeight = 15;
@@ -199,23 +193,14 @@ public sealed partial class MainWindow
         };
         Canvas.SetLeft(text, (width - lineHeight) / 2);
         Canvas.SetTop(text, length);
-        var entry = new ToggleButton
-        {
-            Content = new Canvas { Width = width, Height = length, Children = { text } },
-            IsChecked = active,
-            Width = width,
-            Height = length,
-            MinWidth = width,
-            MinHeight = length,
-            Padding = new Thickness(0),
-        };
+        var entry = SeamlessTab.Create(new Canvas { Width = width, Height = length, Children = { text } }, active, TabEdge.Left, new Thickness(0));
+        entry.Width = width;
+        entry.Height = length;
+        entry.MinWidth = width;
+        entry.MinHeight = length;
         AutomationProperties.SetName(entry, (active ? "Current: " : "Switch to ") + name);
         ToolTipService.SetToolTip(entry, tip);
-        entry.Click += (_, _) =>
-        {
-            entry.IsChecked = active;
-            activate();
-        };
+        entry.Click += (_, _) => activate();
         return entry;
     }
 

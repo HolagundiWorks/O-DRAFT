@@ -28,7 +28,7 @@ public sealed partial class MainWindow
 }
 
 /// <summary>
-/// File &gt; New Project Wizard: the project's details, the team, the building (floors and their
+/// File &gt; Project Wizard: the project's details, the team, the building (floors and their
 /// heights), and the standards (layer sets, discipline tabs, symbols), then one call to the engine's
 /// <c>project.wizard</c>. The window collects answers; the engine applies them as one undo step.
 /// </summary>
@@ -164,7 +164,7 @@ internal static class ProjectWizardWindow
         var layerStandard = new CheckBox { Content = "Architectural layer set (walls, doors, windows, furniture, services)", IsChecked = true, MinHeight = Density.ControlHeight };
         var layerPermit = new CheckBox { Content = "Building permit layers (site, setbacks, areas)", IsChecked = false, MinHeight = Density.ControlHeight };
         var layerPresentation = new CheckBox { Content = "Presentation layers (tone, clouds)", IsChecked = false, MinHeight = Density.ControlHeight };
-        var tabBoxes = Tabs.Select(t => new CheckBox { Content = t, IsChecked = true, MinHeight = Density.ControlHeight }).ToList();
+        var tabBoxes = Tabs.Select(t => new CheckBox { Content = t, Tag = t, IsChecked = true, MinHeight = Density.ControlHeight }).ToList();
         var symbols = new CheckBox { Content = "Standard symbol blocks (switches, lights, fans, sanitary fixtures, furniture, ceiling)", IsChecked = true, MinHeight = Density.ControlHeight };
         var page4 = new StackPanel { Spacing = Density.SpaceSm };
         page4.Children.Add(DialogLayout.Heading("Standards"));
@@ -186,11 +186,134 @@ internal static class ProjectWizardWindow
         page5.Children.Add(DialogLayout.Heading("Review"));
         page5.Children.Add(review);
 
+        // What the drawing holds already: the form opens filled in, and a drawing that has floors or
+        // tabs is edited (details, structure and extra standards) instead of set up again.
+        var edit = false;
+        var existingFloors = new List<string>();
+        var existingTabs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (Native.Execute(host, "level.list", "{}") == 0)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(Native.ReadResult(host));
+                var implicitLevel = doc.RootElement.TryGetProperty("implicit", out var im) && im.ValueKind == JsonValueKind.True;
+                if (!implicitLevel && doc.RootElement.TryGetProperty("levels", out var levels) && levels.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var level in levels.EnumerateArray())
+                    {
+                        existingFloors.Add(level.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "");
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+        if (Native.Execute(host, "sheetset.list", "{}") == 0)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(Native.ReadResult(host));
+                if (doc.RootElement.TryGetProperty("sheetSets", out var sets) && sets.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var set in sets.EnumerateArray())
+                    {
+                        existingTabs.Add(set.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "");
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+        edit = existingFloors.Count > 0 || existingTabs.Count > 0;
+        if (edit)
+        {
+            // The default of today is for a new project; an edit shows only what the project holds.
+            projectBoxes["date"].Text = "";
+        }
+        if (Native.Execute(host, "project", "{}") == 0)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(Native.ReadResult(host));
+                if (doc.RootElement.TryGetProperty("details", out var held) && held.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in held.EnumerateObject())
+                    {
+                        var text = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() ?? "" : "";
+                        if (projectBoxes.TryGetValue(prop.Name, out var box))
+                        {
+                            box.Text = text;
+                        }
+                        else if (prop.Name == "architect")
+                        {
+                            architect.Text = text;
+                        }
+                        else if (prop.Name == "engineer")
+                        {
+                            engineer.Text = text;
+                        }
+                    }
+                }
+                if (doc.RootElement.TryGetProperty("structure", out var structure))
+                {
+                    if (structure.TryGetProperty("slabMm", out var sv) && sv.TryGetDouble(out var slabValue))
+                    {
+                        slab.Text = slabValue.ToString("0.###", CultureInfo.InvariantCulture);
+                    }
+                    if (structure.TryGetProperty("beamMm", out var bv) && bv.TryGetDouble(out var beamValue))
+                    {
+                        beam.Text = beamValue.ToString("0.###", CultureInfo.InvariantCulture);
+                    }
+                }
+                if (doc.RootElement.TryGetProperty("company", out var held2) && held2.ValueKind == JsonValueKind.Object)
+                {
+                    var lines = held2.EnumerateObject()
+                        .Where(x => x.Value.ValueKind == JsonValueKind.String && (x.Value.GetString() ?? "").Length > 0 && x.Name != "project_ref")
+                        .Select(x => x.Name.Replace('_', ' ') + ": " + x.Value.GetString());
+                    var joined = string.Join("\n", lines);
+                    if (joined.Length > 0)
+                    {
+                        company.Text = joined;
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+        if (edit)
+        {
+            // Floors, levels and the unit were chosen when the project was created: they are changed
+            // on the level tabs (right-click) and with Drawing Units, not here.
+            for (var i = 1; i < page3.Children.Count; i++)
+            {
+                page3.Children[i].Visibility = Visibility.Collapsed;
+            }
+            page3.Children.Add(Density.Secondary(
+                "Floors in this drawing: " + string.Join(", ", existingFloors) + ". Change a floor's name, elevation or height by right-clicking its tab at the bottom of the drawing.",
+                TextWrapping.Wrap));
+            foreach (var box in tabBoxes)
+            {
+                if (existingTabs.Contains((string)box.Tag))
+                {
+                    box.IsChecked = true;
+                    box.IsEnabled = false;
+                    box.Content = (string)box.Tag + " (already in this drawing)";
+                }
+                else
+                {
+                    box.IsChecked = false;
+                }
+            }
+        }
+
         var pages = new FrameworkElement[] { page1, page2, page3, page4, page5 };
         var current = 0;
         var back = Density.DialogAction("Back");
         var next = Density.DialogAction("Next", primary: true);
-        var create = Density.DialogAction("Create project", primary: true);
+        var create = Density.DialogAction(edit ? "Apply changes" : "Create project", primary: true);
         var cancel = Density.DialogAction("Cancel");
 
         Dictionary<string, object> Collect()
@@ -199,16 +322,17 @@ internal static class ProjectWizardWindow
             foreach (var (key, box) in projectBoxes)
             {
                 var text = box.Text.Trim();
-                if (text.Length > 0)
+                // Editing sends empty fields too, so a detail can be cleared.
+                if (text.Length > 0 || edit)
                 {
                     details[key] = text;
                 }
             }
-            if (architect.Text.Trim().Length > 0)
+            if (architect.Text.Trim().Length > 0 || edit)
             {
                 details["architect"] = architect.Text.Trim();
             }
-            if (engineer.Text.Trim().Length > 0)
+            if (engineer.Text.Trim().Length > 0 || edit)
             {
                 details["engineer"] = engineer.Text.Trim();
             }
@@ -237,9 +361,15 @@ internal static class ProjectWizardWindow
                 ["floors"] = floors,
                 ["levels"] = oneLevelPerFloor.IsChecked == true,
                 ["layers"] = layers,
-                ["sheetSets"] = tabBoxes.Where(b => b.IsChecked == true).Select(b => (string)b.Content).ToList(),
+                ["sheetSets"] = tabBoxes.Where(b => b.IsChecked == true && b.IsEnabled).Select(b => (string)b.Tag).ToList(),
                 ["symbols"] = symbols.IsChecked == true,
             };
+            if (edit)
+            {
+                body.Remove("units");
+                body.Remove("floors");
+                body.Remove("levels");
+            }
             if (Number(slab.Text, out var sm))
             {
                 body["slabMm"] = sm;
@@ -261,17 +391,20 @@ internal static class ProjectWizardWindow
             if (current == pages.Length - 1)
             {
                 var body = Collect();
-                var names = ((List<object>)body["floors"]).Cast<Dictionary<string, object>>().Select(f => (string)f["name"]).ToList();
+                var names = floorBoxes.Select(f => f.Name.Text.Trim()).ToList();
                 var tabs = (List<string>)body["sheetSets"];
                 var details = (Dictionary<string, object>)body["details"];
                 review.Text =
-                    "Project: " + (details.TryGetValue("title", out var t) ? t : "(no name)") + "\n"
+                    (edit ? "Editing the project in this drawing.\n" : "")
+                    + "Project: " + (details.TryGetValue("title", out var t) ? t : "(no name)") + "\n"
                     + "Client: " + (details.TryGetValue("owner", out var o) ? o : "-") + "\n"
-                    + "Unit: " + body["units"] + "\n"
-                    + "Floors (" + names.Count + "): " + string.Join(", ", names) + "\n"
-                    + "One tab per floor: " + ((bool)body["levels"] ? "yes" : "no") + "\n"
+                    + (edit
+                        ? "Floors: " + string.Join(", ", existingFloors) + " (unchanged)\n"
+                        : "Unit: " + Units[Math.Max(0, units.SelectedIndex)] + "\n"
+                            + "Floors (" + names.Count + "): " + string.Join(", ", names) + "\n"
+                            + "One tab per floor: " + (oneLevelPerFloor.IsChecked == true ? "yes" : "no") + "\n")
                     + "Layer sets: " + (((List<string>)body["layers"]).Count == 0 ? "none" : string.Join(", ", (List<string>)body["layers"])) + "\n"
-                    + "Drawing set tabs: " + (tabs.Count == 0 ? "none" : string.Join(", ", tabs)) + "\n"
+                    + (edit ? "Tabs to add: " : "Drawing set tabs: ") + (tabs.Count == 0 ? "none" : string.Join(", ", tabs)) + "\n"
                     + "Symbol blocks: " + ((bool)body["symbols"] ? "yes" : "no");
             }
             back.IsEnabled = current > 0;
@@ -351,7 +484,7 @@ internal static class ProjectWizardWindow
         Density.Apply(root);
         var window = new Window
         {
-            Title = "New Project Wizard",
+            Title = edit ? "Edit Project" : "New Project Wizard",
             Content = new ScrollViewer { Content = new Grid { RequestedTheme = theme, Children = { root } } },
         };
         if (window.AppWindow.Presenter is OverlappedPresenter presenter)

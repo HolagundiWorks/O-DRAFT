@@ -52,9 +52,9 @@
                 <ColumnDefinition x:Name="PropertiesColumn" Width="240" MinWidth="0" />
             </Grid.ColumnDefinitions>
             <!-- Sheet sets: Design, then one entry per discipline. Shown only when the drawing has sheet sets. -->
-            <Border x:Name="SheetRailHost" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,0,1,0" AutomationProperties.Name="Sheet sets">
+            <Border x:Name="SheetRailHost" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" BorderThickness="0" AutomationProperties.Name="Sheet sets">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="SheetRail" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="{StaticResource PaddingSm}" />
+                    <StackPanel x:Name="SheetRail" Orientation="Vertical" Spacing="2" Margin="4,6,0,6" />
                 </ScrollViewer>
             </Border>
             <Border x:Name="CanvasHost" Grid.Column="2" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
@@ -130,10 +130,10 @@
                 Width="28"
                 Background="{ThemeResource SurfaceSecondaryBrush}"
                 BorderBrush="{ThemeResource BorderSubtleBrush}"
-                BorderThickness="1,0,0,0"
+                BorderThickness="0"
                 AutomationProperties.Name="Panel titles">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="SideRailTabs" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="1,4,1,4" />
+                    <StackPanel x:Name="SideRailTabs" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="0,6,4,6" />
                 </ScrollViewer>
             </Border>
             </Grid>
@@ -259,10 +259,10 @@
             </StackPanel>
         </Border>
         <!-- Level tabs under the drawing; the bar is a row of its own because the canvas is a native child window. -->
-        <Border x:Name="LevelBarHost" Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}" AutomationProperties.Name="Levels">
+        <Border x:Name="LevelBarHost" Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderThickness="0" Padding="6,0,6,0" AutomationProperties.Name="Levels">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
-                    <StackPanel x:Name="LevelTabs" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" AutomationProperties.Name="Level tabs" />
+                    <StackPanel x:Name="LevelTabs" Orientation="Horizontal" Spacing="2" AutomationProperties.Name="Level tabs" />
                     <Button x:Name="AddLevelButton" Click="OnAddLevel" AutomationProperties.Name="Add level" ToolTipService.ToolTip="Add a level" Style="{StaticResource IconButtonStyle}">
                         <local:DrawnIcon Kind="plus" />
                     </Button>

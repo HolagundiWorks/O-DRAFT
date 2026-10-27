@@ -4,10 +4,10 @@ What exists today and what is not built. Status vocabulary: [documentation-polic
 
 ## Project parameters (Project panel, `project`)
 
-Implemented and tested (`crates/engine/tests/project_details.rs`): the panel shows and edits the
+Implemented and tested (`crates/engine/tests/project_details.rs`): the panel shows (read only) the
 twelve project details (project name, client, location, site address, property ID, site area, plot
 use, approving authority, architect, engineer, date, summary) and the slab and beam defaults; each
-field is saved on Enter or when it loses focus. `project` also returns `company`, the company details
+is edited in the Project Wizard ("Edit project..." or File > Project Wizard). `project` also returns `company`, the company details
 the drawing holds. Checked by hand in the running shell; there is no automated UI test.
 
 ## Company details (`companyfile`)

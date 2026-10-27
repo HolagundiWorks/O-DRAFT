@@ -488,6 +488,13 @@ carried `levels`, `sheetSets` and `designMode`):
   opens a collapsed dock; an unpinned open panel still collapses 1.5 s after the pointer leaves.
   Float puts the panels in their own window, and the rail then switches the panel shown there.
   Not tried by hand: Float with the new rail, and the pinned/unpinned auto-collapse.
+- **Tab styling** (`apps/aad-winui/SeamlessTab.cs`): the level tabs under the drawing, the sheet-set tabs
+  on the left and the panel titles on the right share one look. An inactive tab is flat grey text on
+  the bar; the active tab takes the colour of the surface it controls (the drawing, or the open side
+  panel), so the two read as one piece with no dividing line, with rounded corners on the outer side and
+  a thin accent line on the outer edge. The bars lost their divider lines. Checked by hand in the light
+  theme only; the colours come from the theme brushes and the tabs are rebuilt on a theme switch, which
+  was not tried.
 - **Move selection to a level**: select objects, right-click the canvas (no command running), and
   the shortcut menu has *Move to Level* with every other level listed; a click runs `level.moveto`
   with that level, so the objects keep their coordinates and leave the active level (one undo

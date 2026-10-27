@@ -2310,6 +2310,9 @@ public sealed partial class MainWindow : Window
     {
         var theme = _dark ? ElementTheme.Dark : ElementTheme.Light;
         Density.Theme = theme;
+        _levelKey = "";
+        _sheetKey = "";
+        RefreshSideRail();
         ShellChrome.Apply(this, theme);
         _chrome?.ApplyTheme(theme);
         SyncAskPills();
@@ -4522,108 +4525,47 @@ public sealed partial class MainWindow : Window
         try
         {
             ProjectPanel.Children.Clear();
+            // Read only: the project is edited in the Project Wizard (File menu).
+            void Row(string label, string value)
+            {
+                ProjectPanel.Children.Add(FieldLabel(label));
+                ProjectPanel.Children.Add(new TextBlock
+                {
+                    Text = value.Length == 0 ? "-" : value,
+                    TextWrapping = TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true,
+                    FontSize = Density.FontBody,
+                    Opacity = value.Length == 0 ? 0.55 : 1.0,
+                });
+            }
+            var edit = Density.DialogAction("Edit project...", primary: true);
+            ToolTipService.SetToolTip(edit, "Opens the Project Wizard (File menu) to change these details");
+            edit.Click += (_, _) => StartCommand("project.wizard");
+            ProjectPanel.Children.Add(edit);
+
             ProjectPanel.Children.Add(Heading("Project"));
             foreach (var (detail, label) in ProjectDetailFields)
             {
-                var current = details.GetValueOrDefault(detail, "");
-                ProjectPanel.Children.Add(FieldLabel(label));
-                var box = Density.DialogField(current, label);
-                var field = detail;
-                var original = current;
-                void Commit()
-                {
-                    var text = box.Text.Trim();
-                    if (text == original)
-                    {
-                        return;
-                    }
-                    var body = JsonSerializer.Serialize(new Dictionary<string, object> { [field] = text });
-                    if (Native.Execute(_host, "project", body) != 0)
-                    {
-                        History.Text = Native.LastError(_host);
-                        return;
-                    }
-                    _projectPanelKey = "";
-                    AfterCommand();
-                }
-                box.LostFocus += (_, _) => Commit();
-                box.KeyDown += (_, e) =>
-                {
-                    if (e.Key == Windows.System.VirtualKey.Enter)
-                    {
-                        Commit();
-                        e.Handled = true;
-                    }
-                };
-                ProjectPanel.Children.Add(box);
+                Row(label, details.GetValueOrDefault(detail, ""));
             }
-
             ProjectPanel.Children.Add(Heading("Company"));
             var shown = 0;
             foreach (var (detail, label) in CompanyDetailFields)
             {
                 var value = company.GetValueOrDefault(detail, "");
-                if (value.Length == 0)
+                if (value.Length > 0)
                 {
-                    continue;
+                    shown++;
+                    Row(label, value);
                 }
-                shown++;
-                ProjectPanel.Children.Add(FieldLabel(label));
-                ProjectPanel.Children.Add(new TextBlock
-                {
-                    Text = value,
-                    TextWrapping = TextWrapping.Wrap,
-                    IsTextSelectionEnabled = true,
-                    FontSize = Density.FontBody,
-                });
             }
             if (shown == 0)
             {
-                ProjectPanel.Children.Add(FieldLabel("No company details in this drawing yet. Read them from the company file."));
+                ProjectPanel.Children.Add(FieldLabel("No company details in this drawing yet. The Project Wizard can read them from the company file."));
             }
-            var read = Density.DialogAction("Read company file");
-            ToolTipService.SetToolTip(read, "Reads the company and the project's details from the OSAS company file (read only)");
-            read.Click += (_, _) =>
-            {
-                if (Native.Execute(_host, "companyfile", "{\"refresh\":true}") != 0)
-                {
-                    History.Text = Native.LastError(_host);
-                    return;
-                }
-                _projectPanelKey = "";
-                AfterCommand();
-            };
-            ProjectPanel.Children.Add(read);
-
             ProjectPanel.Children.Add(Heading("Structure"));
-            ProjectPanel.Children.Add(FieldLabel("Default slab thickness (mm)"));
-            var slabBox = Density.DialogField(slab, "Slab thickness");
-            ProjectPanel.Children.Add(slabBox);
-            ProjectPanel.Children.Add(FieldLabel("Default beam depth including slab (mm)"));
-            var beamBox = Density.DialogField(beam, "Beam depth");
-            ProjectPanel.Children.Add(beamBox);
-            void SaveStructure()
-            {
-                if (!double.TryParse(slabBox.Text.Trim(), out var sm) || !double.TryParse(beamBox.Text.Trim(), out var bm))
-                {
-                    History.Text = "Slab and beam must be positive millimetres.";
-                    return;
-                }
-                var body = JsonSerializer.Serialize(new Dictionary<string, object> { ["slabMm"] = sm, ["beamMm"] = bm });
-                if (Native.Execute(_host, "project", body) != 0)
-                {
-                    History.Text = Native.LastError(_host);
-                    return;
-                }
-                _projectPanelKey = "";
-                AfterCommand();
-            }
-            slabBox.LostFocus += (_, _) => SaveStructure();
-            beamBox.LostFocus += (_, _) => SaveStructure();
-            var floors = Density.DialogAction("Floors...");
-            floors.Click += (_, _) => StartCommand("floors");
-            ProjectPanel.Children.Add(floors);
-            ProjectPanel.Children.Add(FieldLabel("Door and Window take the selected Blocks-panel block; opening width on the drawing updates the schedule."));
+            Row("Default slab thickness (mm)", slab);
+            Row("Default beam depth including slab (mm)", beam);
         }
         finally
         {

@@ -91,9 +91,9 @@ the naming rules only for when DWG writing exists.
    serialisation, rendering, relative paths, export). The nameplate text (`nameplate_lines`) is
    complete without it, and storing a logo changes none of its lines.
 
-## New Project Wizard for one drawing (built)
+## Project Wizard for one drawing (built): new and edit
 
-File > New Project Wizard (`apps/aad-winui/ProjectWizardWindow.cs`, engine command `project.wizard`,
+File > Project Wizard (`apps/aad-winui/ProjectWizardWindow.cs`, engine command `project.wizard`,
 `cmd/wizard.rs`) sets up a new single drawing in five pages: the project (name, client, location,
 site address, property ID, site area, plot use, authority, date, summary); the team and company
 (architect, engineer, and a button that reads the OSAS company file); the building (drawing unit,
@@ -102,8 +102,15 @@ floor names and heights, slab and beam defaults, one level per floor or not); th
 (architectural, permit and presentation layer sets, the five discipline tabs, symbol blocks); and a
 review. Create runs one `project.wizard` call: `project`, `drawing.units`, `level.setup`,
 `hcwlayers` and `sheetset.standard` in order, as one undo step; a refused part puts the drawing back
-as it was. It is for a new drawing (it refuses one that already has levels or sheet sets). This is
-separate from the folder-and-manifest wizard in the table below, which stays unbuilt.
+as it was.
+
+**Edit.** The Project panel in the side dock is read only (labels and values, an "Edit project..."
+button). The button, and File > Project Wizard on a drawing that already has floors or tabs, open
+the same window as "Edit Project", filled in from the drawing. An edit changes the project details
+(an empty field clears one), the slab and beam defaults, the layer sets, and adds standard tabs the
+drawing lacks (a tab that exists keeps its mapping). The floors, levels and unit are shown but not
+changed there: the engine refuses `units`, `floors` and `levels` on a set-up drawing, and the
+wizard points to the level tabs (right-click) and Drawing Units. One undo step. This is separate from the folder-and-manifest wizard in the table below, which stays unbuilt.
 Tested: `crates/engine/tests/project_wizard.rs` (whole flow and undo, skipping parts, refusals leave
 nothing behind, hostile parameters). The window was driven by hand through all five pages and Create.
 Not built in it: plot scale, per-floor elevations other than the running sum, templates and saved

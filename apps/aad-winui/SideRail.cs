@@ -17,7 +17,7 @@ public sealed partial class MainWindow
     private const double SideRailWidth = 28;
 
     private SideTab _sideTab = SideTab.Properties;
-    private readonly Dictionary<SideTab, ToggleButton> _railButtons = new();
+    private readonly Dictionary<SideTab, Button> _railButtons = new();
     private readonly Dictionary<SideTab, string> _sideTitles = new();
 
     private static readonly (SideTab Tab, string Title)[] RailTitles =
@@ -44,7 +44,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>A vertical title: the name rotated 90 degrees (reading downward) in a canvas of fixed size.</summary>
-    private static ToggleButton MakeRailTitle(string title)
+    private static Button MakeRailTitle(string title)
     {
         const double lineHeight = 15;
         var length = Math.Clamp(title.Length * 7 + 28, 72, 120);
@@ -58,17 +58,16 @@ public sealed partial class MainWindow
             RenderTransformOrigin = new Windows.Foundation.Point(0, 0),
             RenderTransform = new RotateTransform { Angle = 90 },
         };
-        Canvas.SetLeft(text, (SideRailWidth - 2 + lineHeight) / 2);
+        // 24 wide: the tab touches the open panel on its left and leaves 4 of the rail on its right.
+        const double tabWidth = SideRailWidth - 4;
+        Canvas.SetLeft(text, (tabWidth + lineHeight) / 2);
         Canvas.SetTop(text, 0);
-        return new ToggleButton
-        {
-            Content = new Canvas { Width = SideRailWidth - 2, Height = length, Children = { text } },
-            Width = SideRailWidth - 2,
-            Height = length,
-            MinWidth = SideRailWidth - 2,
-            MinHeight = length,
-            Padding = new Thickness(0),
-        };
+        var button = SeamlessTab.Create(new Canvas { Width = tabWidth, Height = length, Children = { text } }, false, TabEdge.Right, new Thickness(0));
+        button.Width = tabWidth;
+        button.Height = length;
+        button.MinWidth = tabWidth;
+        button.MinHeight = length;
+        return button;
     }
 
     private void OnRailTitle(SideTab tab)
@@ -101,10 +100,7 @@ public sealed partial class MainWindow
         foreach (var (tab, button) in _railButtons)
         {
             var current = open && tab == _sideTab;
-            if (button.IsChecked != current)
-            {
-                button.IsChecked = current;
-            }
+            SeamlessTab.Apply(button, current, TabEdge.Right);
             var title = _sideTitles.TryGetValue(tab, out var live) && live.Length > 0 ? live : RailTitles.First(r => r.Tab == tab).Title;
             ToolTipService.SetToolTip(button, title + (current ? " (click to collapse)" : " (click to open)"));
             AutomationProperties.SetName(button, (current ? "Collapse " : "Open ") + RailTitles.First(r => r.Tab == tab).Title);
