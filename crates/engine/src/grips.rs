@@ -4,7 +4,7 @@
 //! The UI calls [`Session::grip_edit`]; every edit runs through a `grip.*` command so it is
 //! undoable and reachable from scripts, the control channel and MCP.
 
-use aad_doc::{DimKind, EntityKind, Handle, LwPolyline};
+use aad_doc::{DimKind, Drawing, Entity, EntityKind, Handle, LwPolyline};
 use aad_geom::{Arc, EPS, Mat3, Polyline, Vec2, Vec3, norm_angle};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -339,10 +339,22 @@ impl Session {
         r.map(|_| ())
     }
 
-    /// Grip points of an object (the indices `grip_edit` takes).
+    /// Grip points of an object (the indices `grip_edit` takes), see [`grips`].
     pub fn grips_of(&self, handle: Handle) -> Result<Vec<Vec2>> {
-        self.doc()?.entity(handle).map(|e| e.kind.grips()).ok_or_else(|| EngineError::Other("no such object".into()))
+        let d = self.doc()?;
+        d.entity(handle).map(|e| grips(d, e)).ok_or_else(|| EngineError::Other("no such object".into()))
     }
+}
+
+/// Every grip of `e` in `doc`, the indices `grip_edit` and `grip.*` take: the object's own grips
+/// ([`EntityKind::grips`]), then for a smart block reference one grip per parameter grip of its
+/// definition (dragging one changes that parameter, see `cmd::smartblock`).
+pub fn grips(doc: &Drawing, e: &Entity) -> Vec<Vec2> {
+    let mut g = e.kind.grips();
+    if let EntityKind::Insert(i) = &e.kind {
+        g.extend(crate::cmd::smartblock::param_grips(doc, i));
+    }
+    g
 }
 
 /// Polyline helper kept public for the UI: segment midpoints are grips too.

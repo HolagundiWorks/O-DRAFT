@@ -7,6 +7,7 @@
     {
       "id": "struct.ibeam",
       "title": "Steel I-section (cross-section)",
+      "grips": [ { "param": "depth", "at": [0, "b"], "axis": "y", "per": 2 }, { "param": "flange", "at": ["a", "-b"], "axis": "x", "per": 2 } ],
       "layer": "S-STEEL", "color": 5, "lineweight": 35,
       "params": [
         { "name": "depth", "label": "Depth", "unit": "mm", "default": 300, "min": 75, "max": 1200 },
@@ -27,6 +28,7 @@
     {
       "id": "struct.channel",
       "title": "Steel channel (cross-section)",
+      "grips": [ { "param": "depth", "at": [0, "b"], "axis": "y", "per": 2 }, { "param": "flange", "at": ["flange", "-b"], "axis": "x" } ],
       "layer": "S-STEEL", "color": 5, "lineweight": 35,
       "params": [
         { "name": "depth", "label": "Depth", "unit": "mm", "default": 200, "min": 50, "max": 600 },
@@ -46,6 +48,7 @@
     {
       "id": "struct.angle",
       "title": "Steel angle (cross-section)",
+      "grips": [ { "param": "leg1", "at": [0, "leg1"], "axis": "y" }, { "param": "leg2", "at": ["leg2", 0], "axis": "x" } ],
       "layer": "S-STEEL", "color": 5, "lineweight": 35,
       "params": [
         { "name": "leg1", "label": "Vertical leg", "unit": "mm", "default": 75, "min": 20, "max": 250 },
@@ -62,6 +65,7 @@
     {
       "id": "struct.hollow.rect",
       "title": "Rectangular / square hollow section",
+      "grips": [ { "param": "width", "at": ["width/2", 0], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth/2"], "axis": "y", "per": 2 } ],
       "layer": "S-STEEL", "color": 5, "lineweight": 35,
       "params": [
         { "name": "width", "label": "Width", "unit": "mm", "default": 100, "min": 20, "max": 500 },
@@ -79,6 +83,7 @@
     {
       "id": "struct.baseplate",
       "title": "Column base plate with anchor bolts (plan)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "breadth", "at": [0, "breadth/2"], "axis": "y", "per": 2 } ],
       "layer": "S-STEEL", "color": 5, "lineweight": 35,
       "params": [
         { "name": "length", "label": "Plate length", "unit": "mm", "default": 400, "min": 150, "max": 1500 },

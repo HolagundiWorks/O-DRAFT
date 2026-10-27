@@ -7,6 +7,7 @@
     {
       "id": "int.wardrobe",
       "title": "Wardrobe with hinged or sliding shutters (plan)",
+      "grips": [ { "param": "width", "at": ["width", "depth/2"], "axis": "x" }, { "param": "depth", "at": ["width/2", "depth"], "axis": "y" } ],
       "layer": "I-JOIN", "color": 5, "lineweight": 20,
       "params": [
         { "name": "width", "label": "Width", "unit": "mm", "default": 1800, "min": 450, "max": 6000 },
@@ -30,6 +31,7 @@
     {
       "id": "int.kitchen.counter",
       "title": "Kitchen counter with sink and hob (plan)",
+      "grips": [ { "param": "length", "at": ["length", "depth/2"], "axis": "x" }, { "param": "depth", "at": ["length/2", "depth"], "axis": "y" }, { "param": "sinkat", "at": ["sinkat", "depth/2"], "axis": "x" }, { "param": "hobat", "at": ["hobat", "depth/2"], "axis": "x" } ],
       "layer": "I-JOIN", "color": 5, "lineweight": 20,
       "params": [
         { "name": "length", "label": "Counter length", "unit": "mm", "default": 3000, "min": 900, "max": 8000 },
@@ -53,6 +55,7 @@
     {
       "id": "int.dining.set",
       "title": "Rectangular dining table with chairs (plan)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "width", "at": [0, "width/2"], "axis": "y", "per": 2 } ],
       "layer": "I-FURN", "color": 3, "lineweight": 20,
       "params": [
         { "name": "length", "label": "Table length", "unit": "mm", "default": 1500, "min": 700, "max": 4000 },
@@ -76,6 +79,7 @@
     {
       "id": "int.bed",
       "title": "Bed with pillows and side tables (plan)",
+      "grips": [ { "param": "length", "at": [0, "headboard + length"], "axis": "y" } ],
       "layer": "I-FURN", "color": 3, "lineweight": 20,
       "params": [
         { "name": "width", "label": "Mattress width", "unit": "mm", "default": 1500, "choices": [
@@ -101,6 +105,7 @@
     {
       "id": "int.sofa",
       "title": "Sofa, one to five seats (plan)",
+      "grips": [ { "param": "seat", "at": ["total/2", "depth/2"], "axis": "x", "per": "2/seats" }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "I-FURN", "color": 3, "lineweight": 20,
       "params": [
         { "name": "seats", "label": "Seats", "default": 3, "min": 1, "max": 5, "integer": true },
@@ -121,6 +126,7 @@
     {
       "id": "int.shelf",
       "title": "Shelving or storage unit (elevation)",
+      "grips": [ { "param": "width", "at": ["width", "height/2"], "axis": "x" }, { "param": "height", "at": ["width/2", "height"], "axis": "y" } ],
       "layer": "I-JOIN", "color": 5, "lineweight": 20,
       "params": [
         { "name": "width", "label": "Width", "unit": "mm", "default": 900, "min": 300, "max": 4000 },

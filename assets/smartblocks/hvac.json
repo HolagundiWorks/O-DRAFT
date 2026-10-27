@@ -7,6 +7,7 @@
     {
       "id": "hvac.duct.rect",
       "title": "Rectangular duct run with size tag (plan)",
+      "grips": [ { "param": "length", "at": ["length", 0], "axis": "x" }, { "param": "width", "at": ["length/2", "width/2"], "axis": "y", "per": 2 } ],
       "layer": "M-HVAC", "color": 4, "lineweight": 25,
       "params": [
         { "name": "length", "label": "Run length", "unit": "mm", "default": 2000, "min": 200, "max": 30000 },
@@ -32,6 +33,7 @@
     {
       "id": "hvac.diffuser.square",
       "title": "Square ceiling diffuser (plan)",
+      "grips": [ { "param": "face", "at": ["face/2", 0], "axis": "x", "per": 2 } ],
       "layer": "M-HVAC", "color": 4, "lineweight": 18,
       "params": [
         { "name": "face", "label": "Face size", "unit": "mm", "default": 600, "min": 150, "max": 1200 },
@@ -51,6 +53,7 @@
     {
       "id": "hvac.grille",
       "title": "Grille or register with blades (face view)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "height", "at": [0, "height/2"], "axis": "y", "per": 2 } ],
       "layer": "M-HVAC", "color": 4, "lineweight": 18,
       "params": [
         { "name": "length", "label": "Length", "unit": "mm", "default": 600, "min": 100, "max": 3000 },
@@ -68,6 +71,7 @@
     {
       "id": "hvac.split.indoor",
       "title": "Split AC indoor unit, wall-mounted (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "M-HVAC", "color": 4, "lineweight": 25,
       "params": [
         { "name": "width", "label": "Unit width", "unit": "mm", "default": 900, "min": 600, "max": 1400 },
@@ -86,6 +90,7 @@
     {
       "id": "hvac.split.outdoor",
       "title": "Split AC outdoor unit (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "M-HVAC", "color": 4, "lineweight": 25,
       "params": [
         { "name": "width", "label": "Unit width", "unit": "mm", "default": 850, "min": 600, "max": 1400 },
@@ -106,6 +111,7 @@
     {
       "id": "hvac.fan.exhaust",
       "title": "Exhaust fan (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
       "layer": "M-HVAC", "color": 4, "lineweight": 18,
       "params": [
         { "name": "dia", "label": "Fan size", "unit": "mm", "default": 300, "min": 150, "max": 900 },

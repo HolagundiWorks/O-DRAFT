@@ -19,6 +19,13 @@
 //! A definition given inline (`definition`) is checked like a built-in one and stored in the
 //! drawing's project data (`smartBlockDefs`), so its references can be edited later.
 //!
+//! A definition may declare grips (`grips`): a point (a formula) tied to one parameter. The grips
+//! follow the reference's own grips ([`crate::grips::grips`]); dragging one with `grip.move`
+//! changes that parameter by the drag along the grip's axis, like `smartblock.edit`.
+//!
+//! Formulas are parsed once, when a definition is read; built-in definitions are read once per
+//! process and shared.
+//!
 //! Limits: 64 KB per definition, 48 parameters, 64 derived values, 2000 items, repeats nested 4
 //! deep and 1000 times each, 5000 objects per block, coordinates within 1e9 mm.
 
@@ -49,6 +56,7 @@ const MAX_OBJECTS: usize = 5000;
 const MAX_COORD: f64 = 1e9;
 const MAX_TEXT: usize = 200;
 const MAX_STORED_DEFS: usize = 500;
+const MAX_GRIPS: usize = 16;
 
 /// The built-in library files, one per discipline.
 const LIBRARY: [(&str, &str); 6] = [
@@ -160,7 +168,30 @@ pub(crate) struct Def {
     params: Vec<ParamDef>,
     #[serde(default)]
     vars: Vec<VarDef>,
+    #[serde(default)]
+    grips: Vec<GripDef>,
     items: Vec<Item>,
+}
+
+/// A grip that sets parameter `param`: drawn at `at`; dragging it by `d` along `axis` changes the
+/// parameter by `per * d`, rounded to `step` and kept in the parameter's range.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GripDef {
+    param: String,
+    at: [Num; 2],
+    axis: Axis,
+    #[serde(default)]
+    per: Option<Num>,
+    #[serde(default)]
+    step: Option<f64>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum Axis {
+    X,
+    Y,
 }
 
 fn seven() -> i16 {
@@ -203,12 +234,30 @@ struct VarDef {
     expr: Num,
 }
 
-/// A number or a formula of the parameters and derived values.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(untagged)]
+/// A number or a formula of the parameters and derived values. A formula is parsed when the
+/// definition is read, so a syntax error refuses the definition and evaluation never re-parses.
+#[derive(Clone, Debug)]
 enum Num {
     N(f64),
-    F(String),
+    F(Box<(String, formula::Expr)>),
+}
+
+impl<'de> Deserialize<'de> for Num {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            N(f64),
+            F(String),
+        }
+        match Raw::deserialize(d)? {
+            Raw::N(v) => Ok(Num::N(v)),
+            Raw::F(t) => {
+                let e = formula::parse(&t).map_err(|e| serde::de::Error::custom(format!("formula `{t}`: {e}")))?;
+                Ok(Num::F(Box::new((t, e))))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -301,8 +350,8 @@ fn err(msg: impl Into<String>) -> EngineError {
 }
 
 /// The built-in library, parsed once. A definition that does not parse is an error, never a panic.
-fn library() -> std::result::Result<&'static [Def], String> {
-    static LIB: OnceLock<std::result::Result<Vec<Def>, String>> = OnceLock::new();
+fn library() -> std::result::Result<&'static [Arc<Def>], String> {
+    static LIB: OnceLock<std::result::Result<Vec<Arc<Def>>, String>> = OnceLock::new();
     LIB.get_or_init(|| {
         let mut out = Vec::new();
         for (name, text) in LIBRARY {
@@ -315,7 +364,7 @@ fn library() -> std::result::Result<&'static [Def], String> {
                     d.discipline = f.discipline.clone();
                 }
                 check_def(&d).map_err(|e| format!("smart block `{}`: {e}", d.id))?;
-                out.push(d);
+                out.push(Arc::new(d));
             }
         }
         Ok(out)
@@ -325,7 +374,7 @@ fn library() -> std::result::Result<&'static [Def], String> {
     .map_err(Clone::clone)
 }
 
-fn builtin(id: &str) -> Result<Option<&'static Def>> {
+fn builtin(id: &str) -> Result<Option<&'static Arc<Def>>> {
     Ok(library().map_err(err)?.iter().find(|d| d.id == id))
 }
 
@@ -384,6 +433,20 @@ fn check_def(d: &Def) -> std::result::Result<(), String> {
             return Err(format!("derived value `{}` is not a valid, unique name", v.name));
         }
     }
+    if d.grips.len() > MAX_GRIPS {
+        return Err(format!("at most {MAX_GRIPS} grips"));
+    }
+    for g in &d.grips {
+        let Some(p) = d.params.iter().find(|p| p.name == g.param) else {
+            return Err(format!("grip: no parameter `{}`", g.param));
+        };
+        if !p.choices.is_empty() {
+            return Err(format!("grip: `{}` is a list of choices", g.param));
+        }
+        if matches!(g.per, Some(Num::N(v)) if !v.is_finite() || v == 0.0) || g.step.is_some_and(|s| !(s.is_finite() && s > 0.0)) {
+            return Err(format!("grip `{}`: `per` must be a non-zero number and `step` positive", g.param));
+        }
+    }
     let mut n = 0;
     count_items(&d.items, 0, &mut n)
 }
@@ -421,15 +484,24 @@ fn check_value(p: &ParamDef, v: f64) -> std::result::Result<(), String> {
     Ok(())
 }
 
-/// A definition by id: the drawing's own (inline ones) first, then the built-in library.
-fn find_def(s: &Session, id: &str) -> Result<Def> {
-    let stored = project::get(s.doc()?, DEFS_KEY);
+/// A definition found by id, with its stored JSON when the drawing keeps it (an inline one).
+#[derive(Clone)]
+struct Found {
+    def: Arc<Def>,
+    stored: Option<Value>,
+}
+
+/// A definition by id: the drawing's own (inline ones) first, then the built-in library (shared,
+/// not copied).
+fn find_def(doc: &aad_doc::Drawing, id: &str) -> Result<Found> {
+    let stored = project::get(doc, DEFS_KEY);
     if let Some(v) = stored.get(id) {
         let d: Def = serde_json::from_value(v.clone()).map_err(|e| err(format!("stored smart block `{id}`: {e}")))?;
         check_def(&d).map_err(|e| err(format!("stored smart block `{id}`: {e}")))?;
-        return Ok(d);
+        return Ok(Found { def: Arc::new(d), stored: Some(v.clone()) });
     }
-    builtin(id)?.cloned().ok_or_else(|| err(format!("no smart block `{id}` (see smartblock.list)")))
+    let def = builtin(id)?.cloned().ok_or_else(|| err(format!("no smart block `{id}` (see smartblock.list)")))?;
+    Ok(Found { def, stored: None })
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -507,10 +579,7 @@ impl Ctx<'_> {
     fn num(&self, n: &Num) -> Result<f64> {
         let v = match n {
             Num::N(v) => *v,
-            Num::F(t) => {
-                let e = formula::parse(t).map_err(|e| err(format!("`{}`: formula `{t}`: {e}", self.def.id)))?;
-                formula::eval(&e, &self.vars).map_err(|e| err(format!("`{}`: formula `{t}`: {e}", self.def.id)))?
-            }
+            Num::F(f) => formula::eval(&f.1, &self.vars).map_err(|e| err(format!("`{}`: formula `{}`: {e}", self.def.id, f.0)))?,
         };
         if v.is_finite() && v.abs() <= MAX_COORD { Ok(v) } else { Err(err(format!("`{}`: a value is out of range", self.def.id))) }
     }
@@ -673,9 +742,11 @@ impl Ctx<'_> {
             }
             Shape::Repeat(r) => {
                 let n = self.count(&r.count)?;
-                let saved = self.vars.get(&r.var).copied();
+                let saved = self.vars.insert(r.var.clone(), 0.0);
                 for i in 0..n {
-                    self.vars.insert(r.var.clone(), i as f64);
+                    if let Some(x) = self.vars.get_mut(&r.var) {
+                        *x = i as f64;
+                    }
                     self.items(&r.items)?;
                 }
                 match saved {
@@ -719,13 +790,19 @@ fn dot(c: Vec2, r: f64) -> EntityKind {
     EntityKind::LwPolyline(aad_doc::LwPolyline { vertices: vs, closed: true, const_width: r, elevation: 0.0, plinegen: false })
 }
 
-/// Evaluate `d` with parameter values `vals` into objects (millimetres, about the origin).
-fn evaluate(d: &Def, vals: &BTreeMap<String, f64>) -> Result<Vec<(Option<String>, Option<String>, EntityKind)>> {
+/// The parameters and derived values of `d` with parameter values `vals`.
+fn context<'a>(d: &'a Def, vals: &BTreeMap<String, f64>) -> Result<Ctx<'a>> {
     let mut cx = Ctx { def: d, vars: vals.clone(), out: Vec::new() };
     for v in &d.vars {
         let x = cx.num(&v.expr)?;
         cx.vars.insert(v.name.clone(), x);
     }
+    Ok(cx)
+}
+
+/// Evaluate `d` with parameter values `vals` into objects (millimetres, about the origin).
+fn evaluate(d: &Def, vals: &BTreeMap<String, f64>) -> Result<Vec<(Option<String>, Option<String>, EntityKind)>> {
+    let mut cx = context(d, vals)?;
     cx.items(&d.items)?;
     if cx.out.is_empty() {
         return Err(err(format!("`{}` draws nothing with these parameters", d.id)));
@@ -733,11 +810,11 @@ fn evaluate(d: &Def, vals: &BTreeMap<String, f64>) -> Result<Vec<(Option<String>
     Ok(cx.out)
 }
 
-fn block_name(d: &Def, vals: &BTreeMap<String, f64>, inline: bool) -> String {
+fn block_name(d: &Def, vals: &BTreeMap<String, f64>, stored: Option<&Value>) -> String {
     let mut key = json!({ "id": d.id, "params": params_json(vals) });
-    if inline {
+    if let Some(v) = stored {
         // An inline definition may differ from a built-in one with the same id.
-        key["def"] = json!(aad_param::fnv64(format!("{d:?}").as_bytes()));
+        key["def"] = json!(aad_param::fnv64(aad_param::canonical(v).as_bytes()));
     }
     let h = aad_param::fnv64(aad_param::canonical(&key).as_bytes()) & 0xFFFF_FFFF;
     let id: String = d.id.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect();
@@ -745,8 +822,8 @@ fn block_name(d: &Def, vals: &BTreeMap<String, f64>, inline: bool) -> String {
 }
 
 /// Make (or reuse) the block for `d` with `vals`; returns its name.
-fn build(s: &mut Session, d: &Def, vals: &BTreeMap<String, f64>, inline: bool) -> Result<String> {
-    let name = block_name(d, vals, inline);
+fn build(s: &mut Session, d: &Def, vals: &BTreeMap<String, f64>, stored: Option<&Value>) -> Result<String> {
+    let name = block_name(d, vals, stored);
     if s.doc()?.block(&name).is_some() {
         return Ok(name);
     }
@@ -810,6 +887,7 @@ fn spec_json(d: &Def) -> Value {
         "discipline": d.discipline,
         "description": d.description,
         "layer": d.layer,
+        "grips": d.grips.iter().map(|g| json!({ "param": g.param, "axis": if g.axis == Axis::X { "x" } else { "y" } })).collect::<Vec<_>>(),
         "params": d.params.iter().map(|p| json!({
             "name": p.name,
             "label": if p.label.is_empty() { &p.name } else { &p.label },
@@ -852,22 +930,23 @@ fn run_list(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn run_insert(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "smartblock.insert";
-    let (def, inline) = match p.get("definition") {
+    let (found, inline) = match p.get("definition") {
         Some(v) if !v.is_null() => {
             if v.to_string().len() > MAX_DEF_BYTES {
                 return Err(bad(CMD, "the definition is larger than 64 KB"));
             }
             let d: Def = serde_json::from_value(v.clone()).map_err(|e| bad(CMD, format!("definition: {e}")))?;
             check_def(&d).map_err(|e| bad(CMD, format!("definition: {e}")))?;
-            (d, Some(v.clone()))
+            (Found { def: Arc::new(d), stored: Some(v.clone()) }, true)
         }
         _ => {
             let id = str_param(p, "id").ok_or_else(|| bad(CMD, "`id` or `definition` is required (see smartblock.list)"))?;
-            (find_def(s, id)?, None)
+            (find_def(s.doc()?, id)?, false)
         }
     };
+    let def = &*found.def;
     let at = point_req(CMD, p, "at")?;
-    let vals = resolve(CMD, &def, &Map::new(), &given_params(CMD, p)?)?;
+    let vals = resolve(CMD, def, &Map::new(), &given_params(CMD, p)?)?;
     let user_scale = f64_or(p, "scale", 1.0);
     if !user_scale.is_finite() || user_scale <= 0.0 {
         return Err(bad(CMD, "`scale` must be a positive number"));
@@ -884,20 +963,21 @@ fn run_insert(s: &mut Session, p: &Value) -> Result<Value> {
         None if !def.layer.is_empty() => Some(def.layer.clone()),
         None => None,
     };
-    if let Some(v) = &inline {
-        let stored = project::get(s.doc()?, DEFS_KEY).as_object().cloned().unwrap_or_default();
+    if inline {
+        let mut stored = project::get(s.doc()?, DEFS_KEY).as_object().cloned().unwrap_or_default();
         if stored.len() >= MAX_STORED_DEFS && !stored.contains_key(&def.id) {
             return Err(bad(CMD, format!("the drawing already keeps {MAX_STORED_DEFS} smart block definitions")));
         }
         // Built first: a definition that fails to draw is not kept.
-        let name = build(s, &def, &vals, true)?;
-        let mut stored = stored;
-        stored.insert(def.id.clone(), v.clone());
+        let name = build(s, def, &vals, found.stored.as_ref())?;
+        if let Some(v) = &found.stored {
+            stored.insert(def.id.clone(), v.clone());
+        }
         project::set(s.doc_mut()?, DEFS_KEY, &Value::Object(stored));
-        return place(s, &def, &name, at, scale, rot, layer, &vals);
+        return place(s, def, &name, at, scale, rot, layer, &vals);
     }
-    let name = build(s, &def, &vals, false)?;
-    place(s, &def, &name, at, scale, rot, layer, &vals)
+    let name = build(s, def, &vals, found.stored.as_ref())?;
+    place(s, def, &name, at, scale, rot, layer, &vals)
 }
 
 /// Insert block `name` and put the reference on `layer` (the definition's layer is created with its look).
@@ -929,37 +1009,150 @@ fn place(
 fn run_get(s: &mut Session, p: &Value) -> Result<Value> {
     for h in targets(s, p)? {
         if let Some((block, id, params)) = smart_ref(s, h)? {
-            let def = find_def(s, &id)?;
-            return Ok(json!({ "handle": h.hex(), "id": id, "title": def.title, "block": block, "params": params, "spec": spec_json(&def) }));
+            let found = find_def(s.doc()?, &id)?;
+            let def = &*found.def;
+            return Ok(json!({ "handle": h.hex(), "id": id, "title": def.title, "block": block, "params": params, "spec": spec_json(def) }));
         }
     }
     Err(bad("smartblock.get", "no smart block reference given or selected"))
 }
 
+/// Point reference `h` at the block of `found` with `vals` (made when missing); returns its name.
+fn repoint(s: &mut Session, h: aad_doc::Handle, found: &Found, vals: &BTreeMap<String, f64>) -> Result<String> {
+    let name = build(s, &found.def, vals, found.stored.as_ref())?;
+    let n = name.clone();
+    s.doc_mut()?.modify_entity(h, move |e| {
+        if let EntityKind::Insert(i) = &mut e.kind {
+            i.block = n;
+        }
+    })?;
+    Ok(name)
+}
+
 fn run_edit(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "smartblock.edit";
     let given = given_params(CMD, p)?;
+    let hs = targets(s, p)?;
+    edit_handles(s, CMD, &hs, &given)
+}
+
+/// Set parameters `given` on the smart block references among `hs` (others are skipped); an error
+/// when there are none. `smartblock.edit` and the Properties panel (`properties.set` with
+/// `sb:<name>` keys) use it.
+pub(crate) fn edit_handles(s: &mut Session, cmd: &str, hs: &[aad_doc::Handle], given: &Map<String, Value>) -> Result<Value> {
     let mut edited = Vec::new();
     let mut blocks = Vec::new();
-    for h in targets(s, p)? {
+    // One lookup per definition, however many references share it.
+    let mut defs: BTreeMap<String, Found> = BTreeMap::new();
+    for &h in hs {
         let Some((_, id, stored)) = smart_ref(s, h)? else { continue };
-        let def = find_def(s, &id)?;
-        let inline = project::get(s.doc()?, DEFS_KEY).get(&id).is_some();
-        let vals = resolve(CMD, &def, &stored, &given)?;
-        let name = build(s, &def, &vals, inline)?;
-        let n = name.clone();
-        s.doc_mut()?.modify_entity(h, move |e| {
-            if let EntityKind::Insert(i) = &mut e.kind {
-                i.block = n;
+        let found = match defs.get(&id) {
+            Some(f) => f.clone(),
+            None => {
+                let f = find_def(s.doc()?, &id)?;
+                defs.insert(id, f.clone());
+                f
             }
-        })?;
+        };
+        let vals = resolve(cmd, &found.def, &stored, given)?;
+        blocks.push(repoint(s, h, &found, &vals)?);
         edited.push(h.hex());
-        blocks.push(name);
     }
     if edited.is_empty() {
-        return Err(bad(CMD, "no smart block reference given or selected"));
+        return Err(bad(cmd, "no smart block reference given or selected"));
     }
     Ok(json!({ "edited": edited, "blocks": blocks }))
+}
+
+/// Prefix of the Properties panel keys for smart block parameters (`sb:width`).
+pub(crate) const FIELD_PREFIX: &str = "sb:";
+
+/// Properties panel rows for a smart block reference's parameters (none for other inserts):
+/// `{key: "sb:<name>", label, value, text: false, choices?: [labels]}`; a choice's value is its
+/// label. `properties.set` with these keys edits the parameters like `smartblock.edit`.
+pub fn property_fields(doc: &aad_doc::Drawing, ins: &aad_doc::Insert) -> Vec<Value> {
+    let Some(b) = doc.block(&ins.block) else { return Vec::new() };
+    let Some((id, params)) = smart_of(b) else { return Vec::new() };
+    let Ok(found) = find_def(doc, &id) else { return Vec::new() };
+    let Ok(vals) = resolve("", &found.def, &params, &Map::new()) else { return Vec::new() };
+    let mut out = vec![json!({ "label": "Smart block", "value": found.def.title, "text": true })];
+    for p in &found.def.params {
+        let v = vals.get(&p.name).copied().unwrap_or(p.default);
+        let label = match (p.label.is_empty(), p.unit.is_empty()) {
+            (true, true) => p.name.clone(),
+            (true, false) => format!("{} ({})", p.name, p.unit),
+            (false, true) => p.label.clone(),
+            (false, false) => format!("{} ({})", p.label, p.unit),
+        };
+        let key = format!("{FIELD_PREFIX}{}", p.name);
+        if p.choices.is_empty() {
+            out.push(json!({ "key": key, "label": label, "value": fmt_num(v), "text": false }));
+        } else {
+            let value = p.choices.iter().find(|c| c.value == v).map_or_else(|| fmt_num(v), |c| c.label.clone());
+            let choices: Vec<&str> = p.choices.iter().map(|c| c.label.as_str()).collect();
+            out.push(json!({ "key": key, "label": label, "value": value, "text": false, "choices": choices }));
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Grips
+
+/// A smart block reference's definition, parameter values and block-to-world transform.
+fn grip_context(doc: &aad_doc::Drawing, ins: &aad_doc::Insert) -> Option<(Found, BTreeMap<String, f64>, aad_geom::Mat3)> {
+    let b = doc.block(&ins.block)?;
+    let (id, params) = smart_of(b)?;
+    let found = find_def(doc, &id).ok()?;
+    if found.def.grips.is_empty() {
+        return None;
+    }
+    let vals = resolve("", &found.def, &params, &Map::new()).ok()?;
+    Some((found, vals, ins.transform(b.base.xy())))
+}
+
+/// The parameter grips of a smart block reference, in world coordinates (none for other inserts).
+pub(crate) fn param_grips(doc: &aad_doc::Drawing, ins: &aad_doc::Insert) -> Vec<Vec2> {
+    let Some((found, vals, m)) = grip_context(doc, ins) else { return Vec::new() };
+    let Ok(cx) = context(&found.def, &vals) else { return Vec::new() };
+    found.def.grips.iter().filter_map(|g| cx.pt(&g.at).ok()).map(|q| m.apply(q)).collect()
+}
+
+/// Drag parameter grip `index` of reference `h` to world point `to`: the parameter changes by the
+/// drag along the grip's axis (block millimetres times `per`), rounded to the grip's step and kept
+/// in range. One undo step with the rest of the command.
+pub(crate) fn drag_grip(s: &mut Session, cmd: &str, h: aad_doc::Handle, index: usize, to: Vec2) -> Result<Value> {
+    let doc = s.doc()?;
+    let Some(EntityKind::Insert(ins)) = doc.entity(h).map(|e| &e.kind) else { return Err(bad(cmd, "no such grip")) };
+    let (found, mut vals, m) = grip_context(doc, ins).ok_or_else(|| bad(cmd, "no such grip"))?;
+    let g = found.def.grips.get(index).ok_or_else(|| bad(cmd, "no such grip"))?;
+    let p = found.def.params.iter().find(|p| p.name == g.param).ok_or_else(|| bad(cmd, "no such grip"))?;
+    let cx = context(&found.def, &vals)?;
+    let from = cx.pt(&g.at)?;
+    let per = match &g.per {
+        Some(n) => cx.num(n)?,
+        None => 1.0,
+    };
+    let local = m.inverse().ok_or_else(|| bad(cmd, "the reference has zero scale"))?.apply(to);
+    if !local.is_finite() {
+        return Err(bad(cmd, "invalid point"));
+    }
+    let d = if g.axis == Axis::X { local.x - from.x } else { local.y - from.y };
+    let old = vals.get(&p.name).copied().unwrap_or(p.default);
+    let step = if p.integer { g.step.unwrap_or(1.0).max(1.0).round() } else { g.step.unwrap_or(1.0) };
+    let mut v = ((old + per * d) / step).round() * step;
+    if let Some(lo) = p.min {
+        v = v.max(lo);
+    }
+    if let Some(hi) = p.max {
+        v = v.min(hi);
+    }
+    if !v.is_finite() || check_value(p, v).is_err() {
+        return Err(bad(cmd, format!("`{}` cannot take that value", p.name)));
+    }
+    vals.insert(p.name.clone(), v);
+    let name = repoint(s, h, &found, &vals)?;
+    Ok(json!({ "handle": h.hex(), "block": name, "param": p.name, "value": v }))
 }
 
 #[cfg(test)]

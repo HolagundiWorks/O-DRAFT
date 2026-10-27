@@ -34,6 +34,34 @@ the control channel, MCP and the agent reach the same code. Programmatic calls n
 - Menus: Insert > Smart Block > Insert... opens a form (block, parameters as text, rotation, then
   the insertion point); Insert > Smart Block > List; Modify > Object > Smart Block... asks
   for the parameters (text) and runs `smartblock.edit` on the selection. Aliases: `sbinsert`, `smartblock`, `sblist`, `sbedit`.
+- `properties.set` takes smart block parameters as `sb:<name>` keys (`{"handles": [...], "sb:width": 300,
+  "sb:bar": "20"}`) and edits them like `smartblock.edit`.
+
+### Editing a placed smart block
+
+- **Properties panel.** With one smart block reference selected, the Properties panel (WinUI) and
+  Quick Properties (egui) list its parameters after Name, Rotation and Scale: a number field, or a
+  list for a parameter with choices. A change runs `properties.set` with the `sb:<name>` key. The
+  rows come from `aad_engine::smart_block_fields(doc, insert)`.
+- **Grips.** A definition can declare parameter grips (see `grips` below). They follow the
+  reference's own grip (the insertion point) in `Session::grips_of` and `aad_engine::grips::grips`,
+  which both front ends draw. Dragging one (`grip.move` with that grip index) changes its parameter
+  by the drag along the grip's axis in block millimetres times `per`, rounded to `step` (default 1)
+  and kept within the parameter's range; the reference is pointed at the block for the new value,
+  as `smartblock.edit` does. Rotation, scale and drawing units are taken into account. 34 of the 39
+  built-in blocks have grips (for example width and depth of a column, the length of a duct, the
+  sink and hob positions of a kitchen counter).
+
+### Windows app
+
+- Blocks panel: a **Smart blocks...** button opens the Smart Blocks window, and a **Discipline
+  blocks** section lists the five DXF sets below as collapsed groups; thumbnails are made when a
+  group is first opened. Clicking a thumbnail starts `insert.place` with that file, as for the
+  furniture set.
+- Smart Blocks window (Insert > Smart Block > Insert..., or the button): filter by discipline,
+  pick a block, fill in its parameters (lists for choices, numbers with the range as a tooltip) and
+  a rotation; **Insert** starts the `smartblock.insert` form with these values and the insertion
+  point is picked on the drawing.
 
 Examples (control channel or `aad-cli run --cmd`):
 
@@ -105,6 +133,10 @@ Unknown keys are refused.
   as `mm`, `h`, `round`), `default`, optional `label`, `unit`, `min`, `max`, `integer`, `choices`
   (label and value). Defaults must satisfy the range.
 - **vars**: derived values, evaluated in order after the parameters.
+- **grips** (optional, at most 16): `{param, at: [x, y], axis: "x" | "y", per?, step?}`. `param`
+  names a parameter that is not a list of choices; `at` is where the grip is drawn (formulas);
+  dragging it by `d` mm along `axis` adds `per * d` to the parameter (`per` is a number or formula,
+  default 1; use 2 for a size measured about the centre), rounded to `step` (default 1).
 - **Numbers**: every coordinate, size and count is a number or a formula in the `aad-param`
   formula language (`+ - * /`, `^` with a whole exponent, parentheses, `min`, `max`, `abs`,
   `sqrt`, `round`, `floor`, `ceil`). There are no trigonometric functions; use `ring` for points
@@ -127,7 +159,7 @@ Unknown keys are refused.
 | `repeat` | `{var, count, items}`; `var` counts from 0 |
 
 Limits (larger input is refused, never truncated): 64 KB per inline definition, 48 parameters,
-64 derived values, 2000 items, repeats nested 4 deep and at most 1000 times, 5000 objects per
+64 derived values, 16 grips, 2000 items, repeats nested 4 deep and at most 1000 times, 5000 objects per
 block, coordinates within 1e9 mm, text 200 characters.
 
 ## Discipline DXF blocks
@@ -136,7 +168,8 @@ block, coordinates within 1e9 mm, text 200 characters.
 `catalog.json` each (same shape as the furniture catalog). They are original Innerscene models
 released under CC0 1.0; each item's licence was read from its page on 2026-10-27 and is recorded in
 `ATTRIBUTION.md`. Insert one with `insert {name, file: "<path>", at}`. The Windows package and the
-WinUI build copy them to `blocks\` beside the program. The Blocks panel does not list them yet.
+WinUI build copy them to `blocks\` beside the program, and the WinUI Blocks panel lists them
+(see Windows app above). The egui window does not list them.
 
 ### Sources reviewed and not bundled
 
@@ -154,6 +187,15 @@ site's terms.
 No openly licensed source of AutoCAD dynamic blocks was found for these disciplines, which is why
 the parametric library is O-Draft's own.
 
+## Performance
+
+- Every formula is parsed once, when a definition is read; evaluation only walks the parsed
+  expression, including inside repeats.
+- The built-in library is read and checked once per process and shared (`Arc`), never copied per
+  command. `smartblock.edit` looks each definition up once however many references it edits.
+- Block names of inline definitions hash the definition's canonical JSON.
+- A block is made once per distinct parameter set; references with the same parameters share it.
+
 ## Tests
 
 - `crates/engine/src/cmd/smartblock.rs` (unit): the library parses, its ids match the form list,
@@ -161,13 +203,18 @@ the parametric library is O-Draft's own.
 - `crates/engine/tests/smartblock.rs`: insert and reuse, edit and undo, choice labels, drawing-unit
   scale, every library block inserts, DXF round trip (built-in and inline), hostile definitions and
   values are refused without a panic and without changing the drawing, the insert and edit
-  forms, every catalogued discipline DXF reads.
+  forms, every catalogued discipline DXF reads, every parameter grip lies on its block and dragging
+  it outwards grows its parameter, a grip drag under rotation and metre units (range clamp, undo,
+  bad index), the Properties rows and `properties.set` with `sb:` keys.
 - `cargo xtask assets` checks every file under `assets/blocks` and `assets/smartblocks` has an
   `ATTRIBUTION.md` row.
 
 ## Not done
 
-- Grips or Properties-panel fields for smart block parameters (edit is by command or form).
-- A smart block section in the Blocks panel, and the discipline DXFs in the Blocks panel.
+- The WinUI changes (Smart Blocks window, Blocks panel sections) have not been compiled or run on
+  Windows yet; the Rust side they call is tested.
+- Grips for count parameters (bars, chairs, shutters) and for the switch board; these are edited
+  in Properties.
+- Discipline DXFs and a smart block picker in the egui window.
 - Reading AutoCAD dynamic-block data from DWG/DXF.
 - Take-off rows from smart block parameters (for example column or footing concrete).

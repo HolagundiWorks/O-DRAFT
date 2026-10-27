@@ -158,6 +158,12 @@ fn hostile_params_never_panic() {
         json!({ "definition": { "id": "x", "title": "X", "items": [{ "text": { "at": [0, 0], "height": 0, "value": "x" } }] }, "at": [0, 0] }),
         json!({ "definition": { "id": "x", "title": "X", "items": [{ "poly": { "pts": [[0, 0]] } }] }, "at": [0, 0] }),
         json!({ "definition": { "id": "x", "title": "X", "extra": 1, "items": [{ "line": [0, 0, 1, 1] }] }, "at": [0, 0] }),
+        json!({ "definition": { "id": "x", "title": "X", "items": [{ "line": [0, 0, "1 +", 1] }] }, "at": [0, 0] }),
+        json!({ "definition": { "id": "x", "title": "X", "grips": [{ "param": "nope", "at": [0, 0], "axis": "x" }], "items": [{ "line": [0, 0, 1, 1] }] }, "at": [0, 0] }),
+        json!({ "definition": { "id": "x", "title": "X", "params": [{ "name": "a", "default": 1 }], "grips": [{ "param": "a", "at": [0, 0], "axis": "z" }], "items": [{ "line": [0, 0, 1, 1] }] }, "at": [0, 0] }),
+        json!({ "definition": { "id": "x", "title": "X", "params": [{ "name": "a", "default": 1 }], "grips": [{ "param": "a", "at": [0, 0], "axis": "x", "per": 0 }], "items": [{ "line": [0, 0, 1, 1] }] }, "at": [0, 0] }),
+        json!({ "definition": { "id": "x", "title": "X", "params": [{ "name": "a", "default": 1 }], "grips": [{ "param": "a", "at": [0, 0], "axis": "x", "step": -1 }], "items": [{ "line": [0, 0, 1, 1] }] }, "at": [0, 0] }),
+        json!({ "definition": { "id": "x", "title": "X", "params": [{ "name": "a", "default": 1, "choices": [{ "label": "One", "value": 1 }] }], "grips": [{ "param": "a", "at": [0, 0], "axis": "x" }], "items": [{ "line": [0, 0, 1, 1] }] }, "at": [0, 0] }),
     ] {
         refused(&mut s, p);
     }
@@ -167,6 +173,102 @@ fn hostile_params_never_panic() {
     let r = s.execute("smartblock.insert", &json!({ "id": "rcc.column.rect", "at": [0, 0] })).unwrap();
     assert!(s.execute("smartblock.edit", &json!({ "handle": r["handle"], "params": { "width": -5 } })).is_err());
     assert!(s.execute("smartblock.get", &json!({ "handle": l["handle"] })).is_err());
+}
+
+/// (parameter grips, all grips) of reference `h`.
+fn grip_points(s: &Session, h: &str) -> (Vec<aad_engine::geom::Vec2>, Vec<aad_engine::geom::Vec2>) {
+    let h = aad_engine::doc::Handle::parse_hex(h).unwrap();
+    let all = s.grips_of(h).unwrap();
+    let own = s.doc().unwrap().entity(h).unwrap().kind.grips().len();
+    (all[own..].to_vec(), all)
+}
+
+#[test]
+fn every_parameter_grip_sits_on_the_block_and_drags_its_parameter() {
+    let list = metric().execute("smartblock.list", &json!({})).unwrap();
+    let mut with_grips = 0;
+    for b in list["blocks"].as_array().unwrap() {
+        let id = b["id"].as_str().unwrap();
+        let specs = b["grips"].as_array().unwrap();
+        let mut s = metric();
+        let r = s.execute("smartblock.insert", &json!({ "id": id, "at": [0, 0] })).unwrap();
+        let h = r["handle"].as_str().unwrap().to_string();
+        let (pg, all) = grip_points(&s, &h);
+        assert_eq!(pg.len(), specs.len(), "{id}: one grip per grip definition");
+        if specs.is_empty() {
+            continue;
+        }
+        with_grips += 1;
+        let ext = s.doc().unwrap().extents(&aad_engine::doc::Space::Model).expand(1.0);
+        for (k, g) in pg.iter().enumerate() {
+            assert!(ext.contains(*g), "{id}: grip {k} at {g:?} is off the block");
+        }
+        for (k, spec) in specs.iter().enumerate() {
+            let mut s = metric();
+            let h = s.execute("smartblock.insert", &json!({ "id": id, "at": [0, 0] })).unwrap()["handle"].as_str().unwrap().to_string();
+            let name = spec["param"].as_str().unwrap();
+            let before = s.execute("smartblock.get", &json!({ "handle": h })).unwrap()["params"][name].as_f64().unwrap();
+            let d = if spec["axis"] == "x" { [20.0, 0.0] } else { [0.0, 20.0] };
+            let to = [pg[k].x + d[0], pg[k].y + d[1]];
+            let index = all.len() - pg.len() + k;
+            s.execute("grip.move", &json!({ "handle": h, "index": index, "to": to })).unwrap_or_else(|e| panic!("{id} grip {name}: {e}"));
+            let after = s.execute("smartblock.get", &json!({ "handle": h })).unwrap()["params"][name].as_f64().unwrap();
+            let max = b["params"].as_array().unwrap().iter().find(|p| p["name"] == name).unwrap()["max"].as_f64();
+            assert!(after > before || Some(before) == max, "{id}: dragging the {name} grip outwards gave {before} -> {after}");
+        }
+    }
+    assert!(with_grips >= 30, "most library blocks have grips ({with_grips})");
+}
+
+#[test]
+fn a_grip_drag_follows_rotation_units_and_range_and_undoes() {
+    let mut s = metric();
+    let r = s.execute("smartblock.insert", &json!({ "id": "rcc.column.rect", "at": [10, 5], "rotation": 90, "units": "m" })).unwrap();
+    let h = r["handle"].as_str().unwrap().to_string();
+    let (pg, all) = grip_points(&s, &h);
+    let width = all.len() - pg.len();
+    // Rotated 90°: the width grip (block +x) is above the insertion point, 0.115 m away.
+    assert!((pg[0].x - 10.0).abs() < 1e-9 && (pg[0].y - 5.115).abs() < 1e-9, "{:?}", pg[0]);
+    // Drag 0.1 m further out along block +x (world +y): width grows by 2 × 100 mm.
+    s.execute("grip.move", &json!({ "handle": h, "index": width, "to": [10.3, 5.215] })).unwrap();
+    let got = s.execute("smartblock.get", &json!({ "handle": h })).unwrap();
+    assert_eq!(got["params"]["width"], 430.0);
+    assert_eq!(reference(&s, &h).1, 10.0, "the reference stays where it was");
+    // Far beyond the range: kept at the maximum.
+    s.execute("grip.move", &json!({ "handle": h, "index": width, "to": [10.0, 50.0] })).unwrap();
+    assert_eq!(s.execute("smartblock.get", &json!({ "handle": h })).unwrap()["params"]["width"], 2000.0);
+    s.execute("undo", &json!({})).unwrap();
+    assert_eq!(s.execute("smartblock.get", &json!({ "handle": h })).unwrap()["params"]["width"], 430.0);
+    // A grip index past the last one is refused.
+    assert!(s.execute("grip.move", &json!({ "handle": h, "index": all.len(), "to": [0, 0] })).is_err());
+}
+
+#[test]
+fn the_properties_rows_show_and_set_parameters() {
+    let mut s = metric();
+    let r = s.execute("smartblock.insert", &json!({ "id": "rcc.column.rect", "at": [0, 0] })).unwrap();
+    let h = r["handle"].as_str().unwrap().to_string();
+    let fields = {
+        let d = s.doc().unwrap();
+        let e = d.entity(aad_engine::doc::Handle::parse_hex(&h).unwrap()).unwrap();
+        let EntityKind::Insert(i) = &e.kind else { panic!() };
+        aad_engine::smart_block_fields(d, i)
+    };
+    let row = |k: &str| fields.iter().find(|f| f["key"] == k).cloned().unwrap_or_else(|| panic!("no row {k}"));
+    assert_eq!(row("sb:width")["value"], "230");
+    assert_eq!(row("sb:width")["label"], "Width (mm)");
+    assert_eq!(row("sb:bar")["value"], "16");
+    assert!(row("sb:bar")["choices"].as_array().unwrap().iter().any(|c| c == "20"));
+    assert_eq!(fields[0]["label"], "Smart block");
+
+    s.execute("properties.set", &json!({ "handles": [h], "sb:width": 300, "sb:bar": "20" })).unwrap();
+    let got = s.execute("smartblock.get", &json!({ "handle": h })).unwrap();
+    assert_eq!((got["params"]["width"].as_f64(), got["params"]["bar"].as_f64()), (Some(300.0), Some(20.0)));
+    assert!(s.execute("properties.set", &json!({ "handles": [h], "sb:width": 5 })).is_err(), "out of range is refused");
+    assert!(s.execute("properties.set", &json!({ "handles": [h], "sb:nope": 5 })).is_err());
+    // A plain line has no smart block rows.
+    let l = s.execute("line", &json!({ "points": [[0, 0], [10, 0]] })).unwrap();
+    assert!(s.execute("properties.set", &json!({ "handles": [l["handle"]], "sb:width": 300 })).is_err());
 }
 
 #[test]

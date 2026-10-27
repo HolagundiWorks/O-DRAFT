@@ -26,6 +26,7 @@
     {
       "id": "elec.socket",
       "title": "Socket outlet 6 A / 16 A (plan, on a wall)",
+      "grips": [ { "param": "size", "at": ["size/2", 0], "axis": "x", "per": 2 } ],
       "layer": "E-POINT", "color": 2, "lineweight": 18,
       "params": [
         { "name": "amp", "label": "Rating", "default": 6, "choices": [ { "label": "6A", "value": 6 }, { "label": "16A", "value": 16 }, { "label": "20A", "value": 20 } ] },
@@ -43,6 +44,7 @@
     {
       "id": "elec.light",
       "title": "Light point (plan)",
+      "grips": [ { "param": "size", "at": ["size/2", 0], "axis": "x", "per": 2 } ],
       "layer": "E-CEIL", "color": 6, "lineweight": 18,
       "params": [
         { "name": "size", "label": "Symbol size", "unit": "mm", "default": 200, "min": 50, "max": 600 },
@@ -59,6 +61,7 @@
     {
       "id": "elec.fan.ceiling",
       "title": "Ceiling fan with sweep (plan)",
+      "grips": [ { "param": "size", "at": [0, "r"], "axis": "y", "per": 2 } ],
       "layer": "E-CEIL", "color": 6, "lineweight": 18,
       "params": [
         { "name": "sweep", "label": "Sweep", "unit": "mm", "default": 1200, "min": 600, "max": 1800 },
@@ -80,6 +83,7 @@
     {
       "id": "elec.db",
       "title": "Distribution board (plan, on a wall)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "E-POINT", "color": 2, "lineweight": 25,
       "params": [
         { "name": "ways", "label": "Ways", "default": 8, "min": 2, "max": 48, "integer": true },
@@ -98,6 +102,7 @@
     {
       "id": "elec.downlight",
       "title": "Recessed downlight (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
       "layer": "E-CEIL", "color": 6, "lineweight": 18,
       "params": [
         { "name": "dia", "label": "Cut-out diameter", "unit": "mm", "default": 150, "min": 50, "max": 400 },

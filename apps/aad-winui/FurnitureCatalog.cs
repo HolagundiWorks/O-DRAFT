@@ -3,7 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace Aad.WinUi;
 
-/// <summary>Bundled standard furniture DXF set beside the program (<c>furniture/standard</c>).</summary>
+/// <summary>Bundled DXF block sets beside the program: the standard furniture set
+/// (<c>furniture/standard</c>) and the discipline sets (<c>blocks/&lt;discipline&gt;</c>).
+/// Each folder has a <c>catalog.json</c>; files it lists that are missing are skipped.</summary>
 internal static class FurnitureCatalog
 {
     internal sealed record Item(
@@ -20,7 +22,14 @@ internal static class FurnitureCatalog
 
     internal sealed record Entry(Item Item, string Path);
 
+    /// <summary>One discipline set: folder id, catalogue name and its blocks.</summary>
+    internal sealed record Section(string Id, string Name, IReadOnlyList<Entry> Entries);
+
+    /// <summary>Discipline folders under <c>blocks</c>, in panel order.</summary>
+    private static readonly string[] DisciplineIds = { "plumbing", "hvac", "electrical", "structural", "interior" };
+
     private static IReadOnlyList<Entry>? _entries;
+    private static IReadOnlyList<Section>? _sections;
     private static string? _name;
 
     internal static string Name => _name ?? "Standard furniture";
@@ -29,49 +38,78 @@ internal static class FurnitureCatalog
     {
         if (_entries != null)
             return _entries;
-        foreach (var dir in CandidateDirs())
+        foreach (var dir in CandidateDirs("furniture", "standard"))
         {
-            var catalog = System.IO.Path.Combine(dir, "catalog.json");
-            if (!System.IO.File.Exists(catalog))
-                continue;
-            try
+            if (Read(dir) is (string name, List<Entry> list))
             {
-                var raw = JsonSerializer.Deserialize<CatalogFile>(System.IO.File.ReadAllText(catalog));
-                if (raw?.Items == null || raw.Items.Count == 0)
-                    continue;
-                var list = new List<Entry>();
-                foreach (var item in raw.Items)
-                {
-                    var path = System.IO.Path.Combine(dir, item.File);
-                    if (System.IO.File.Exists(path))
-                        list.Add(new Entry(item, path));
-                }
-                if (list.Count == 0)
-                    continue;
-                _name = string.IsNullOrWhiteSpace(raw.Name) ? "Standard furniture" : raw.Name;
+                _name = string.IsNullOrWhiteSpace(name) ? "Standard furniture" : name;
                 _entries = list;
                 return _entries;
-            }
-            catch (JsonException)
-            {
-                /* try next folder */
-            }
-            catch (IOException)
-            {
-                /* try next folder */
             }
         }
         _entries = Array.Empty<Entry>();
         return _entries;
     }
 
-    private static IEnumerable<string> CandidateDirs()
+    /// <summary>The discipline sets that are present (read once).</summary>
+    internal static IReadOnlyList<Section> LoadDisciplines()
+    {
+        if (_sections != null)
+            return _sections;
+        var sections = new List<Section>();
+        foreach (var id in DisciplineIds)
+        {
+            foreach (var dir in CandidateDirs("blocks", id))
+            {
+                if (Read(dir) is (string name, List<Entry> list))
+                {
+                    sections.Add(new Section(id, string.IsNullOrWhiteSpace(name) ? id : name, list));
+                    break;
+                }
+            }
+        }
+        _sections = sections;
+        return _sections;
+    }
+
+    /// <summary>The catalogue in <paramref name="dir"/> with the files that exist, or null.</summary>
+    private static (string Name, List<Entry> Entries)? Read(string dir)
+    {
+        var catalog = System.IO.Path.Combine(dir, "catalog.json");
+        if (!System.IO.File.Exists(catalog))
+            return null;
+        try
+        {
+            var raw = JsonSerializer.Deserialize<CatalogFile>(System.IO.File.ReadAllText(catalog));
+            if (raw?.Items == null || raw.Items.Count == 0)
+                return null;
+            var list = new List<Entry>();
+            foreach (var item in raw.Items.Take(2000))
+            {
+                if (string.IsNullOrWhiteSpace(item.File) || item.File.Contains("..", StringComparison.Ordinal))
+                    continue;
+                var path = System.IO.Path.Combine(dir, item.File);
+                if (System.IO.File.Exists(path))
+                    list.Add(new Entry(item, path));
+            }
+            return list.Count == 0 ? null : (raw.Name ?? "", list);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private static IEnumerable<string> CandidateDirs(string group, string set)
     {
         var baseDir = AppContext.BaseDirectory;
-        yield return System.IO.Path.Combine(baseDir, "furniture", "standard");
-        yield return System.IO.Path.Combine(baseDir, "assets", "furniture", "standard");
+        yield return System.IO.Path.Combine(baseDir, group, set);
+        yield return System.IO.Path.Combine(baseDir, "assets", group, set);
         // Dev: repo assets next to the WinUI project.
-        var repo = System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, "..", "..", "..", "..", "..", "assets", "furniture", "standard"));
-        yield return repo;
+        yield return System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, "..", "..", "..", "..", "..", "assets", group, set));
     }
 }

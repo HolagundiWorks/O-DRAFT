@@ -248,6 +248,7 @@ fn quick(doc: &aad_engine::doc::Drawing, selection: &[Handle]) -> Value {
                 fields.push(json!({ "label": "Name", "value": insert.block, "text": true }));
                 number_field(&mut fields, "rotation", "Rotation", insert.rotation.to_degrees());
                 number_field(&mut fields, "scale", "Scale", insert.scale.x);
+                fields.extend(aad_engine::smart_block_fields(doc, insert));
             }
             EntityKind::Dimension(dim) => {
                 text_field(&mut fields, "textOverride", "Text override", &dim.text);

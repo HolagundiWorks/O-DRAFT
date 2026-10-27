@@ -7,6 +7,7 @@
     {
       "id": "rcc.column.rect",
       "title": "RCC rectangular column (section with bars and tie)",
+      "grips": [ { "param": "width", "at": ["width/2", 0], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth/2"], "axis": "y", "per": 2 } ],
       "layer": "S-RCC", "color": 1, "lineweight": 35,
       "params": [
         { "name": "width", "label": "Width", "unit": "mm", "default": 230, "min": 150, "max": 2000 },
@@ -48,6 +49,7 @@
     {
       "id": "rcc.column.circular",
       "title": "RCC circular column (section with bars and tie)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
       "layer": "S-RCC", "color": 1, "lineweight": 35,
       "params": [
         { "name": "dia", "label": "Diameter", "unit": "mm", "default": 450, "min": 200, "max": 2500 },
@@ -71,6 +73,7 @@
     {
       "id": "rcc.beam.section",
       "title": "RCC beam cross-section (bars, stirrup, optional slab)",
+      "grips": [ { "param": "width", "at": ["width/2", 0], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth/2"], "axis": "y", "per": 2 } ],
       "layer": "S-RCC", "color": 1, "lineweight": 35,
       "params": [
         { "name": "width", "label": "Width", "unit": "mm", "default": 230, "min": 150, "max": 1500 },
@@ -113,6 +116,7 @@
     {
       "id": "rcc.footing.plan",
       "title": "RCC isolated footing (plan)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "breadth", "at": [0, "breadth/2"], "axis": "y", "per": 2 } ],
       "layer": "S-RCC", "color": 1, "lineweight": 35,
       "params": [
         { "name": "length", "label": "Footing length", "unit": "mm", "default": 1500, "min": 600, "max": 6000 },
@@ -145,6 +149,7 @@
     {
       "id": "rcc.footing.section",
       "title": "RCC isolated footing (section with mesh and column bars)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "depth", "at": ["-pw/2", "depth"], "axis": "y" } ],
       "layer": "S-RCC", "color": 1, "lineweight": 35,
       "params": [
         { "name": "length", "label": "Footing width in section", "unit": "mm", "default": 1500, "min": 600, "max": 6000 },
@@ -189,6 +194,7 @@
     {
       "id": "rcc.lintel.section",
       "title": "RCC lintel over an opening (elevation with bars)",
+      "grips": [ { "param": "span", "at": ["span/2", 0], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "S-RCC", "color": 1, "lineweight": 35,
       "params": [
         { "name": "span", "label": "Clear opening", "unit": "mm", "default": 1000, "min": 450, "max": 4000 },
@@ -214,6 +220,7 @@
     {
       "id": "rcc.slab.section",
       "title": "RCC slab section (main and distribution bars)",
+      "grips": [ { "param": "span", "at": ["span", "thick/2"], "axis": "x" }, { "param": "thick", "at": ["span/2", "thick"], "axis": "y" } ],
       "layer": "S-RCC", "color": 1, "lineweight": 35,
       "params": [
         { "name": "span", "label": "Length shown", "unit": "mm", "default": 3000, "min": 600, "max": 12000 },

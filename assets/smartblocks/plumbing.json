@@ -7,6 +7,7 @@
     {
       "id": "plumb.wc.european",
       "title": "European WC (plan)",
+      "grips": [ { "param": "width", "at": ["r", "cy"], "axis": "x", "per": 2 }, { "param": "length", "at": [0, "length"], "axis": "y" } ],
       "layer": "P-FIXT", "color": 6, "lineweight": 18,
       "params": [
         { "name": "width", "label": "Pan width", "unit": "mm", "default": 380, "min": 300, "max": 500 },
@@ -34,6 +35,7 @@
     {
       "id": "plumb.wc.indian",
       "title": "Indian (squatting) WC pan with footrests (plan)",
+      "grips": [ { "param": "width", "at": ["r", "back"], "axis": "x", "per": 2 }, { "param": "length", "at": [0, "back + length"], "axis": "y" } ],
       "layer": "P-FIXT", "color": 6, "lineweight": 18,
       "params": [
         { "name": "width", "label": "Pan width", "unit": "mm", "default": 450, "min": 400, "max": 600 },
@@ -57,6 +59,7 @@
     {
       "id": "plumb.basin",
       "title": "Wash basin, wall-hung or in a vanity counter (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "P-FIXT", "color": 6, "lineweight": 18,
       "params": [
         { "name": "width", "label": "Basin width", "unit": "mm", "default": 550, "min": 350, "max": 800 },
@@ -76,6 +79,7 @@
     {
       "id": "plumb.sink.kitchen",
       "title": "Kitchen sink, one to three bowls with optional drainer (plan)",
+      "grips": [ { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "P-FIXT", "color": 6, "lineweight": 18,
       "params": [
         { "name": "bowls", "label": "Bowls", "default": 1, "min": 1, "max": 3, "integer": true },
@@ -102,6 +106,7 @@
     {
       "id": "plumb.shower",
       "title": "Shower area or tray with drain (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
       "layer": "P-FIXT", "color": 6, "lineweight": 18,
       "params": [
         { "name": "width", "label": "Width", "unit": "mm", "default": 900, "min": 700, "max": 2000 },
@@ -122,6 +127,7 @@
     {
       "id": "plumb.floor.trap",
       "title": "Floor trap / floor drain with grating (plan)",
+      "grips": [ { "param": "size", "at": ["size/2", 0], "axis": "x", "per": 2 } ],
       "layer": "P-FIXT", "color": 6, "lineweight": 18,
       "params": [
         { "name": "size", "label": "Grating size", "unit": "mm", "default": 150, "min": 100, "max": 400 },
@@ -137,6 +143,7 @@
     {
       "id": "plumb.chamber",
       "title": "Inspection chamber / manhole (plan)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "breadth", "at": [0, "breadth/2"], "axis": "y", "per": 2 } ],
       "layer": "P-PIPE", "color": 4, "lineweight": 18,
       "params": [
         { "name": "length", "label": "Inside length", "unit": "mm", "default": 600, "min": 300, "max": 2000 },
@@ -156,6 +163,7 @@
     {
       "id": "plumb.tank.round",
       "title": "Round water tank with lid and capacity (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
       "layer": "P-FIXT", "color": 6, "lineweight": 18,
       "params": [
         { "name": "dia", "label": "Diameter", "unit": "mm", "default": 1100, "min": 500, "max": 4000 },
@@ -173,6 +181,7 @@
     {
       "id": "plumb.riser",
       "title": "Pipe riser / stack with tag (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
       "layer": "P-PIPE", "color": 4, "lineweight": 18,
       "params": [
         { "name": "dia", "label": "Pipe diameter", "unit": "mm", "default": 110, "min": 15, "max": 300 },

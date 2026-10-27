@@ -37,6 +37,11 @@ fn stretch(s: &mut Session, cmd: &str, p: &Value) -> Result<Value> {
         return Err(EngineError::Other("The object is on a locked layer.".into()));
     }
     let e = curves::entity(s, h)?;
+    let own = e.kind.grips().len();
+    if i >= own {
+        // A smart block's parameter grip.
+        return super::smartblock::drag_grip(s, cmd, h, i - own, to);
+    }
     let k = stretch_grip(&e.kind, i, to).ok_or_else(|| bad(cmd, "no such grip, or the result would be degenerate"))?;
     let mut edits = vec![(h, k)];
     let mut refit: Vec<(Handle, f64)> = Vec::new();
@@ -82,7 +87,7 @@ fn base_point(s: &Session, cmd: &str, p: &Value, hs: &[Handle]) -> Result<Vec2> 
         .or_else(|| hs.first().copied())
         .ok_or_else(|| bad(cmd, "`base` or `baseHandle` + `index` is required"))?;
     let i = index_param(cmd, p)?;
-    let g = curves::entity(s, h)?.kind.grips();
+    let g = crate::grips::grips(s.doc()?, &curves::entity(s, h)?);
     g.get(i).copied().ok_or_else(|| bad(cmd, "no such grip"))
 }
 
