@@ -60,16 +60,14 @@ fn a_door_cuts_both_faces_and_places_a_block_the_takeoff_deducts() {
     let mut s = session();
     s.execute("wall.draw", &json!({"points": [[0, 0], [4000, 0]], "thickness": 230})).unwrap();
     let r = s.execute("wall.door", &json!({"at": [2000, 0], "width": 900})).unwrap();
-    assert_eq!(
-        (r["block"].as_str(), r["cut"].as_u64(), r["thickness"].as_f64()),
-        (Some("DOOR-900-230"), Some(2), Some(230.0)),
-        "thickness read from the wall faces"
-    );
+    let block = r["block"].as_str().unwrap().to_string();
+    assert!(block.starts_with("AADOPEN-"), "openings use AADOPEN-… block names, got {block}");
+    assert_eq!((r["cut"].as_u64(), r["thickness"].as_f64()), (Some(2), Some(230.0)), "thickness read from the wall faces");
     let w = lines_on(&s, "A-WALL");
     assert!(w.contains(&(0.0, 115.0, 1550.0, 115.0)) && w.contains(&(2450.0, 115.0, 4000.0, 115.0)), "{w:?}");
     assert!(w.contains(&(0.0, -115.0, 1550.0, -115.0)) && w.contains(&(2450.0, -115.0, 4000.0, -115.0)), "{w:?}");
     assert!(!w.contains(&(0.0, 115.0, 4000.0, 115.0)), "the face line was cut");
-    let b = s.doc().unwrap().block("DOOR-900-230").unwrap().clone();
+    let b = s.doc().unwrap().block(&block).unwrap().clone();
     assert!(b.entities.iter().any(|e| matches!(e.kind, EntityKind::Arc(_))), "swing arc");
     assert!(b.entities.iter().any(|e| e.common.layer == "MEASURE-DEDUCT"));
 
@@ -89,12 +87,13 @@ fn doors_and_windows_follow_the_schedule_and_report_missing_walls() {
     s.execute("wall.draw", &json!({"points": [[0, 0], [0, 5000]], "thickness": 230})).unwrap();
     // The wall runs along y: the angle is found from the nearest wall line.
     let r = s.execute("wall.door", &json!({"at": [0, 1000], "name": "D2", "swing": "right"})).unwrap();
-    assert_eq!(r["block"], "DOOR-D2-230");
+    let door_block = r["block"].as_str().unwrap().to_string();
+    assert!(door_block.starts_with("AADOPEN-"), "got {door_block}");
     let r = s.execute("wall.window", &json!({"at": [0, 3000], "name": "W3"})).unwrap();
     assert_eq!(r["cut"], 2);
     let sched = s.execute("schedule", &json!({})).unwrap();
     let d2 = sched["openings"].as_array().unwrap().iter().find(|o| o["name"] == "D2").unwrap();
-    assert_eq!(d2["block"], "DOOR-D2-230", "the entry is linked to the block");
+    assert_eq!(d2["block"], door_block, "the entry is linked to the block");
     let counts = s.execute("openings.sync", &json!({})).unwrap()["counts"].clone();
     assert_eq!((counts["D2"].as_u64(), counts["W3"].as_u64()), (Some(1), Some(1)), "placing links the entry to its block, so sync counts it");
     assert!(s.execute("wall.door", &json!({"at": [9000, 9000]})).is_err(), "no wall near, no angle given");
