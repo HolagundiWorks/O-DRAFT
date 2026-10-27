@@ -321,3 +321,16 @@ fn long_secant_keeps_both_intersections() {
     assert!(hits[0].0.near(Vec2::new(-2.0, 0.0), 1e-8), "{hits:?}");
     assert!(hits[1].0.near(Vec2::new(2.0, 0.0), 1e-8), "{hits:?}");
 }
+
+#[test]
+fn sweep_points_full_turn_from_f32_is_a_whole_circle() {
+    // `f32` TAU is a little more than `f64` TAU; it must still draw the whole circle.
+    let mut pts = Vec::new();
+    sweep_points(Vec2::new(1.0, 2.0), 5.0, 0.7, f64::from(std::f32::consts::TAU), 0.005, &mut pts);
+    assert!(pts.len() > 16);
+    let far = pts.iter().map(|p| p.dist(Vec2::new(1.0, 2.0) + Vec2::new(-5.0 * 0.7f64.cos(), -5.0 * 0.7f64.sin()))).fold(f64::INFINITY, f64::min);
+    assert!(far < 0.3, "the points must reach the opposite side");
+    let mut none = Vec::new();
+    sweep_points(Vec2::ZERO, 1.0, 0.0, f64::NAN, 0.01, &mut none);
+    assert!(none.iter().all(|p| p.is_finite()));
+}

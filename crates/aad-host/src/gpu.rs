@@ -188,28 +188,16 @@ impl Gpu {
         Ok(())
     }
 
-    fn draw_parts(
-        &self,
-        pass: &mut wgpu::RenderPass<'_>,
-        tris: &[Batch],
-        lines: &[Batch],
-        quads: &[Batch],
-        rings: &[Batch],
-        breaks: &[[usize; 4]],
-    ) {
+    fn draw_parts(&self, pass: &mut wgpu::RenderPass<'_>, tris: &[Batch], lines: &[Batch], quads: &[Batch], rings: &[Batch], breaks: &[[usize; 4]]) {
         pass.set_bind_group(0, &self.bind_group, &[]);
         let total = |bs: &[Batch]| bs.iter().map(|b| b.count as usize).sum::<usize>();
         let all = [total(tris), total(lines), total(quads), total(rings)];
         let mut from = [0usize; 4];
         for to in breaks.iter().copied().chain(std::iter::once(all)) {
-            for (i, (pipeline, batches)) in [
-                (&self.tri_pipeline, tris),
-                (&self.line_pipeline, lines),
-                (&self.quad_pipeline, quads),
-                (&self.ring_pipeline, rings),
-            ]
-            .into_iter()
-            .enumerate()
+            for (i, (pipeline, batches)) in
+                [(&self.tri_pipeline, tris), (&self.line_pipeline, lines), (&self.quad_pipeline, quads), (&self.ring_pipeline, rings)]
+                    .into_iter()
+                    .enumerate()
             {
                 let parts = batch_ranges(batches.iter().map(|b| b.count), from[i]..to[i]);
                 if parts.is_empty() {
@@ -219,11 +207,7 @@ impl Gpu {
                 for (j, range) in parts {
                     let Some(batch) = batches.get(j) else { continue };
                     pass.set_vertex_buffer(0, batch.buffer.slice(..));
-                    if i >= 2 {
-                        pass.draw(0..6, range)
-                    } else {
-                        pass.draw(range, 0..1)
-                    }
+                    if i >= 2 { pass.draw(0..6, range) } else { pass.draw(range, 0..1) }
                 }
             }
             from = to;

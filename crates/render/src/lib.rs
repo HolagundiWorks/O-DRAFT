@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use aad_color::{Color, Rgb};
 use aad_doc::{Drawing, Entity, EntityKind, Handle, Lineweight, Prim, Space};
-use aad_geom::{Bounds2, Mat3, Polyline, Vec2, TAU};
+use aad_geom::{Bounds2, Mat3, Polyline, TAU, Vec2};
 
 pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, dimension_geometry, dimension_geometry_with, format_linear_value};
 pub use fill::{triangulate_evenodd, triangulate_outline};
@@ -1052,10 +1052,12 @@ fn append_clipped_arc(dst: &mut DisplayList, p: &DPrim, pts: &[Vec2], sweep: f32
     let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { return };
     let bb = arc_world_bounds(*center, *rim, sweep);
     let hits = match poly {
-        Some(poly) => bb.intersects(&Bounds2::from_points(poly.iter().copied())) && {
-            // Cheap reject: if the AABB misses the polygon AABB we already failed; otherwise flatten.
-            true
-        },
+        Some(poly) => {
+            bb.intersects(&Bounds2::from_points(poly.iter().copied())) && {
+                // Cheap reject: if the AABB misses the polygon AABB we already failed; otherwise flatten.
+                true
+            }
+        }
         None => bb.intersects(rect),
     };
     if !hits {
