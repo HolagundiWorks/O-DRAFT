@@ -12,6 +12,8 @@ use crate::{DisplayList, Kind};
 pub const VERTEX_SIZE: usize = 12;
 /// Wide-line / point instance: a, b (2 × f32 each) + colour (4 × u8) + width in points (f32).
 pub const INSTANCE_SIZE: usize = 24;
+/// Circle/arc ring instance: centre (2×f32) + (radius, start) + (sweep, width) + colour (4×u8) + pad.
+pub const RING_INSTANCE_SIZE: usize = 32;
 /// Point markers are 1.5 × 1.5 points (as on the CPU path).
 const POINT_SIZE: f32 = 1.5;
 
@@ -32,6 +34,8 @@ struct VOut {
     @location(1) pa: vec2<f32>,
     @location(2) pb: vec2<f32>,
     @location(3) hw: f32,
+    // 0 = segment stroke (pa/pb endpoints). >0 = ring: pa=centre_px, pb=(r_px, start), sweep=radians.
+    @location(4) sweep: f32,
 };
 
 fn to_px(p: vec2<f32>) -> vec2<f32> {
@@ -52,6 +56,11 @@ fn out_color(c: vec4<f32>) -> vec4<f32> {
     return c;
 }
 
+fn stroke_px_w(width: f32) -> f32 {
+    let w_abs = abs(width);
+    return max(select(1.5 * view.c.x, w_abs * select(view.c.x, view.a.z, view.c.y > 0.5), w_abs > 1e-6), 1.0);
+}
+
 fn solid(pos: vec4<f32>, color: vec4<f32>) -> VOut {
     var o: VOut;
     o.pos = pos;
@@ -59,6 +68,7 @@ fn solid(pos: vec4<f32>, color: vec4<f32>) -> VOut {
     o.pa = vec2<f32>(0.0, 0.0);
     o.pb = vec2<f32>(0.0, 0.0);
     o.hw = 0.0;
+    o.sweep = 0.0;
     return o;
 }
 
@@ -83,8 +93,7 @@ fn vs_quad(
     let butt = width < 0.0;
     // Screen: width is points × pixels-per-point. True scale (layouts): width is world mm × scale.
     // Width ~0 is a hairline sentinel (always screen points) so default strokes stay thin on paper.
-    let w_abs = abs(width);
-    let px_w = max(select(1.5 * view.c.x, w_abs * select(view.c.x, view.a.z, view.c.y > 0.5), w_abs > 1e-6), 1.0);
+    let px_w = stroke_px_w(width);
     let dlt = pb - pa;
     if (px_w <= 3.5 && abs(dlt.y) <= 0.75 && abs(dlt.x) >= abs(dlt.y)) {
         let y = floor((pa.y + pb.y) * 0.5) + 0.5;
@@ -113,16 +122,80 @@ fn vs_quad(
     o.pa = pa;
     o.pb = pb;
     o.hw = hw;
+    o.sweep = 0.0;
+    return o;
+}
+
+@vertex
+fn vs_ring(
+    @builtin(vertex_index) vi: u32,
+    @location(0) center: vec2<f32>,
+    @location(1) rs: vec2<f32>,
+    @location(2) sw: vec2<f32>,
+    @location(3) color: vec4<f32>,
+) -> VOut {
+    let radius = rs.x;
+    let start = rs.y;
+    let sweep = sw.x;
+    let width = sw.y;
+    let px_w = stroke_px_w(width);
+    let hw = 0.5 * px_w;
+    let c = to_px(center);
+    let r_px = abs(radius) * view.a.z;
+    let pad = hw + 1.5;
+    let ext = r_px + pad;
+    let t = select(0.0, 1.0, vi == 1u || vi == 4u || vi == 5u);
+    let s = select(-1.0, 1.0, vi == 2u || vi == 3u || vi == 5u);
+    let px = c + vec2<f32>((2.0 * t - 1.0) * ext, (2.0 * s - 1.0) * ext);
+    var o: VOut;
+    o.pos = px_to_clip(px);
+    o.color = out_color(color);
+    o.pa = c;
+    o.pb = vec2<f32>(r_px, start);
+    o.hw = hw;
+    o.sweep = max(sweep, 1e-6);
     return o;
 }
 
 @fragment
 fn fs_main(v: VOut) -> @location(0) vec4<f32> {
     let p = v.pos.xy;
-    let ab = v.pb - v.pa;
-    let lab = dot(ab, ab);
-    let t = select(0.0, clamp(dot(p - v.pa, ab) / max(lab, 0.000001), 0.0, 1.0), lab > 0.0001);
-    let d = length(p - (v.pa + ab * t));
+    var d: f32;
+    if (v.sweep > 0.0) {
+        let c = v.pa;
+        let r = v.pb.x;
+        let start = v.pb.y;
+        let dxy = p - c;
+        let d_ring = abs(length(dxy) - r);
+        // Screen Y is flipped vs world; world angle θ maps to atan2(-dy, dx) = -θ.
+        let ang = -atan2(dxy.y, dxy.x);
+        let tau = 6.28318530718;
+        let full = v.sweep >= (tau - 1e-3);
+        if (full) {
+            d = d_ring;
+        } else {
+            var a = ang - start;
+            a = a - floor(a / tau) * tau;
+            if (a < 0.0) {
+                a = a + tau;
+            }
+            if (a <= v.sweep) {
+                d = d_ring;
+            } else {
+                let a0 = start;
+                let a1 = start + v.sweep;
+                // World (cos θ, sin θ) → screen offset (cos θ, -sin θ) × r.
+                let p0 = c + vec2<f32>(cos(a0), -sin(a0)) * r;
+                let p1 = c + vec2<f32>(cos(a1), -sin(a1)) * r;
+                d = min(length(p - p0), length(p - p1));
+            }
+        }
+    } else {
+        let ab = v.pb - v.pa;
+        let lab = dot(ab, ab);
+        let t = select(0.0, clamp(dot(p - v.pa, ab) / max(lab, 0.000001), 0.0, 1.0), lab > 0.0001);
+        d = length(p - (v.pa + ab * t));
+    }
     // Fills (hw = 0) stay solid. A stroke covers its width and fades across one pixel at the edge.
     var cover = select(1.0, clamp(v.hw + 0.5 - d, 0.0, 1.0), v.hw > 0.0);
     // Linear-light premultiplied blend thins dark-on-white edges; raise coverage toward display
@@ -141,9 +214,11 @@ pub struct MeshData {
     pub lines: Vec<u8>,
     pub tris: Vec<u8>,
     pub quads: Vec<u8>,
-    /// Draw-order breaks, one before each wipeout mask: the fill vertices, line vertices and
-    /// quad instances drawn before it. Each group is drawn fills, lines, quads in turn.
-    pub breaks: Vec<[usize; 3]>,
+    /// Distance-field circle/arc stroke instances ([`RING_INSTANCE_SIZE`] each).
+    pub rings: Vec<u8>,
+    /// Draw-order breaks, one before each wipeout mask: fill / line / quad / ring counts drawn
+    /// before it. Each group is drawn fills, lines, quads, rings in turn.
+    pub breaks: Vec<[usize; 4]>,
 }
 
 impl MeshData {
@@ -155,6 +230,9 @@ impl MeshData {
     }
     pub fn quad_instances(&self) -> usize {
         self.quads.len() / INSTANCE_SIZE
+    }
+    pub fn ring_instances(&self) -> usize {
+        self.rings.len() / RING_INSTANCE_SIZE
     }
 }
 
@@ -186,6 +264,23 @@ fn push_instance(out: &mut Vec<u8>, a: [f32; 2], b: [f32; 2], c: [u8; 4], width:
     }
     out.extend_from_slice(&c);
     out.extend_from_slice(&width.to_le_bytes());
+}
+
+fn push_ring(out: &mut Vec<u8>, center: [f32; 2], radius: f32, start: f32, sweep: f32, width: f32, c: [u8; 4]) {
+    for v in [center[0], center[1], radius, start, sweep, width] {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out.extend_from_slice(&c);
+    out.extend_from_slice(&[0u8; 4]);
+}
+
+/// Append one distance-field circle/arc stroke (world coords relative to `origin`).
+pub fn stroke_arc(out: &mut Vec<u8>, center: Vec2, radius: f64, start: f64, sweep: f64, origin: Vec2, col: [u8; 4], width: f32) {
+    if !(center.is_finite() && radius.is_finite() && sweep.is_finite()) || radius <= 1e-12 || sweep <= 0.0 {
+        return;
+    }
+    let width = if width.is_finite() && width > 0.0 { width } else { HAIRLINE_POINTS };
+    push_ring(out, rel(center, origin), radius as f32, start as f32, sweep as f32, width, col);
 }
 
 /// Screen-space stroke for a polyline: butt-ended edges plus round joins/caps.
@@ -281,18 +376,25 @@ pub fn build_mesh_mode(list: &DisplayList, origin: Vec2, bg: Rgb, lw: Option<Lin
         lines: Vec::with_capacity(list.segment_count().saturating_mul(2 * VERTEX_SIZE)),
         tris: Vec::with_capacity(list.tris.len().saturating_mul(VERTEX_SIZE)),
         quads: Vec::new(),
+        rings: Vec::new(),
         breaks: Vec::new(),
     };
     for prim in &list.prims {
         let c = prim.display_rgb(bg);
         let col = [c.0, c.1, c.2, 255];
         let pts = list.points(prim);
+        let hair = if matches!(lw, Some(LineweightMode::TrueScale)) { 0.0 } else { HAIRLINE_POINTS };
+        let w = wide_width(prim.lw, lw).unwrap_or(hair);
         match prim.kind {
             Kind::Polyline => {
-                // True-scale hairlines use width 0 (shader screen sentinel); screen mode keeps points.
-                let hair = if matches!(lw, Some(LineweightMode::TrueScale)) { 0.0 } else { HAIRLINE_POINTS };
-                let w = wide_width(prim.lw, lw).unwrap_or(hair);
                 stroke_polyline(&mut m.quads, pts, origin, col, w);
+            }
+            Kind::Arc { sweep } => {
+                if let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) {
+                    let radius = center.dist(*rim);
+                    let start = center.angle_to(*rim);
+                    stroke_arc(&mut m.rings, *center, radius, start, f64::from(sweep), origin, col, w);
+                }
             }
             Kind::Tris => {
                 for t in pts.as_chunks::<3>().0 {
@@ -302,7 +404,7 @@ pub fn build_mesh_mode(list: &DisplayList, origin: Vec2, bg: Rgb, lw: Option<Lin
                 }
             }
             Kind::Mask => {
-                m.breaks.push([m.tri_vertices(), m.line_vertices(), m.quad_instances()]);
+                m.breaks.push([m.tri_vertices(), m.line_vertices(), m.quad_instances(), m.ring_instances()]);
                 for t in pts.as_chunks::<3>().0 {
                     for q in t {
                         push_vertex(&mut m.tris, rel(*q, origin), [bg.0, bg.1, bg.2, 255]);
@@ -387,12 +489,13 @@ pub fn expand_hairlines_width(mesh: &mut MeshData, width: f32) {
     let width = if width.is_finite() && width >= 0.0 { width } else { 1.0 };
     let line_n = mesh.line_vertices();
     let quad_n = mesh.quad_instances();
+    let ring_n = mesh.ring_instances();
     let mut quads = Vec::with_capacity(mesh.quads.len() + (line_n / 2) * INSTANCE_SIZE);
     let mut breaks = Vec::with_capacity(mesh.breaks.len());
     let mut line_from = 0usize;
     let mut quad_from = 0usize;
-    let end = [mesh.tri_vertices(), line_n, quad_n];
-    for [tri, line_to, quad_to] in mesh.breaks.iter().copied().chain(std::iter::once(end)) {
+    let end = [mesh.tri_vertices(), line_n, quad_n, ring_n];
+    for [tri, line_to, quad_to, ring_to] in mesh.breaks.iter().copied().chain(std::iter::once(end)) {
         let mut i = line_from;
         while i + 1 < line_to {
             if let (Some((a, color)), Some((b, _))) = (read_vertex(&mesh.lines, i), read_vertex(&mesh.lines, i + 1)) {
@@ -405,7 +508,7 @@ pub fn expand_hairlines_width(mesh: &mut MeshData, width: f32) {
         if lo < hi {
             quads.extend_from_slice(&mesh.quads[lo..hi]);
         }
-        breaks.push([tri, 0, quads.len() / INSTANCE_SIZE]);
+        breaks.push([tri, 0, quads.len() / INSTANCE_SIZE, ring_to]);
         line_from = line_to;
         quad_from = quad_to;
     }
@@ -452,13 +555,33 @@ mod tests {
         push_instance(&mut mesh.quads, [0.0, 0.0], [1.0, 0.0], [9, 9, 9, 255], 2.0);
         push_vertex(&mut mesh.lines, [0.0, 1.0], [4, 5, 6, 255]);
         push_vertex(&mut mesh.lines, [0.0, 3.0], [4, 5, 6, 255]);
-        mesh.breaks.push([0, 2, 1]);
+        mesh.breaks.push([0, 2, 1, 0]);
         expand_hairlines(&mut mesh);
         assert_eq!(mesh.line_vertices(), 0);
         assert_eq!(mesh.quad_instances(), 3);
-        assert_eq!(mesh.breaks, vec![[0, 0, 2]]);
+        assert_eq!(mesh.breaks, vec![[0, 0, 2, 0]]);
         let width = f32::from_le_bytes(mesh.quads[20..24].try_into().expect("width bytes"));
         assert_eq!(width, HAIRLINE_POINTS);
+    }
+
+    #[test]
+    fn gpu_arc_emits_one_ring_instance() {
+        let mut list = DisplayList::default();
+        list.verts.extend([Vec2::new(10.0, 20.0), Vec2::new(15.0, 20.0)]);
+        list.prims.push(crate::DPrim {
+            handle: aad_doc::Handle(1),
+            color: Rgb(0, 0, 0),
+            aci7: false,
+            lw: 0.0,
+            kind: Kind::Arc { sweep: std::f32::consts::TAU },
+            start: 0,
+            len: 2,
+        });
+        let m = build_mesh(&list, Vec2::ZERO, Rgb(255, 255, 255), false);
+        assert_eq!(m.ring_instances(), 1);
+        assert_eq!(m.quad_instances(), 0);
+        let r = f32::from_le_bytes(m.rings[8..12].try_into().expect("radius"));
+        assert!((r - 5.0).abs() < 1e-5, "radius {r}");
     }
 
     #[test]

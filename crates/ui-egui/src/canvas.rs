@@ -331,6 +331,22 @@ fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay:
                     shapes.push(Shape::line(screen, Stroke::new(w, col)));
                 }
             }
+            Kind::Arc { sweep } => {
+                let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { continue };
+                let radius = center.dist(*rim);
+                let start = center.angle_to(*rim);
+                let mut tess = Vec::new();
+                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate(px.max(1e-9), &mut tess);
+                let bb = Bounds2::from_points(tess.iter().copied());
+                if !bb.intersects(&vis) {
+                    continue;
+                }
+                let w = if lwdisplay && prim.lw > 0.0 { (prim.lw * 3.78).clamp(1.0, 12.0) } else { 1.0 };
+                let screen: Vec<Pos2> = tess.iter().map(|q| xf.to_screen(*q)).collect();
+                if screen.len() >= 2 {
+                    shapes.push(Shape::line(screen, Stroke::new(w, col)));
+                }
+            }
             Kind::Tris | Kind::Mask => {
                 // A wipeout's mask hides what was drawn before it with the background colour.
                 let col = if prim.kind == Kind::Mask { color32(bg) } else { col };
@@ -435,6 +451,19 @@ fn draw_highlight(p: &egui::Painter, xf: &Xf, list: &DisplayList, prims: &[usize
                 if dashed {
                     shapes.extend(Shape::dashed_line(&screen, Stroke::new(width, color), 6.0, 4.0));
                 } else {
+                    shapes.push(Shape::line(screen, Stroke::new(width, color)));
+                }
+            }
+            Kind::Arc { sweep } => {
+                let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { continue };
+                let radius = center.dist(*rim);
+                let start = center.angle_to(*rim);
+                let mut tess = Vec::new();
+                aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                let screen: Vec<Pos2> = tess.iter().map(|q| xf.to_screen(*q)).collect();
+                if dashed {
+                    shapes.extend(Shape::dashed_line(&screen, Stroke::new(width, color), 6.0, 4.0));
+                } else if screen.len() >= 2 {
                     shapes.push(Shape::line(screen, Stroke::new(width, color)));
                 }
             }

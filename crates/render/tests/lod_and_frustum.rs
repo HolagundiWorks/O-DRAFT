@@ -35,6 +35,16 @@ fn hatch_and_circles() -> Drawing {
 }
 
 #[test]
+fn continuous_circles_emit_gpu_arc_prims() {
+    let d = hatch_and_circles();
+    let list = build(&d, &Space::Model, &Options { view_height: 2000.0, tolerance: 0.01, ..Default::default() });
+    let arcs = list.prims.iter().filter(|p| matches!(p.kind, aad_render::Kind::Arc { .. })).count();
+    assert_eq!(arcs, 20, "each continuous circle should be one Kind::Arc, not a tessellated polyline");
+    let mesh = aad_render::mesh::build_mesh(&list, aad_geom::Vec2::ZERO, aad_color::Rgb(0, 0, 0), false);
+    assert_eq!(mesh.ring_instances(), 20);
+}
+
+#[test]
 fn lod_turns_off_text_and_fill_when_zoomed_out() {
     let (text, fill) = lod_for_view(100.0, 1.0); // 100 world units per pixel
     assert!(!text && !fill);

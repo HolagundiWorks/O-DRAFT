@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use aad_color::{Color, Rgb};
 use aad_doc::{Drawing, Entity, EntityKind, Handle, Lineweight, Prim, Space};
-use aad_geom::{Bounds2, Mat3, Polyline, Vec2};
+use aad_geom::{Bounds2, Mat3, Polyline, Vec2, TAU};
 
 pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, dimension_geometry, dimension_geometry_with, format_linear_value};
 pub use fill::{triangulate_evenodd, triangulate_outline};
@@ -41,6 +41,9 @@ pub const VIEWPORT_CONTENT: Handle = Handle(0);
 pub enum Kind {
     /// `verts[start..start+len]` as a connected polyline.
     Polyline,
+    /// Circular stroke: `verts[start]` = centre, `verts[start+1]` = rim point (radius).
+    /// `sweep` is the CCW span in radians from the rim angle; ≥ 2π − ε is a full circle.
+    Arc { sweep: f32 },
     /// `tris[start..start+len]`, three vertices per triangle.
     Tris,
     /// A wipeout: triangles laid out like [`Kind::Tris`], filled with the background colour
@@ -339,6 +342,33 @@ impl Builder<'_> {
             self.list.verts.push(q);
         }
         self.list.prims.push(DPrim { handle: ctx.top, color: color.rgb, aci7: color.aci7, lw, kind: Kind::Polyline, start, len: pts.len() as u32 });
+    }
+    /// Emit a GPU distance-field arc when `ctx.xf` is a similarity; otherwise return false so the
+    /// caller can tessellate.
+    fn try_arc(&mut self, ctx: &Ctx, color: Ink, lw: f32, center: Vec2, radius: f64, start: f64, sweep: f64) -> bool {
+        let Some((c, r, a0, sw)) = map_similarity_arc(ctx.xf, center, radius, start, sweep) else {
+            return false;
+        };
+        if !(r.is_finite() && r > 1e-12 && sw.is_finite() && sw > 0.0) {
+            return false;
+        }
+        let (color, lw) = self.styled(color, lw);
+        let rim = Vec2::polar(c, r, a0);
+        let at = self.list.verts.len() as u32;
+        self.list.bounds.add(c - Vec2::new(r, r));
+        self.list.bounds.add(c + Vec2::new(r, r));
+        self.list.verts.push(c);
+        self.list.verts.push(rim);
+        self.list.prims.push(DPrim {
+            handle: ctx.top,
+            color: color.rgb,
+            aci7: color.aci7,
+            lw,
+            kind: Kind::Arc { sweep: sw as f32 },
+            start: at,
+            len: 2,
+        });
+        true
     }
     fn tris(&mut self, ctx: &Ctx, color: Ink, tris: &[Vec2]) {
         if tris.len() < 3 {
@@ -660,13 +690,26 @@ pub fn rebuild(old: &DisplayList, old_doc: &Drawing, new_doc: &Drawing, opts: &O
     }
     let mut bounds = Bounds2::default();
     for p in &out.prims {
-        let pts = match p.kind {
+        match p.kind {
             Kind::Infinite { .. } => continue,
-            Kind::Tris | Kind::Mask => out.tris.get(p.start as usize..(p.start + p.len) as usize),
-            _ => out.verts.get(p.start as usize..(p.start + p.len) as usize),
-        };
-        for q in pts.unwrap_or(&[]) {
-            bounds.add(*q);
+            Kind::Arc { sweep } => {
+                let pts = out.points(p);
+                if let (Some(c), Some(rim)) = (pts.first(), pts.get(1)) {
+                    let b = arc_world_bounds(*c, *rim, sweep);
+                    bounds.add(b.min);
+                    bounds.add(b.max);
+                }
+            }
+            Kind::Tris | Kind::Mask => {
+                for q in out.points(p) {
+                    bounds.add(*q);
+                }
+            }
+            _ => {
+                for q in out.points(p) {
+                    bounds.add(*q);
+                }
+            }
         }
     }
     out.bounds = bounds;
@@ -767,6 +810,31 @@ fn vp_model_put(key: u64, list: Arc<DisplayList>) {
     });
 }
 
+/// Map a circular arc through a similarity transform. Non-uniform scales return `None` (ellipse).
+fn map_similarity_arc(xf: Mat3, center: Vec2, radius: f64, start: f64, sweep: f64) -> Option<(Vec2, f64, f64, f64)> {
+    let u = xf.apply_vec(Vec2::X);
+    let v = xf.apply_vec(Vec2::Y);
+    let (lu, lv) = (u.len(), v.len());
+    let tol = 1e-9 * lu.max(lv);
+    if !((lu - lv).abs() <= tol && u.dot(v).abs() <= tol * lu.max(lv) && lu > 0.0) {
+        return None;
+    }
+    let c = xf.apply(center);
+    let r = radius * lu;
+    let p0 = xf.apply(Vec2::polar(center, radius, start));
+    let p1 = xf.apply(Vec2::polar(center, radius, start + sweep));
+    let (a0, a1) = (c.angle_to(p0), c.angle_to(p1));
+    let (a0, a1) = if xf.is_mirroring() { (a1, a0) } else { (a0, a1) };
+    let sw = if sweep >= TAU - 1e-9 { TAU } else { aad_geom::ccw_sweep(a0, a1) };
+    Some((c, r, a0, sw))
+}
+
+fn arc_world_bounds(center: Vec2, rim: Vec2, sweep: f32) -> Bounds2 {
+    let radius = center.dist(rim);
+    let start = center.angle_to(rim);
+    aad_geom::Arc::new(center, radius, start, start + f64::from(sweep)).bounds()
+}
+
 /// Map every point of `src` by `xf` (infinite lines map base and direction).
 fn transform_list(src: &DisplayList, xf: Mat3) -> DisplayList {
     let mut out = DisplayList { expanded: src.expanded, ..DisplayList::default() };
@@ -787,6 +855,24 @@ fn transform_list(src: &DisplayList, xf: Mat3) -> DisplayList {
                     out.prims.push(DPrim { start, len: 2, kind: Kind::Infinite { ray }, ..*p });
                 }
             }
+            Kind::Arc { sweep } => {
+                if let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) {
+                    let radius = center.dist(*rim);
+                    let start_a = center.angle_to(*rim);
+                    if let Some((c, r, a0, sw)) = map_similarity_arc(xf, *center, radius, start_a, f64::from(sweep)) {
+                        let start = out.verts.len() as u32;
+                        out.verts.push(c);
+                        out.verts.push(Vec2::polar(c, r, a0));
+                        out.prims.push(DPrim { start, len: 2, kind: Kind::Arc { sweep: sw as f32 }, ..*p });
+                    } else {
+                        let mut tess = Vec::new();
+                        aad_geom::Arc::new(*center, radius, start_a, start_a + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                        let start = out.verts.len() as u32;
+                        out.verts.extend(tess.iter().copied().map(map));
+                        out.prims.push(DPrim { start, len: tess.len() as u32, kind: Kind::Polyline, ..*p });
+                    }
+                }
+            }
             Kind::Tris | Kind::Mask => {
                 let start = out.tris.len() as u32;
                 out.tris.extend(pts.iter().copied().map(map));
@@ -800,8 +886,23 @@ fn transform_list(src: &DisplayList, xf: Mat3) -> DisplayList {
         }
     }
     let mut bounds = Bounds2::default();
-    for q in out.verts.iter().chain(out.tris.iter()) {
-        bounds.add(*q);
+    for prim in &out.prims {
+        match prim.kind {
+            Kind::Arc { sweep } => {
+                let pts = out.points(prim);
+                if let (Some(c), Some(rim)) = (pts.first(), pts.get(1)) {
+                    let b = arc_world_bounds(*c, *rim, sweep);
+                    bounds.add(b.min);
+                    bounds.add(b.max);
+                }
+            }
+            Kind::Infinite { .. } => {}
+            _ => {
+                for q in out.points(prim) {
+                    bounds.add(*q);
+                }
+            }
+        }
     }
     out.bounds = bounds;
     out
@@ -887,7 +988,16 @@ fn viewport(b: &mut Builder, d: &Drawing, e: &Entity, vp: &aad_doc::Viewport) {
             push_raw(&mut culled, p, p.kind, pts);
             continue;
         }
-        let bb = Bounds2::from_points(pts.iter().copied());
+        let bb = match p.kind {
+            Kind::Arc { sweep } => {
+                if let (Some(c), Some(rim)) = (pts.first(), pts.get(1)) {
+                    arc_world_bounds(*c, *rim, sweep)
+                } else {
+                    Bounds2::default()
+                }
+            }
+            _ => Bounds2::from_points(pts.iter().copied()),
+        };
         if !bb.is_empty() && !bb.intersects(&win) {
             continue;
         }
@@ -912,6 +1022,7 @@ fn append_clipped(dst: &mut DisplayList, src: &DisplayList, rect: &Bounds2) {
                     push_raw(dst, p, Kind::Polyline, &piece);
                 }
             }
+            Kind::Arc { sweep } => append_clipped_arc(dst, p, pts, sweep, rect, None),
             Kind::Tris | Kind::Mask => {
                 let t = clip::clip_triangles(pts, rect);
                 push_raw(dst, p, p.kind, &t);
@@ -934,6 +1045,49 @@ fn append_clipped(dst: &mut DisplayList, src: &DisplayList, rect: &Bounds2) {
     }
 }
 
+/// Keep a GPU arc when its bounds sit inside the clip; otherwise flatten and clip as a polyline.
+fn append_clipped_arc(dst: &mut DisplayList, p: &DPrim, pts: &[Vec2], sweep: f32, rect: &Bounds2, poly: Option<&[Vec2]>) {
+    let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { return };
+    let bb = arc_world_bounds(*center, *rim, sweep);
+    let hits = match poly {
+        Some(poly) => bb.intersects(&Bounds2::from_points(poly.iter().copied())) && {
+            // Cheap reject: if the AABB misses the polygon AABB we already failed; otherwise flatten.
+            true
+        },
+        None => bb.intersects(rect),
+    };
+    if !hits {
+        return;
+    }
+    let fully_inside = match poly {
+        Some(poly) => {
+            let corners = [bb.min, Vec2::new(bb.max.x, bb.min.y), bb.max, Vec2::new(bb.min.x, bb.max.y)];
+            corners.iter().all(|q| aad_geom::point_in_polygon(poly, *q))
+        }
+        None => rect.contains(bb.min) && rect.contains(bb.max),
+    };
+    if fully_inside {
+        push_raw(dst, p, Kind::Arc { sweep }, pts);
+        return;
+    }
+    let radius = center.dist(*rim);
+    let start = center.angle_to(*rim);
+    let mut tess = Vec::new();
+    aad_geom::Arc::new(*center, radius, start, start + f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+    match poly {
+        Some(poly) => {
+            for piece in clip::clip_polyline_poly(&tess, poly) {
+                push_raw(dst, p, Kind::Polyline, &piece);
+            }
+        }
+        None => {
+            for piece in clip::clip_polyline(&tess, rect) {
+                push_raw(dst, p, Kind::Polyline, &piece);
+            }
+        }
+    }
+}
+
 /// Append `src` to `dst`, clipped to an arbitrary polygon (even-odd). Falls back to the polygon's
 /// axis-aligned bounds when the ring is degenerate.
 fn append_clipped_poly(dst: &mut DisplayList, src: &DisplayList, poly: &[Vec2]) {
@@ -951,6 +1105,10 @@ fn append_clipped_poly(dst: &mut DisplayList, src: &DisplayList, poly: &[Vec2]) 
                 for piece in clip::clip_polyline_poly(pts, poly) {
                     push_raw(dst, p, Kind::Polyline, &piece);
                 }
+            }
+            Kind::Arc { sweep } => {
+                let rect = Bounds2::from_points(poly.iter().copied());
+                append_clipped_arc(dst, p, pts, sweep, &rect, Some(poly));
             }
             Kind::Tris | Kind::Mask => {
                 let t = clip::clip_triangles_poly(pts, poly);
@@ -979,7 +1137,7 @@ fn append_clipped_poly(dst: &mut DisplayList, src: &DisplayList, poly: &[Vec2]) 
 
 fn push_raw(dst: &mut DisplayList, p: &DPrim, kind: Kind, pts: &[Vec2]) {
     let min = match kind {
-        Kind::Polyline => 2,
+        Kind::Polyline | Kind::Arc { .. } => 2,
         Kind::Tris | Kind::Mask => 3,
         _ => 1,
     };
@@ -1268,11 +1426,14 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
         kind => {
             for prim in kind.prims() {
                 match prim {
+                    Prim::Seg(aad_geom::Segment::Arc { arc, .. })
+                        if lt.is_none() && b.try_arc(ctx, rgb, lw, arc.center, arc.radius, arc.start, arc.sweep()) => {}
                     Prim::Seg(s) => {
                         let mut pts = Vec::new();
                         s.tessellate(tol, &mut pts);
                         stroke(b, &pts);
                     }
+                    Prim::Circle(c) if lt.is_none() && b.try_arc(ctx, rgb, lw, c.center, c.radius, 0.0, TAU) => {}
                     Prim::Circle(c) => {
                         let mut pts = Vec::new();
                         c.tessellate(tol, &mut pts);

@@ -2027,7 +2027,7 @@ impl Host {
     pub fn mesh_vertices(&mut self) -> Result<usize, String> {
         let _ = self.mesh()?;
         let built = self.frame.mesh.as_ref().ok_or_else(|| "mesh missing".to_string())?;
-        Ok(built.line_vertices() + built.tri_vertices() + built.quad_instances())
+        Ok(built.line_vertices() + built.tri_vertices() + built.quad_instances() + built.ring_instances())
     }
 }
 
@@ -2543,7 +2543,10 @@ mod tests {
         let hit = |bytes: &[u8], stride: usize, at: usize| {
             bytes.chunks(stride).any(|v| v.len() >= at + 3 && v[at] == rgb[0] && v[at + 1] == rgb[1] && v[at + 2] == rgb[2])
         };
-        hit(&mesh.lines, mesh::VERTEX_SIZE, 8) || hit(&mesh.tris, mesh::VERTEX_SIZE, 8) || hit(&mesh.quads, mesh::INSTANCE_SIZE, 16)
+        hit(&mesh.lines, mesh::VERTEX_SIZE, 8)
+            || hit(&mesh.tris, mesh::VERTEX_SIZE, 8)
+            || hit(&mesh.quads, mesh::INSTANCE_SIZE, 16)
+            || hit(&mesh.rings, mesh::RING_INSTANCE_SIZE, 24)
     }
 
     #[test]

@@ -1,7 +1,7 @@
 # O-Draft canvas rendering: review and roadmap
 
 Source plan: *ODraft canvas rendering review and plan* (Oct 26, 2026).  
-Branch work: `fix/canvas-phase2-strokes` (Phase 1 landed earlier).
+Branch work: `fix/canvas-phase3-gpu-curves` (Phases 1–2 landed earlier).
 
 The canvas already runs on the GPU (wgpu on Direct3D 12) with analytic anti-aliased strokes. It does **not** need a new engine. The rough look comes from specific gaps listed below. Phase 1 is small changes inside the existing renderer; Phase 2 reworks strokes, text and hatches; Phase 3 moves curves onto the GPU.
 
@@ -64,8 +64,16 @@ Every frame goes through one shared path (WinUI host and optional egui shell). T
 
 | # | Change | Fixes | Effort | Status |
 | --- | --- | --- | --- | --- |
-| 11 | GPU arcs/circles/ellipses + Loop–Blinn-style glyph fills | sharp at every zoom | 3–4 w | Planned |
+| 11 | GPU arcs/circles/ellipses + Loop–Blinn-style glyph fills | sharp at every zoom | 3–4 w | **In progress** — circles/arcs as SDF rings (`Kind::Arc` → `MeshData::rings` + `vs_ring`); continuous linetype + similarity transforms only. Ellipses and Loop–Blinn glyph fills still open |
 | 12 | Vello prototype for paper / plot preview behind a flag | quality compare | ~1 w | Planned |
+
+### Phase 3 (#11 circles/arcs) test commands
+
+```text
+cargo test -p aad-render --lib mesh::tests
+cargo test -p aad-render --test lod_and_frustum
+cargo test -p aad-ui-egui --lib gpu::tests
+```
 
 ## Performance (measure each change)
 
