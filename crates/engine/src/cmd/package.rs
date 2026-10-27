@@ -40,7 +40,7 @@ fn run_adcenter(s: &mut Session, p: &Value) -> Result<Value> {
         if str_param(p, "path").is_some() {
             return Err(bad(CMD, "browsing another file is not available in this build"));
         }
-        ("(current)".into(), s.doc()?.clone())
+        ("(current)".to_string(), s.doc()?.clone())
     };
     let want = |k: &str| table == "all" || table == k;
     let mut out = json!({ "path": path });

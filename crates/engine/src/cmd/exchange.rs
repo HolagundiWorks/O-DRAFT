@@ -8,7 +8,9 @@
 //! levels, which the plain files no longer have); the drawing itself is not changed.
 
 use aad_doc::{Drawing, EntityStore};
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(not(target_arch = "wasm32"))]
+use serde_json::json;
 
 use super::*;
 use crate::{Result, Session};

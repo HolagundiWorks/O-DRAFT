@@ -13,13 +13,16 @@
 //! units than this drawing is refused (`ignoreUnits` imports it unscaled).
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use aad_doc::{Drawing, EntityKind, EntityStore, Handle, LevelId, SheetSetId};
 use serde_json::{Value, json};
 
 use super::blocks::{adopt, block_names, merge_tables, read_drawing};
+#[cfg(not(target_arch = "wasm32"))]
 use super::project;
 use super::*;
 use crate::annot;
