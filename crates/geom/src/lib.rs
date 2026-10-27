@@ -58,6 +58,17 @@ pub fn rad(d: f64) -> f64 {
     d.to_radians()
 }
 
+/// Points along a circular sweep of `sweep` radians (negative: clockwise) from angle `start`,
+/// within `tol` of the curve. A sweep of a full turn or more (`f32` rounding can put it just past
+/// `TAU`) is one closed circle.
+pub fn sweep_points(center: Vec2, radius: f64, start: f64, sweep: f64, tol: f64, out: &mut Vec<Vec2>) {
+    let sweep = if sweep.is_finite() { sweep.clamp(-TAU, TAU) } else { 0.0 };
+    let n = arc_segments(radius, sweep, tol);
+    for i in 0..=n {
+        out.push(Vec2::polar(center, radius, start + sweep * i as f64 / n as f64));
+    }
+}
+
 /// Number of segments needed to approximate an arc of `radius` and `sweep` within `tol`.
 pub fn arc_segments(radius: f64, sweep: f64, tol: f64) -> usize {
     let r = radius.abs();

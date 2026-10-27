@@ -1710,3 +1710,13 @@ fn project_data_roundtrips_through_dxf() {
     assert_eq!(back.project, d.project);
     assert!(!write_dxf(&Drawing::new_imperial()).contains("AAD_PROJECT"));
 }
+
+#[test]
+fn svg_export_draws_whole_circles() {
+    let mut d = Drawing::new_metric();
+    d.add(&Space::Model, Common::default(), EntityKind::Circle(Circle { center: Vec3::new(0.0, 0.0, 0.0), radius: 500.0 })).unwrap();
+    let svg = crate::svg::export(&d, &Space::Model);
+    let poly = svg.split("<polyline").nth(1).unwrap_or("");
+    let points = poly.split("points=\"").nth(1).and_then(|p| p.split('"').next()).unwrap_or("");
+    assert!(points.split_whitespace().count() > 16, "a circle exported as {points:?}");
+}

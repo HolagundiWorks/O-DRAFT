@@ -1887,7 +1887,7 @@ impl Host {
             if state.doc.layer(&entity.common.layer).is_some_and(|layer| layer.locked) {
                 continue;
             }
-            for (index, grip) in entity.kind.grips().into_iter().enumerate() {
+            for (index, grip) in aad_engine::grips::grips(&state.doc, entity).into_iter().enumerate() {
                 let Ok(screen) = self.world_to_screen(grip) else { continue };
                 if (screen.x - x).abs() <= reach && (screen.y - y).abs() <= reach {
                     return Some(overlay::HotGrip { handle: *handle, index, base: grip, mode: aad_engine::grips::GripMode::Stretch });

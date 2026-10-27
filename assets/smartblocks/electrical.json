@@ -1,0 +1,119 @@
+{
+  "format": "osas-smartblocks",
+  "version": 1,
+  "discipline": "electrical",
+  "note": "Electrical layout symbols in plan, drawn by O-Draft (generic shapes, not copied from a standard's artwork). `size` is the symbol size in drawing millimetres: 150 mm prints 3 mm at 1:50. Their block names start with SB_ELEC_, so `electrical.blocks` can classify them with a wildcard such as SB_ELEC_SOCKET_*.",
+  "blocks": [
+    {
+      "id": "elec.switchboard",
+      "title": "Switch board with gangs (plan, on a wall)",
+      "layer": "E-POINT", "color": 2, "lineweight": 18,
+      "params": [
+        { "name": "gangs", "label": "Switches", "default": 2, "min": 1, "max": 12, "integer": true },
+        { "name": "sockets", "label": "Sockets", "default": 1, "min": 0, "max": 4, "integer": true },
+        { "name": "size", "label": "Symbol size", "unit": "mm", "default": 150, "min": 50, "max": 600 },
+        { "name": "height", "label": "Mounting height (tag)", "unit": "mm", "default": 1200, "min": 0, "max": 3000 },
+        { "name": "tag", "label": "Height tag", "default": 0, "choices": [ { "label": "No", "value": 0 }, { "label": "Yes", "value": 1 } ] }
+      ],
+      "vars": [ { "name": "pitch", "expr": "size*0.45" }, { "name": "wid", "expr": "(gangs + sockets + 1)*pitch" } ],
+      "items": [
+        { "rect": ["-wid/2", 0, "wid", "size*0.6"] },
+        { "repeat": { "var": "i", "count": "gangs", "items": [ { "line": ["-wid/2 + (i + 1)*pitch", "size*0.1", "-wid/2 + (i + 1)*pitch", "size*0.5"] } ] } },
+        { "repeat": { "var": "i", "count": "sockets", "items": [ { "circle": ["-wid/2 + (gangs + i + 1)*pitch", "size*0.3", "size*0.15"] } ] } },
+        { "when": "tag", "text": { "at": [0, "size*0.75"], "height": "size*0.35", "value": "+{height}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "elec.socket",
+      "title": "Socket outlet 6 A / 16 A (plan, on a wall)",
+      "grips": [ { "param": "size", "at": ["size/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "E-POINT", "color": 2, "lineweight": 18,
+      "params": [
+        { "name": "amp", "label": "Rating", "default": 6, "choices": [ { "label": "6A", "value": 6 }, { "label": "16A", "value": 16 }, { "label": "20A", "value": 20 } ] },
+        { "name": "size", "label": "Symbol size", "unit": "mm", "default": 150, "min": 50, "max": 600 },
+        { "name": "label", "label": "Rating text", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] }
+      ],
+      "items": [
+        { "line": ["-size/2", 0, "size/2", 0] },
+        { "arc": [0, 0, "size/2", 0, 180] },
+        { "when": "amp - 6", "arc": [0, 0, "size/3", 0, 180] },
+        { "line": [0, "size/2", 0, "size*0.8"] },
+        { "when": "label", "text": { "at": ["size*0.6", "size*0.3"], "height": "size*0.35", "value": "{amp}" } }
+      ]
+    },
+    {
+      "id": "elec.light",
+      "title": "Light point (plan)",
+      "grips": [ { "param": "size", "at": ["size/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "E-CEIL", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "size", "label": "Symbol size", "unit": "mm", "default": 200, "min": 50, "max": 600 },
+        { "name": "wall", "label": "Mounting", "default": 0, "choices": [ { "label": "Ceiling", "value": 0 }, { "label": "Wall bracket", "value": 1 } ] }
+      ],
+      "vars": [ { "name": "q", "expr": "size*0.3536" } ],
+      "items": [
+        { "circle": [0, 0, "size/2"] },
+        { "line": ["-q", "-q", "q", "q"] },
+        { "line": ["-q", "q", "q", "-q"] },
+        { "when": "wall", "line": ["-size/2", "-size/2", "size/2", "-size/2"] }
+      ]
+    },
+    {
+      "id": "elec.fan.ceiling",
+      "title": "Ceiling fan with sweep (plan)",
+      "grips": [ { "param": "size", "at": [0, "r"], "axis": "y", "per": 2 } ],
+      "layer": "E-CEIL", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "sweep", "label": "Sweep", "unit": "mm", "default": 1200, "min": 600, "max": 1800 },
+        { "name": "size", "label": "Symbol size", "unit": "mm", "default": 300, "min": 100, "max": 800 },
+        { "name": "showsweep", "label": "Show sweep circle", "default": 0, "choices": [ { "label": "No", "value": 0 }, { "label": "Yes", "value": 1 } ] }
+      ],
+      "vars": [ { "name": "r", "expr": "size/2" } ],
+      "items": [
+        { "circle": [0, 0, "r/4"] },
+        { "line": [0, "r/4", 0, "r"] },
+        { "line": ["r*0.2165", "-r*0.125", "r*0.866", "-r*0.5"] },
+        { "line": ["-r*0.2165", "-r*0.125", "-r*0.866", "-r*0.5"] },
+        { "arc": [0, 0, "r", 75, 105] },
+        { "arc": [0, 0, "r", 195, 225] },
+        { "arc": [0, 0, "r", 315, 345] },
+        { "when": "showsweep", "linetype": "HIDDEN", "circle": [0, 0, "sweep/2"] }
+      ]
+    },
+    {
+      "id": "elec.db",
+      "title": "Distribution board (plan, on a wall)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
+      "layer": "E-POINT", "color": 2, "lineweight": 25,
+      "params": [
+        { "name": "ways", "label": "Ways", "default": 8, "min": 2, "max": 48, "integer": true },
+        { "name": "phase", "label": "Supply", "default": 1, "choices": [ { "label": "SP", "value": 1 }, { "label": "TPN", "value": 3 } ] },
+        { "name": "width", "label": "Board width", "unit": "mm", "default": 400, "min": 200, "max": 1200 },
+        { "name": "depth", "label": "Board depth", "unit": "mm", "default": 150, "min": 80, "max": 400 },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 60, "min": 10, "max": 500 }
+      ],
+      "items": [
+        { "rect": ["-width/2", 0, "width", "depth"] },
+        { "hatch": { "pts": [["-width/2", 0], ["width/2", 0], ["width/2", "depth"]], "pattern": "SOLID" } },
+        { "line": ["-width/2", 0, "width/2", "depth"] },
+        { "text": { "at": [0, "depth + 0.8*txt"], "height": "txt", "value": "DB {ways}W {phase}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "elec.downlight",
+      "title": "Recessed downlight (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "E-CEIL", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "dia", "label": "Cut-out diameter", "unit": "mm", "default": 150, "min": 50, "max": 400 },
+        { "name": "square", "label": "Shape", "default": 0, "choices": [ { "label": "Round", "value": 0 }, { "label": "Square", "value": 1 } ] }
+      ],
+      "items": [
+        { "when": "1 - square", "circle": [0, 0, "dia/2"] },
+        { "when": "square", "crect": [0, 0, "dia", "dia"] },
+        { "circle": [0, 0, "dia*0.3"] },
+        { "dot": [0, 0, "dia*0.1"] }
+      ]
+    }
+  ]
+}

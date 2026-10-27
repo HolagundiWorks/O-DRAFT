@@ -1,0 +1,151 @@
+{
+  "format": "osas-smartblocks",
+  "version": 1,
+  "discipline": "interior",
+  "note": "Joinery and furniture in plan (shelf: elevation). The insertion point is the wall face or the centre. Millimetres.",
+  "blocks": [
+    {
+      "id": "int.wardrobe",
+      "title": "Wardrobe with hinged or sliding shutters (plan)",
+      "grips": [ { "param": "width", "at": ["width", "depth/2"], "axis": "x" }, { "param": "depth", "at": ["width/2", "depth"], "axis": "y" } ],
+      "layer": "I-JOIN", "color": 5, "lineweight": 20,
+      "params": [
+        { "name": "width", "label": "Width", "unit": "mm", "default": 1800, "min": 450, "max": 6000 },
+        { "name": "depth", "label": "Depth", "unit": "mm", "default": 600, "min": 300, "max": 900 },
+        { "name": "shutters", "label": "Shutters", "default": 3, "min": 1, "max": 10, "integer": true },
+        { "name": "sliding", "label": "Shutter type", "default": 0, "choices": [ { "label": "Hinged", "value": 0 }, { "label": "Sliding", "value": 1 } ] },
+        { "name": "rod", "label": "Hanging rod", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] }
+      ],
+      "vars": [ { "name": "sw", "expr": "width/shutters" } ],
+      "items": [
+        { "rect": [0, 0, "width", "depth"] },
+        { "when": "1 - sliding", "repeat": { "var": "i", "count": "shutters - 1", "items": [ { "line": ["(i + 1)*sw", "depth - 20", "(i + 1)*sw", "depth"] } ] } },
+        { "when": "1 - sliding", "line": [0, "depth - 20", "width", "depth - 20"] },
+        { "when": "1 - sliding", "repeat": { "var": "i", "count": "shutters", "items": [ { "arc": ["i*sw", "depth", "sw", 0, 90], "linetype": "HIDDEN" } ] } },
+        { "when": "sliding", "line": [0, "depth - 25", "width", "depth - 25"] },
+        { "when": "sliding", "line": [0, "depth - 50", "width", "depth - 50"] },
+        { "when": "sliding", "repeat": { "var": "i", "count": "shutters - 1", "items": [ { "line": ["(i + 1)*sw", "depth - 50", "(i + 1)*sw", "depth - 25"] } ] } },
+        { "when": "rod", "linetype": "HIDDEN", "line": [50, "depth/2", "width - 50", "depth/2"] }
+      ]
+    },
+    {
+      "id": "int.kitchen.counter",
+      "title": "Kitchen counter with sink and hob (plan)",
+      "grips": [ { "param": "length", "at": ["length", "depth/2"], "axis": "x" }, { "param": "depth", "at": ["length/2", "depth"], "axis": "y" }, { "param": "sinkat", "at": ["sinkat", "depth/2"], "axis": "x" }, { "param": "hobat", "at": ["hobat", "depth/2"], "axis": "x" } ],
+      "layer": "I-JOIN", "color": 5, "lineweight": 20,
+      "params": [
+        { "name": "length", "label": "Counter length", "unit": "mm", "default": 3000, "min": 900, "max": 8000 },
+        { "name": "depth", "label": "Counter depth", "unit": "mm", "default": 600, "min": 450, "max": 900 },
+        { "name": "sink", "label": "Sink", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "sinkat", "label": "Sink centre from left", "unit": "mm", "default": 900, "min": 300, "max": 7700 },
+        { "name": "hob", "label": "Hob", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "hobat", "label": "Hob centre from left", "unit": "mm", "default": 2200, "min": 300, "max": 7700 },
+        { "name": "burners", "label": "Burners", "default": 3, "choices": [ { "label": "2", "value": 2 }, { "label": "3", "value": 3 }, { "label": "4", "value": 4 } ] }
+      ],
+      "items": [
+        { "rect": [0, 0, "length", "depth"] },
+        { "when": "sink", "rect": ["sinkat - 250", 80, 500, "depth - 160"] },
+        { "when": "sink", "circle": ["sinkat", "depth/2", 30] },
+        { "when": "sink", "circle": ["sinkat", 40, 15] },
+        { "when": "hob", "crect": ["hobat", "depth/2", 700, "min(500, depth - 60)"] },
+        { "when": "hob", "repeat": { "var": "i", "count": "burners", "items": [
+          { "circle": ["hobat - 240 + i*480/(burners - 1)", "depth/2 + 70*(i - 2*floor(i/2))", 75] } ] } }
+      ]
+    },
+    {
+      "id": "int.dining.set",
+      "title": "Rectangular dining table with chairs (plan)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "width", "at": [0, "width/2"], "axis": "y", "per": 2 } ],
+      "layer": "I-FURN", "color": 3, "lineweight": 20,
+      "params": [
+        { "name": "length", "label": "Table length", "unit": "mm", "default": 1500, "min": 700, "max": 4000 },
+        { "name": "width", "label": "Table width", "unit": "mm", "default": 900, "min": 600, "max": 1500 },
+        { "name": "side", "label": "Chairs per long side", "default": 2, "min": 0, "max": 6, "integer": true },
+        { "name": "ends", "label": "Chairs at ends", "default": 0, "choices": [ { "label": "No", "value": 0 }, { "label": "Yes", "value": 1 } ] },
+        { "name": "chair", "label": "Chair size", "unit": "mm", "default": 450, "min": 350, "max": 600 }
+      ],
+      "vars": [ { "name": "sp", "expr": "length/max(side, 1)" }, { "name": "tuck", "expr": "chair*0.25" } ],
+      "items": [
+        { "crect": [0, 0, "length", "width"] },
+        { "repeat": { "var": "i", "count": "side", "items": [
+          { "crect": ["-length/2 + (i + 0.5)*sp", "-width/2 - chair/2 + tuck", "chair", "chair"] },
+          { "line": ["-length/2 + (i + 0.5)*sp - chair/2", "-width/2 - chair + tuck + 60", "-length/2 + (i + 0.5)*sp + chair/2", "-width/2 - chair + tuck + 60"] },
+          { "crect": ["-length/2 + (i + 0.5)*sp", "width/2 + chair/2 - tuck", "chair", "chair"] },
+          { "line": ["-length/2 + (i + 0.5)*sp - chair/2", "width/2 + chair - tuck - 60", "-length/2 + (i + 0.5)*sp + chair/2", "width/2 + chair - tuck - 60"] } ] } },
+        { "when": "ends", "crect": ["-length/2 - chair/2 + tuck", 0, "chair", "chair"] },
+        { "when": "ends", "crect": ["length/2 + chair/2 - tuck", 0, "chair", "chair"] }
+      ]
+    },
+    {
+      "id": "int.bed",
+      "title": "Bed with pillows and side tables (plan)",
+      "grips": [ { "param": "length", "at": [0, "headboard + length"], "axis": "y" } ],
+      "layer": "I-FURN", "color": 3, "lineweight": 20,
+      "params": [
+        { "name": "width", "label": "Mattress width", "unit": "mm", "default": 1500, "choices": [
+          { "label": "Single 900", "value": 900 }, { "label": "Double 1350", "value": 1350 }, { "label": "Queen 1500", "value": 1500 }, { "label": "King 1800", "value": 1800 } ] },
+        { "name": "length", "label": "Mattress length", "unit": "mm", "default": 1950, "min": 1800, "max": 2200 },
+        { "name": "headboard", "label": "Headboard depth", "unit": "mm", "default": 50, "min": 0, "max": 300 },
+        { "name": "tables", "label": "Side tables", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "table", "label": "Side table size", "unit": "mm", "default": 450, "min": 300, "max": 600 }
+      ],
+      "vars": [ { "name": "two", "expr": "min(1, max(0, width - 1200))" }, { "name": "hb", "expr": "max(headboard, 1)" } ],
+      "items": [
+        { "when": "headboard", "rect": ["-width/2", 0, "width", "headboard"] },
+        { "rect": ["-width/2", "headboard", "width", "length"] },
+        { "when": "1 - two", "rect": ["-width/2 + 100", "headboard + 80", "width - 200", 350] },
+        { "when": "two", "rect": ["-width/2 + 80", "headboard + 80", "width/2 - 120", 350] },
+        { "when": "two", "rect": [40, "headboard + 80", "width/2 - 120", 350] },
+        { "poly": { "pts": [["-width/2", "headboard + 0.35*length"], ["width/2 - 300", "headboard + 0.35*length"], ["width/2", "headboard + 0.35*length - 300"]] } },
+        { "line": ["width/2 - 300", "headboard + 0.35*length", "width/2", "headboard + 0.35*length"] },
+        { "when": "tables", "rect": ["-width/2 - table - 30", 0, "table", "table"] },
+        { "when": "tables", "rect": ["width/2 + 30", 0, "table", "table"] }
+      ]
+    },
+    {
+      "id": "int.sofa",
+      "title": "Sofa, one to five seats (plan)",
+      "grips": [ { "param": "seat", "at": ["total/2", "depth/2"], "axis": "x", "per": "2/seats" }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
+      "layer": "I-FURN", "color": 3, "lineweight": 20,
+      "params": [
+        { "name": "seats", "label": "Seats", "default": 3, "min": 1, "max": 5, "integer": true },
+        { "name": "seat", "label": "Seat width", "unit": "mm", "default": 600, "min": 450, "max": 900 },
+        { "name": "depth", "label": "Overall depth", "unit": "mm", "default": 850, "min": 650, "max": 1100 },
+        { "name": "arm", "label": "Arm width", "unit": "mm", "default": 150, "min": 0, "max": 300 },
+        { "name": "back", "label": "Back depth", "unit": "mm", "default": 200, "min": 100, "max": 350 }
+      ],
+      "vars": [ { "name": "total", "expr": "seats*seat + 2*arm" } ],
+      "items": [
+        { "rect": ["-total/2", 0, "total", "depth"] },
+        { "line": ["-total/2 + arm", "back", "total/2 - arm", "back"] },
+        { "when": "arm", "line": ["-total/2 + arm", "back", "-total/2 + arm", "depth"] },
+        { "when": "arm", "line": ["total/2 - arm", "back", "total/2 - arm", "depth"] },
+        { "repeat": { "var": "i", "count": "seats - 1", "items": [ { "line": ["-total/2 + arm + (i + 1)*seat", "back", "-total/2 + arm + (i + 1)*seat", "depth"] } ] } }
+      ]
+    },
+    {
+      "id": "int.shelf",
+      "title": "Shelving or storage unit (elevation)",
+      "grips": [ { "param": "width", "at": ["width", "height/2"], "axis": "x" }, { "param": "height", "at": ["width/2", "height"], "axis": "y" } ],
+      "layer": "I-JOIN", "color": 5, "lineweight": 20,
+      "params": [
+        { "name": "width", "label": "Width", "unit": "mm", "default": 900, "min": 300, "max": 4000 },
+        { "name": "height", "label": "Height", "unit": "mm", "default": 2100, "min": 300, "max": 3000 },
+        { "name": "shelves", "label": "Shelves", "default": 4, "min": 0, "max": 12, "integer": true },
+        { "name": "bays", "label": "Bays", "default": 1, "min": 1, "max": 8, "integer": true },
+        { "name": "plinth", "label": "Plinth height", "unit": "mm", "default": 100, "min": 0, "max": 200 },
+        { "name": "board", "label": "Board thickness", "unit": "mm", "default": 18, "min": 12, "max": 40 }
+      ],
+      "vars": [ { "name": "clear", "expr": "height - plinth - board" } ],
+      "items": [
+        { "rect": [0, 0, "width", "height"] },
+        { "when": "plinth", "line": [0, "plinth", "width", "plinth"] },
+        { "repeat": { "var": "i", "count": "shelves", "items": [
+          { "rect": ["board", "plinth + (i + 1)*clear/(shelves + 1)", "width - 2*board", "board"] } ] } },
+        { "repeat": { "var": "i", "count": "bays - 1", "items": [
+          { "line": ["(i + 1)*width/bays", "plinth", "(i + 1)*width/bays", "height - board"] } ] } },
+        { "line": [0, "height - board", "width", "height - board"] }
+      ]
+    }
+  ]
+}

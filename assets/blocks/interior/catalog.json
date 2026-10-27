@@ -1,0 +1,19 @@
+{
+  "id": "interior",
+  "name": "Interior and accessibility",
+  "units": "mm",
+  "licence": "CC0 1.0",
+  "attribution": "Innerscene Drawing Library (original models, public domain / CC0). Geometry is 1:1 millimetres; verify against the product, the design and local codes before construction.",
+  "source": "https://www.innerscene.com/tools/library/drawings",
+  "items": [
+    {"id": "accessible-toilet-room-2500-x-2500-mm", "title": "Accessible toilet room - 2500 x 2500 mm", "file": "INTR-AccessibleToiletRoom2500X2500Mm.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/accessible-toilet-room-2500-x-2500-mm-49f7462e"},
+    {"id": "door-symbols-a3-sheet-cad-collection", "title": "Door symbols A3 sheet", "file": "INTR-DoorSymbolsA3Sheet.dxf", "category": "sheet", "source": "https://www.innerscene.com/tools/library/drawings/door-symbols-a3-sheet-cad-collection-64b3faa3"},
+    {"id": "door-tag-cad-block", "title": "Door tag", "file": "INTR-DoorTag.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/door-tag-cad-block-74340c81"},
+    {"id": "front-approach-door-maneuvering-clearances", "title": "Front approach door maneuvering clearances", "file": "INTR-FrontApproachDoorManeuveringClearances.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/front-approach-door-maneuvering-clearances-dc04c5ea"},
+    {"id": "kitchen-appliance-a3-sheet-cad-collection", "title": "Kitchen appliance A3 sheet", "file": "INTR-KitchenApplianceA3Sheet.dxf", "category": "sheet", "source": "https://www.innerscene.com/tools/library/drawings/kitchen-appliance-a3-sheet-cad-collection-96ef52f4"},
+    {"id": "toilet-grab-bar-side-and-rear-elevations", "title": "Toilet grab bar side and rear elevations", "file": "INTR-ToiletGrabBarSideAndRearElevations.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/toilet-grab-bar-side-and-rear-elevations-baae8222"},
+    {"id": "two-door-wardrobe-elevation-cad-block", "title": "Two door wardrobe elevation", "file": "INTR-TwoDoorWardrobeElevation.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/two-door-wardrobe-elevation-cad-block-7d7234a9"},
+    {"id": "window-symbols-a3-sheet-cad-collection", "title": "Window symbols A3 sheet", "file": "INTR-WindowSymbolsA3Sheet.dxf", "category": "sheet", "source": "https://www.innerscene.com/tools/library/drawings/window-symbols-a3-sheet-cad-collection-266dbde4"},
+    {"id": "window-tag-cad-block", "title": "Window tag", "file": "INTR-WindowTag.dxf", "category": "symbol", "source": "https://www.innerscene.com/tools/library/drawings/window-tag-cad-block-5d0fbcf4"}
+  ]
+}

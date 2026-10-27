@@ -44,6 +44,7 @@ use serde_json::Value;
 pub use aad_doc as doc;
 pub use aad_geom as geom;
 pub use aad_render as render;
+pub use cmd::smartblock::property_fields as smart_block_fields;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 
 /// Lintel height, in metres, of the active floor. Drawings with no floors use 2.1 m.

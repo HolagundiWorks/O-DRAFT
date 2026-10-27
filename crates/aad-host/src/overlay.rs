@@ -155,7 +155,7 @@ pub fn mesh(
                 if state.doc.layer(&entity.common.layer).is_some_and(|layer| layer.locked) {
                     continue;
                 }
-                for (index, grip) in entity.kind.grips().into_iter().enumerate() {
+                for (index, grip) in aad_engine::grips::grips(&state.doc, entity).into_iter().enumerate() {
                     let hot = cursor.hot.is_some_and(|h| h.handle == *handle && h.index == index);
                     let warm = cursor.warm_grip.is_some_and(|(h, i)| h == *handle && i == index);
                     let color = if hot {

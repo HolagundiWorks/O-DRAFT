@@ -239,6 +239,37 @@ fn num_row(ui: &mut egui::Ui, label: &str, id: egui::Id, v: f64, set: &mut Optio
     ui.end_row();
 }
 
+/// Smart block parameter rows (`aad_engine::smart_block_fields`): a list for choices, else a number.
+fn smart_rows(ui: &mut egui::Ui, fields: &[Value], set: &mut Option<(String, Value)>) {
+    for f in fields {
+        let label = f["label"].as_str().unwrap_or_default();
+        let value = f["value"].as_str().unwrap_or_default();
+        let Some(key) = f["key"].as_str() else {
+            ro_row(ui, label, value.to_string());
+            continue;
+        };
+        if let Some(choices) = f["choices"].as_array() {
+            ui.label(RichText::new(label).color(Tokens::get().text_dim));
+            egui::ComboBox::from_id_salt(("qp_sb", key)).width(150.0).selected_text(value).show_ui(ui, |ui| {
+                for c in choices.iter().filter_map(Value::as_str) {
+                    if ui.selectable_label(c == value, c).clicked() {
+                        *set = Some((key.to_string(), json!(c)));
+                    }
+                }
+            });
+            ui.end_row();
+        } else {
+            ui.label(RichText::new(label).color(Tokens::get().text_dim));
+            if let Some(n) = expr_field(ui, egui::Id::new(("qp_sb", key)), value)
+                && let Some(x) = n.trim().parse::<f64>().ok().filter(|x| x.is_finite())
+            {
+                *set = Some((key.to_string(), json!(x)));
+            }
+            ui.end_row();
+        }
+    }
+}
+
 fn ro_row(ui: &mut egui::Ui, label: &str, v: String) {
     ui.label(RichText::new(crate::i18n::t(label)).color(Tokens::get().text_dim));
     ui.label(v);
@@ -294,6 +325,10 @@ pub fn quick_properties(app: &mut CadApp, ctx: &egui::Context) {
     let layers: Vec<String> = d.layers.iter().map(|l| l.name.clone()).collect();
     let linetypes: Vec<String> = d.linetypes.iter().map(|l| l.name.clone()).collect();
     let kind = if ents.len() == 1 { Some(first.kind.clone()) } else { None };
+    let smart = match &kind {
+        Some(EntityKind::Insert(i)) => aad_engine::smart_block_fields(d, i),
+        _ => Vec::new(),
+    };
     let ids: Vec<String> = sel.iter().map(|h| h.hex()).collect();
     let mut set: Option<(String, Value)> = None;
     let mut close = false;
@@ -388,6 +423,7 @@ pub fn quick_properties(app: &mut CadApp, ctx: &egui::Context) {
                         ro_row(ui, "Name", i.block.clone());
                         num_row(ui, "Rotation", id("rot"), i.rotation.to_degrees(), &mut set, "rotation");
                         num_row(ui, "Scale", id("sc"), i.scale.x, &mut set, "scale");
+                        smart_rows(ui, &smart, &mut set);
                     }
                     Some(EntityKind::Dimension(dm)) => {
                         ui.label(RichText::new(crate::tl!("Text override")).color(Tokens::get().text_dim));

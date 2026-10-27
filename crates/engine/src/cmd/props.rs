@@ -13,7 +13,7 @@ use crate::{Result, Session};
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("properties", "Properties", run_get).menu(&["Modify", "Properties"]).alias(&["pr", "props", "ch"]).params("{handles?} → properties of the selection").noundo(),
-        CommandSpec::new("properties.set", "Set Properties", run_set).params("{handles?, layer?, color?, linetype?, lineweight?, ltscale?, transparency?: \"ByLayer\" | \"ByBlock\" | 0..90, visible?, <geometry fields: radius, center, start, end, text, height | textSize: small|medium|large, rotation…>, door/window: openingType?, openingWidth?, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units)}"),
+        CommandSpec::new("properties.set", "Set Properties", run_set).params("{handles?, layer?, color?, linetype?, lineweight?, ltscale?, transparency?: \"ByLayer\" | \"ByBlock\" | 0..90, visible?, <geometry fields: radius, center, start, end, text, height | textSize: small|medium|large, rotation…>, smart block: sb:<parameter>?, door/window: openingType?, openingWidth?, openingHeight? (drawing units), sill? (drawing units), lintelMode?: standard|custom, head? (drawing units)}"),
         CommandSpec::new("matchprop", "Match Properties", run_matchprop)
             .menu(&["Modify", "Match Properties"])
             .alias(&["ma", "painter"])
@@ -181,6 +181,14 @@ fn run_set(s: &mut Session, p: &Value) -> Result<Value> {
     const OPENING_KEYS: &[&str] = &["openingType", "openingWidth", "openingHeight", "sill", "lintelMode", "head"];
     if OPENING_KEYS.iter().any(|k| p.get(*k).is_some()) {
         return super::walls::edit_openings(s, &hs, p);
+    }
+    // Smart block parameters (`sb:<name>`, the Properties panel rows of a smart block).
+    if let Some(m) = p.as_object()
+        && m.keys().any(|k| k.starts_with(super::smartblock::FIELD_PREFIX))
+    {
+        let given: serde_json::Map<String, Value> =
+            m.iter().filter_map(|(k, v)| k.strip_prefix(super::smartblock::FIELD_PREFIX).map(|n| (n.to_string(), v.clone()))).collect();
+        return super::smartblock::edit_handles(s, "properties.set", &hs, &given);
     }
     let rank_height = match str_param(p, "textSize") {
         Some(r) => Some(text_height_from_rank(s, r)?),

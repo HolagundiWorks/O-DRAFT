@@ -121,6 +121,13 @@ if (Test-Path $FurnSrc) {
   New-Item -ItemType Directory -Force -Path $FurnStage | Out-Null
   Copy-Item (Join-Path $FurnSrc '*') $FurnStage -Recurse -Force
 }
+# Discipline block libraries (CC0 plumbing, HVAC, electrical, structural and interior DXFs).
+$BlocksSrc = Join-Path $Root 'assets\blocks'
+if (Test-Path $BlocksSrc) {
+  $BlocksStage = Join-Path $Stage 'blocks'
+  New-Item -ItemType Directory -Force -Path $BlocksStage | Out-Null
+  Copy-Item (Join-Path $BlocksSrc '*') $BlocksStage -Recurse -Force
+}
 
 # ShilpiDB engine binaries (bundled sibling process — not a separate product). Prefer a local
 # shilpidb workspace build, then OSAS suite-tools, then SHILPIDB_BIN.

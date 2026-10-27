@@ -79,6 +79,8 @@ public sealed partial class MainWindow : Window
     private Window? _dimStyleWindow;
     private Window? _linetypeWindow;
     private Window? _parametersWindow;
+    private Window? _smartBlockWindow;
+    private readonly HashSet<string> _openCatalogs = new(StringComparer.Ordinal);
     private Window? _hatchWindow;
     private Window? _pointStyleWindow;
     private Window? _mleaderStyleWindow;
@@ -605,6 +607,11 @@ public sealed partial class MainWindow : Window
         if (id is "ui.dialog.parameters")
         {
             OpenParameters();
+            return;
+        }
+        if (id is "smartblock.insert" or "sbinsert" or "smartblock" or "ui.dialog.smartblocks")
+        {
+            OpenSmartBlocks();
             return;
         }
         if (id == "ui.workspace.classic")
@@ -2373,6 +2380,7 @@ public sealed partial class MainWindow : Window
         _dimStyleWindow = null;
         _linetypeWindow = null;
         _parametersWindow = null;
+        _smartBlockWindow = null;
         _hatchWindow = null;
         _pointStyleWindow = null;
         _mleaderStyleWindow = null;
@@ -2394,7 +2402,7 @@ public sealed partial class MainWindow : Window
         {
             _calc, _pomodoro, _toolsWindow, _leftFloat, _pdfWindow, _formWindow,
             _unitsWindow, _textStyleWindow, _pageSetupWindow, _plotStyleWindow, _batchPlotWindow,
-            _dimStyleWindow, _linetypeWindow, _parametersWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
+            _dimStyleWindow, _linetypeWindow, _parametersWindow, _smartBlockWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
             _roomSettingsWindow, _draftingWindow, _quickWindow, _quickSelectWindow,
         })
         {
@@ -3534,6 +3542,20 @@ public sealed partial class MainWindow : Window
         PresentToolWindow(_parametersWindow);
     }
 
+    private void OpenSmartBlocks()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        if (_smartBlockWindow == null)
+        {
+            _smartBlockWindow = SmartBlockWindow.Open(this, _host, AfterCommand);
+            _smartBlockWindow.Closed += (_, _) => _smartBlockWindow = null;
+        }
+        PresentToolWindow(_smartBlockWindow);
+    }
+
     private void OpenHatch()
     {
         if (_host == IntPtr.Zero)
@@ -4662,7 +4684,103 @@ public sealed partial class MainWindow : Window
         }
         BlocksPanel.Children.Add(FieldLabel("Double-click a thumbnail to insert. External references are not supported."));
         BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+        AddSmartBlocksEntry();
         AddFurnitureCatalog();
+        AddDisciplineCatalogs();
+    }
+
+    /// <summary>Smart blocks (parametric RCC, steel, services and interior blocks): opens the Smart Blocks window.</summary>
+    private void AddSmartBlocksEntry()
+    {
+        BlocksPanel.Children.Add(Heading("Smart blocks"));
+        BlocksPanel.Children.Add(FieldLabel("Parametric RCC, steel, plumbing, HVAC, electrical and interior blocks. Edit a placed one in Properties or by its grips."));
+        var open = new Button { Content = "Smart blocks...", MinHeight = Density.ControlHeight };
+        Density.Name(open, "Open smart blocks");
+        ToolTipService.SetToolTip(open, "Pick a smart block, set its parameters and insert it");
+        open.Click += (_, _) => OpenSmartBlocks();
+        BlocksPanel.Children.Add(open);
+        BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+    }
+
+    /// <summary>Discipline DXF sets from <c>blocks/&lt;discipline&gt;</c> (CC0), one collapsed section each.
+    /// Thumbnails are made only when a section is opened, so the panel stays quick to rebuild.</summary>
+    private void AddDisciplineCatalogs()
+    {
+        var sections = FurnitureCatalog.LoadDisciplines();
+        if (sections.Count == 0)
+            return;
+        BlocksPanel.Children.Add(Heading("Discipline blocks"));
+        BlocksPanel.Children.Add(FieldLabel("Plumbing, HVAC, electrical, structural and interior symbols; millimetres; CC0 (Innerscene). Click a thumbnail to insert."));
+        foreach (var section in sections)
+        {
+            var body = new StackPanel { Spacing = Density.SpaceSm };
+            var expander = new Expander
+            {
+                Header = section.Name + " (" + section.Entries.Count + ")",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Content = body,
+            };
+            Density.Name(expander, section.Name);
+            var built = false;
+            void Build()
+            {
+                if (built)
+                    return;
+                built = true;
+                AddCatalogGrid(body, section.Entries);
+            }
+            expander.Expanding += (_, _) =>
+            {
+                _openCatalogs.Add(section.Id);
+                Build();
+            };
+            expander.Collapsed += (_, _) => _openCatalogs.Remove(section.Id);
+            if (_openCatalogs.Contains(section.Id))
+            {
+                Build();
+                expander.IsExpanded = true;
+            }
+            BlocksPanel.Children.Add(expander);
+        }
+        BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
+    }
+
+    /// <summary>Two-column thumbnail grids of <paramref name="entries"/>, one per category.</summary>
+    private void AddCatalogGrid(Panel target, IReadOnlyList<FurnitureCatalog.Entry> entries)
+    {
+        string? lastCat = null;
+        Grid? grid = null;
+        var col = 0;
+        var row = 0;
+        foreach (var entry in entries)
+        {
+            if (grid == null || !string.Equals(lastCat, entry.Item.Category, StringComparison.Ordinal))
+            {
+                lastCat = entry.Item.Category;
+                target.Children.Add(FieldLabel((lastCat ?? "").ToUpperInvariant()));
+                grid = new Grid { ColumnSpacing = Density.SpaceMd, RowSpacing = Density.SpaceMd };
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                target.Children.Add(grid);
+                col = 0;
+                row = 0;
+            }
+            while (grid.RowDefinitions.Count <= row)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            }
+            var card = MakeFurnitureThumbnail(entry);
+            Grid.SetRow(card, row);
+            Grid.SetColumn(card, col);
+            grid.Children.Add(card);
+            col++;
+            if (col >= 2)
+            {
+                col = 0;
+                row++;
+            }
+        }
     }
 
     private Border MakeBlockThumbnail(BlockRow block, PanelSnapshot snapshot)
@@ -4987,45 +5105,7 @@ public sealed partial class MainWindow : Window
         BlocksPanel.Children.Add(Heading(FurnitureCatalog.Name));
         BlocksPanel.Children.Add(FieldLabel("Plan blocks · millimetres · CC0 (Innerscene)"));
         BlocksPanel.Children.Add(FieldLabel("Click a thumbnail to insert."));
-        string? lastCat = null;
-        Grid? grid = null;
-        var col = 0;
-        var row = 0;
-        void EnsureGrid()
-        {
-            if (grid != null)
-                return;
-            grid = new Grid { ColumnSpacing = Density.SpaceMd, RowSpacing = Density.SpaceMd };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            BlocksPanel.Children.Add(grid);
-            col = 0;
-            row = 0;
-        }
-        foreach (var entry in entries)
-        {
-            if (!string.Equals(lastCat, entry.Item.Category, StringComparison.Ordinal))
-            {
-                lastCat = entry.Item.Category;
-                grid = null;
-                BlocksPanel.Children.Add(FieldLabel(lastCat.ToUpperInvariant()));
-            }
-            EnsureGrid();
-            while (grid!.RowDefinitions.Count <= row)
-            {
-                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            }
-            var card = MakeFurnitureThumbnail(entry);
-            Grid.SetRow(card, row);
-            Grid.SetColumn(card, col);
-            grid.Children.Add(card);
-            col++;
-            if (col >= 2)
-            {
-                col = 0;
-                row++;
-            }
-        }
+        AddCatalogGrid(BlocksPanel, entries);
         BlocksPanel.Children.Add(new Border { Height = 1, Margin = new Thickness(0, 8, 0, 8), Background = StripBrush() });
     }
 

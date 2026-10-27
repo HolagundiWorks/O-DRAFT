@@ -1,0 +1,116 @@
+{
+  "format": "osas-smartblocks",
+  "version": 1,
+  "discipline": "structural",
+  "note": "Steel sections and base plates drawn from the dimensions you give (no section tables are built in). Geometry in millimetres about the insertion point; root and toe radii are not drawn.",
+  "blocks": [
+    {
+      "id": "struct.ibeam",
+      "title": "Steel I-section (cross-section)",
+      "grips": [ { "param": "depth", "at": [0, "b"], "axis": "y", "per": 2 }, { "param": "flange", "at": ["a", "-b"], "axis": "x", "per": 2 } ],
+      "layer": "S-STEEL", "color": 5, "lineweight": 35,
+      "params": [
+        { "name": "depth", "label": "Depth", "unit": "mm", "default": 300, "min": 75, "max": 1200 },
+        { "name": "flange", "label": "Flange width", "unit": "mm", "default": 140, "min": 40, "max": 600 },
+        { "name": "web", "label": "Web thickness", "unit": "mm", "default": 7.5, "min": 3, "max": 40 },
+        { "name": "tf", "label": "Flange thickness", "unit": "mm", "default": 12.4, "min": 4, "max": 60 },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 25, "min": 5, "max": 300 }
+      ],
+      "vars": [ { "name": "a", "expr": "flange/2" }, { "name": "b", "expr": "depth/2" }, { "name": "w", "expr": "web/2" } ],
+      "items": [
+        { "poly": { "closed": true, "pts": [
+          ["-a", "-b"], ["a", "-b"], ["a", "-b + tf"], ["w", "-b + tf"], ["w", "b - tf"], ["a", "b - tf"],
+          ["a", "b"], ["-a", "b"], ["-a", "b - tf"], ["-w", "b - tf"], ["-w", "-b + tf"], ["-a", "-b + tf"] ] } },
+        { "when": "label", "text": { "at": [0, "-b - 1.8*txt"], "height": "txt", "value": "I {depth} x {flange}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "struct.channel",
+      "title": "Steel channel (cross-section)",
+      "grips": [ { "param": "depth", "at": [0, "b"], "axis": "y", "per": 2 }, { "param": "flange", "at": ["flange", "-b"], "axis": "x" } ],
+      "layer": "S-STEEL", "color": 5, "lineweight": 35,
+      "params": [
+        { "name": "depth", "label": "Depth", "unit": "mm", "default": 200, "min": 50, "max": 600 },
+        { "name": "flange", "label": "Flange width", "unit": "mm", "default": 75, "min": 25, "max": 200 },
+        { "name": "web", "label": "Web thickness", "unit": "mm", "default": 6.2, "min": 3, "max": 25 },
+        { "name": "tf", "label": "Flange thickness", "unit": "mm", "default": 11.4, "min": 4, "max": 40 },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 25, "min": 5, "max": 300 }
+      ],
+      "vars": [ { "name": "b", "expr": "depth/2" } ],
+      "items": [
+        { "poly": { "closed": true, "pts": [
+          [0, "-b"], ["flange", "-b"], ["flange", "-b + tf"], ["web", "-b + tf"], ["web", "b - tf"], ["flange", "b - tf"], ["flange", "b"], [0, "b"] ] } },
+        { "when": "label", "text": { "at": ["flange/2", "-b - 1.8*txt"], "height": "txt", "value": "C {depth} x {flange}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "struct.angle",
+      "title": "Steel angle (cross-section)",
+      "grips": [ { "param": "leg1", "at": [0, "leg1"], "axis": "y" }, { "param": "leg2", "at": ["leg2", 0], "axis": "x" } ],
+      "layer": "S-STEEL", "color": 5, "lineweight": 35,
+      "params": [
+        { "name": "leg1", "label": "Vertical leg", "unit": "mm", "default": 75, "min": 20, "max": 250 },
+        { "name": "leg2", "label": "Horizontal leg", "unit": "mm", "default": 75, "min": 20, "max": 250 },
+        { "name": "thk", "label": "Thickness", "unit": "mm", "default": 8, "min": 3, "max": 35 },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 20, "min": 5, "max": 300 }
+      ],
+      "items": [
+        { "poly": { "closed": true, "pts": [[0, 0], ["leg2", 0], ["leg2", "thk"], ["thk", "thk"], ["thk", "leg1"], [0, "leg1"]] } },
+        { "when": "label", "text": { "at": ["leg2/2", "-1.8*txt"], "height": "txt", "value": "L {leg1} x {leg2} x {thk}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "struct.hollow.rect",
+      "title": "Rectangular / square hollow section",
+      "grips": [ { "param": "width", "at": ["width/2", 0], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth/2"], "axis": "y", "per": 2 } ],
+      "layer": "S-STEEL", "color": 5, "lineweight": 35,
+      "params": [
+        { "name": "width", "label": "Width", "unit": "mm", "default": 100, "min": 20, "max": 500 },
+        { "name": "depth", "label": "Depth", "unit": "mm", "default": 50, "min": 20, "max": 500 },
+        { "name": "thk", "label": "Wall thickness", "unit": "mm", "default": 4, "min": 1.5, "max": 20 },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 15, "min": 5, "max": 300 }
+      ],
+      "items": [
+        { "crect": [0, 0, "width", "depth"] },
+        { "crect": [0, 0, "width - 2*thk", "depth - 2*thk"] },
+        { "when": "label", "text": { "at": [0, "-depth/2 - 1.8*txt"], "height": "txt", "value": "{width} x {depth} x {thk}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "struct.baseplate",
+      "title": "Column base plate with anchor bolts (plan)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "breadth", "at": [0, "breadth/2"], "axis": "y", "per": 2 } ],
+      "layer": "S-STEEL", "color": 5, "lineweight": 35,
+      "params": [
+        { "name": "length", "label": "Plate length", "unit": "mm", "default": 400, "min": 150, "max": 1500 },
+        { "name": "breadth", "label": "Plate breadth", "unit": "mm", "default": 400, "min": 150, "max": 1500 },
+        { "name": "edge", "label": "Bolt edge distance", "unit": "mm", "default": 50, "min": 25, "max": 200 },
+        { "name": "nbolt", "label": "Bolts per row", "default": 2, "min": 2, "max": 5, "integer": true },
+        { "name": "bolt", "label": "Bolt diameter", "unit": "mm", "default": 20, "choices": [
+          { "label": "16", "value": 16 }, { "label": "20", "value": 20 }, { "label": "24", "value": 24 }, { "label": "30", "value": 30 } ] },
+        { "name": "coldepth", "label": "Column depth", "unit": "mm", "default": 250, "min": 75, "max": 1200 },
+        { "name": "colflange", "label": "Column flange", "unit": "mm", "default": 125, "min": 40, "max": 600 },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 25, "min": 5, "max": 300 }
+      ],
+      "vars": [
+        { "name": "sp", "expr": "(length - 2*edge)/(nbolt - 1)" },
+        { "name": "a", "expr": "colflange/2" }, { "name": "b", "expr": "coldepth/2" }, { "name": "tf", "expr": "max(6, coldepth/25)" }, { "name": "w", "expr": "max(3, coldepth/60)" }
+      ],
+      "items": [
+        { "crect": [0, 0, "length", "breadth"] },
+        { "poly": { "closed": true, "pts": [
+          ["-b", "-a"], ["-b", "a"], ["-b + tf", "a"], ["-b + tf", "w"], ["b - tf", "w"], ["b - tf", "a"],
+          ["b", "a"], ["b", "-a"], ["b - tf", "-a"], ["b - tf", "-w"], ["-b + tf", "-w"], ["-b + tf", "-a"] ] } },
+        { "repeat": { "var": "i", "count": "nbolt", "items": [
+          { "circle": ["-length/2 + edge + i*sp", "-breadth/2 + edge", "bolt/2"] },
+          { "circle": ["-length/2 + edge + i*sp", "breadth/2 - edge", "bolt/2"] } ] } },
+        { "when": "label", "text": { "at": [0, "-breadth/2 - 1.8*txt"], "height": "txt", "value": "Base plate {length} x {breadth}, {nbolt}+{nbolt} bolts M{bolt}", "align": "c" } }
+      ]
+    }
+  ]
+}

@@ -1,16 +1,16 @@
 # Parity checklist
 
-> **Generated:** 2026-10-11 by `cargo xtask parity`. Do not edit by hand.
+> **Generated:** 2026-10-27 by `cargo xtask parity`. Do not edit by hand.
 
 Menu-breadth parity: a reference menu item counts as covered when a AAD command is registered under the same menu label. It measures breadth, not depth.
 
-**Menu breadth: 188 / 319 items (59%)** · 339 registered commands.
+**Menu breadth: 184 / 319 items (58%)** · 498 registered commands.
 
 | Menu | Items | Covered | % |
 |---|---|---|---|
-| File | 22 | 10 | 45% |
+| File | 22 | 11 | 50% |
 | Edit | 13 | 11 | 85% |
-| View | 39 | 25 | 64% |
+| View | 39 | 20 | 51% |
 | Insert | 11 | 2 | 18% |
 | Format | 26 | 23 | 88% |
 | Tools | 57 | 17 | 30% |
@@ -27,7 +27,6 @@ Menu-breadth parity: a reference menu item counts as covered when a AAD command 
 - File > Open Recent > Clear Menu
 - File > Import...
 - File > Attach...
-- File > Export...
 - File > Export Layout to Model...
 - File > Package Drawing...
 - File > DWG Compare...
@@ -39,6 +38,11 @@ Menu-breadth parity: a reference menu item counts as covered when a AAD command 
 - View > Zoom > Dynamic
 - View > Pan > Point
 - View > Viewports > Named Viewports...
+- View > Viewports > New Viewports...
+- View > Viewports > 1 Viewport
+- View > Viewports > 2 Viewports
+- View > Viewports > 3 Viewports
+- View > Viewports > 4 Viewports
 - View > Viewports > Polygonal Viewport
 - View > Show Annotative Objects > Current Scale Only
 - View > Show Annotative Objects > All Scales

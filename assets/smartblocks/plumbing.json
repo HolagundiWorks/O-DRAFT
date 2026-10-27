@@ -1,0 +1,201 @@
+{
+  "format": "osas-smartblocks",
+  "version": 1,
+  "discipline": "plumbing",
+  "note": "Sanitary fixtures and drainage items in plan. The insertion point is the wall face (fixtures project in +Y) or the centre. Millimetres; check sizes against the chosen product.",
+  "blocks": [
+    {
+      "id": "plumb.wc.european",
+      "title": "European WC (plan)",
+      "grips": [ { "param": "width", "at": ["r", "cy"], "axis": "x", "per": 2 }, { "param": "length", "at": [0, "length"], "axis": "y" } ],
+      "layer": "P-FIXT", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "width", "label": "Pan width", "unit": "mm", "default": 380, "min": 300, "max": 500 },
+        { "name": "length", "label": "Projection from wall", "unit": "mm", "default": 680, "min": 480, "max": 800 },
+        { "name": "cistern", "label": "Cistern", "default": 1, "choices": [ { "label": "Exposed", "value": 1 }, { "label": "Concealed", "value": 0 } ] }
+      ],
+      "vars": [
+        { "name": "r", "expr": "width/2" },
+        { "name": "back", "expr": "60 + 120*cistern" },
+        { "name": "cy", "expr": "length - r" }
+      ],
+      "items": [
+        { "when": "cistern", "rect": ["-r - 35", 0, "width + 70", 180] },
+        { "when": "1 - cistern", "rect": ["-r", 0, "width", 60] },
+        { "line": ["-r", "back", "-r", "cy"] },
+        { "line": ["r", "back", "r", "cy"] },
+        { "line": ["-r", "back", "r", "back"] },
+        { "arc": [0, "cy", "r", 0, 180] },
+        { "line": ["-r + 40", "back + 80", "-r + 40", "cy"] },
+        { "line": ["r - 40", "back + 80", "r - 40", "cy"] },
+        { "line": ["-r + 40", "back + 80", "r - 40", "back + 80"] },
+        { "arc": [0, "cy", "r - 40", 0, 180] }
+      ]
+    },
+    {
+      "id": "plumb.wc.indian",
+      "title": "Indian (squatting) WC pan with footrests (plan)",
+      "grips": [ { "param": "width", "at": ["r", "back"], "axis": "x", "per": 2 }, { "param": "length", "at": [0, "back + length"], "axis": "y" } ],
+      "layer": "P-FIXT", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "width", "label": "Pan width", "unit": "mm", "default": 450, "min": 400, "max": 600 },
+        { "name": "length", "label": "Pan length", "unit": "mm", "default": 580, "min": 500, "max": 700 },
+        { "name": "back", "label": "Distance from wall", "unit": "mm", "default": 150, "min": 0, "max": 600 }
+      ],
+      "vars": [ { "name": "r", "expr": "width/2" }, { "name": "y1", "expr": "back + length - r" } ],
+      "items": [
+        { "line": ["-r", "back", "r", "back"] },
+        { "line": ["-r", "back", "-r", "y1"] },
+        { "line": ["r", "back", "r", "y1"] },
+        { "arc": [0, "y1", "r", 0, 180] },
+        { "circle": [0, "back + 0.3*length", "0.22*width"] },
+        { "line": ["-0.22*width", "back + 0.3*length", "-0.22*width", "y1"] },
+        { "line": ["0.22*width", "back + 0.3*length", "0.22*width", "y1"] },
+        { "arc": [0, "y1", "0.22*width", 0, 180] },
+        { "rect": ["-r + 20", "y1 - 0.15*length", "0.22*width", "0.3*length"] },
+        { "rect": ["r - 20 - 0.22*width", "y1 - 0.15*length", "0.22*width", "0.3*length"] }
+      ]
+    },
+    {
+      "id": "plumb.basin",
+      "title": "Wash basin, wall-hung or in a vanity counter (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
+      "layer": "P-FIXT", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "width", "label": "Basin width", "unit": "mm", "default": 550, "min": 350, "max": 800 },
+        { "name": "depth", "label": "Basin depth", "unit": "mm", "default": 450, "min": 300, "max": 600 },
+        { "name": "counter", "label": "Vanity counter", "default": 0, "choices": [ { "label": "No", "value": 0 }, { "label": "Yes", "value": 1 } ] },
+        { "name": "vanity", "label": "Counter length", "unit": "mm", "default": 900, "min": 600, "max": 2400 }
+      ],
+      "vars": [ { "name": "rb", "expr": "0.36*min(width, depth)" } ],
+      "items": [
+        { "when": "1 - counter", "rect": ["-width/2", 0, "width", "depth"] },
+        { "when": "counter", "rect": ["-vanity/2", 0, "vanity", "depth + 50"] },
+        { "circle": [0, "depth*0.55", "rb"] },
+        { "circle": [0, "depth*0.55", 20] },
+        { "circle": [0, 60, 15] }
+      ]
+    },
+    {
+      "id": "plumb.sink.kitchen",
+      "title": "Kitchen sink, one to three bowls with optional drainer (plan)",
+      "grips": [ { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
+      "layer": "P-FIXT", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "bowls", "label": "Bowls", "default": 1, "min": 1, "max": 3, "integer": true },
+        { "name": "bowl", "label": "Bowl width", "unit": "mm", "default": 400, "min": 250, "max": 700 },
+        { "name": "depth", "label": "Sink depth", "unit": "mm", "default": 500, "min": 400, "max": 600 },
+        { "name": "drainer", "label": "Drainer", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "drain", "label": "Drainer length", "unit": "mm", "default": 400, "min": 250, "max": 600 }
+      ],
+      "vars": [
+        { "name": "rim", "expr": "40" },
+        { "name": "total", "expr": "bowls*bowl + (bowls + 1)*rim + drainer*drain" },
+        { "name": "x0", "expr": "-total/2" }
+      ],
+      "items": [
+        { "rect": ["x0", 0, "total", "depth"] },
+        { "repeat": { "var": "i", "count": "bowls", "items": [
+          { "rect": ["x0 + rim + i*(bowl + rim)", "rim + 40", "bowl", "depth - 2*rim - 40"] },
+          { "circle": ["x0 + rim + i*(bowl + rim) + bowl/2", "depth/2 + 20", 30] } ] } },
+        { "when": "drainer", "repeat": { "var": "k", "count": 5, "items": [
+          { "line": ["x0 + bowls*(bowl + rim) + rim + 40", "rim + 40 + k*(depth - 2*rim - 80)/4", "-x0 - 40", "rim + 40 + k*(depth - 2*rim - 80)/4"] } ] } },
+        { "circle": ["x0 + rim + bowl/2", 25, 15] }
+      ]
+    },
+    {
+      "id": "plumb.shower",
+      "title": "Shower area or tray with drain (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
+      "layer": "P-FIXT", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "width", "label": "Width", "unit": "mm", "default": 900, "min": 700, "max": 2000 },
+        { "name": "depth", "label": "Depth", "unit": "mm", "default": 900, "min": 700, "max": 2000 },
+        { "name": "screen", "label": "Glass screen", "default": 0, "choices": [ { "label": "No", "value": 0 }, { "label": "Yes", "value": 1 } ] },
+        { "name": "rose", "label": "Shower rose mark", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] }
+      ],
+      "items": [
+        { "rect": ["-width/2", 0, "width", "depth"] },
+        { "line": ["-width/2", 0, "width/2", "depth"] },
+        { "line": ["width/2", 0, "-width/2", "depth"] },
+        { "circle": [0, "depth/2", 50] },
+        { "when": "screen", "rect": ["-width/2", "depth - 10", "width", 10] },
+        { "when": "rose", "circle": [0, 80, 60] },
+        { "when": "rose", "dot": [0, 80, 15] }
+      ]
+    },
+    {
+      "id": "plumb.floor.trap",
+      "title": "Floor trap / floor drain with grating (plan)",
+      "grips": [ { "param": "size", "at": ["size/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "P-FIXT", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "size", "label": "Grating size", "unit": "mm", "default": 150, "min": 100, "max": 400 },
+        { "name": "shape", "label": "Grating shape", "default": 0, "choices": [ { "label": "Square", "value": 0 }, { "label": "Round", "value": 1 } ] }
+      ],
+      "items": [
+        { "when": "1 - shape", "crect": [0, 0, "size", "size"] },
+        { "when": "shape", "circle": [0, 0, "size/2"] },
+        { "circle": [0, 0, "size*0.3"] },
+        { "repeat": { "var": "i", "count": 3, "items": [ { "line": ["-size*0.3", "(i - 1)*size*0.15", "size*0.3", "(i - 1)*size*0.15"] } ] } }
+      ]
+    },
+    {
+      "id": "plumb.chamber",
+      "title": "Inspection chamber / manhole (plan)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "breadth", "at": [0, "breadth/2"], "axis": "y", "per": 2 } ],
+      "layer": "P-PIPE", "color": 4, "lineweight": 18,
+      "params": [
+        { "name": "length", "label": "Inside length", "unit": "mm", "default": 600, "min": 300, "max": 2000 },
+        { "name": "breadth", "label": "Inside breadth", "unit": "mm", "default": 450, "min": 300, "max": 2000 },
+        { "name": "wall", "label": "Wall thickness", "unit": "mm", "default": 115, "min": 75, "max": 350 },
+        { "name": "label", "label": "Label", "default": 1, "choices": [ { "label": "Yes", "value": 1 }, { "label": "No", "value": 0 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 60, "min": 10, "max": 500 }
+      ],
+      "items": [
+        { "crect": [0, 0, "length + 2*wall", "breadth + 2*wall"] },
+        { "crect": [0, 0, "length", "breadth"] },
+        { "line": ["-length/2", "-breadth/2", "length/2", "breadth/2"] },
+        { "line": ["-length/2", "breadth/2", "length/2", "-breadth/2"] },
+        { "when": "label", "text": { "at": [0, "-breadth/2 - wall - 1.8*txt"], "height": "txt", "value": "IC {length} x {breadth}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "plumb.tank.round",
+      "title": "Round water tank with lid and capacity (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "P-FIXT", "color": 6, "lineweight": 18,
+      "params": [
+        { "name": "dia", "label": "Diameter", "unit": "mm", "default": 1100, "min": 500, "max": 4000 },
+        { "name": "height", "label": "Height (for capacity)", "unit": "mm", "default": 1100, "min": 300, "max": 4000 },
+        { "name": "lid", "label": "Lid diameter", "unit": "mm", "default": 400, "min": 150, "max": 800 },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 80, "min": 10, "max": 500 }
+      ],
+      "vars": [ { "name": "cap", "expr": "round(3.14159265*(dia/2)^2*height/1000000)" } ],
+      "items": [
+        { "circle": [0, 0, "dia/2"] },
+        { "circle": [0, 0, "min(lid, dia*0.8)/2"] },
+        { "text": { "at": [0, "-dia/2 - 1.8*txt"], "height": "txt", "value": "Tank {dia} dia, about {cap} L", "align": "c" } }
+      ]
+    },
+    {
+      "id": "plumb.riser",
+      "title": "Pipe riser / stack with tag (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "P-PIPE", "color": 4, "lineweight": 18,
+      "params": [
+        { "name": "dia", "label": "Pipe diameter", "unit": "mm", "default": 110, "min": 15, "max": 300 },
+        { "name": "kind", "label": "Service", "default": 1, "choices": [
+          { "label": "SP", "value": 1 }, { "label": "WP", "value": 2 }, { "label": "RWP", "value": 3 },
+          { "label": "VP", "value": 4 }, { "label": "CW", "value": 5 }, { "label": "HW", "value": 6 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 60, "min": 10, "max": 500 }
+      ],
+      "items": [
+        { "circle": [0, 0, "dia/2"] },
+        { "line": ["-dia/2", 0, "dia/2", 0] },
+        { "line": [0, "-dia/2", 0, "dia/2"] },
+        { "text": { "at": ["dia/2 + 0.6*txt", "-txt/2"], "height": "txt", "value": "{kind} {dia}" } }
+      ]
+    }
+  ]
+}

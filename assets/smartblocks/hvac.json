@@ -1,0 +1,131 @@
+{
+  "format": "osas-smartblocks",
+  "version": 1,
+  "discipline": "hvac",
+  "note": "Ducts, air terminals and room AC units in plan. Millimetres; sizes come from the HVAC design and the chosen product.",
+  "blocks": [
+    {
+      "id": "hvac.duct.rect",
+      "title": "Rectangular duct run with size tag (plan)",
+      "grips": [ { "param": "length", "at": ["length", 0], "axis": "x" }, { "param": "width", "at": ["length/2", "width/2"], "axis": "y", "per": 2 } ],
+      "layer": "M-HVAC", "color": 4, "lineweight": 25,
+      "params": [
+        { "name": "length", "label": "Run length", "unit": "mm", "default": 2000, "min": 200, "max": 30000 },
+        { "name": "width", "label": "Duct width", "unit": "mm", "default": 400, "min": 100, "max": 3000 },
+        { "name": "depth", "label": "Duct depth (tag only)", "unit": "mm", "default": 300, "min": 100, "max": 3000 },
+        { "name": "insul", "label": "Insulation thickness (0: none)", "unit": "mm", "default": 0, "min": 0, "max": 100 },
+        { "name": "kind", "label": "Air", "default": 1, "choices": [ { "label": "Supply", "value": 1 }, { "label": "Return", "value": 2 }, { "label": "Exhaust", "value": 3 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 80, "min": 10, "max": 500 }
+      ],
+      "items": [
+        { "line": [0, "-width/2", "length", "-width/2"] },
+        { "line": [0, "width/2", "length", "width/2"] },
+        { "line": [0, "-width/2", 0, "width/2"] },
+        { "line": ["length", "-width/2", "length", "width/2"] },
+        { "when": "insul", "linetype": "HIDDEN", "line": [0, "-width/2 - insul", "length", "-width/2 - insul"] },
+        { "when": "insul", "linetype": "HIDDEN", "line": [0, "width/2 + insul", "length", "width/2 + insul"] },
+        { "when": "2 - kind", "line": ["length - min(width, length)", "-width/2", "length", "width/2"] },
+        { "when": "2 - kind", "line": ["length - min(width, length)", "width/2", "length", "-width/2"] },
+        { "when": "kind - 1", "line": ["length - min(width, length)", "-width/2", "length", "width/2"] },
+        { "text": { "at": ["length/2", 0], "height": "txt", "value": "{kind} {width} x {depth}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "hvac.diffuser.square",
+      "title": "Square ceiling diffuser (plan)",
+      "grips": [ { "param": "face", "at": ["face/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "M-HVAC", "color": 4, "lineweight": 18,
+      "params": [
+        { "name": "face", "label": "Face size", "unit": "mm", "default": 600, "min": 150, "max": 1200 },
+        { "name": "neck", "label": "Neck size", "unit": "mm", "default": 250, "min": 100, "max": 900 },
+        { "name": "rings", "label": "Cone rings", "default": 3, "min": 0, "max": 8, "integer": true },
+        { "name": "kind", "label": "Air", "default": 1, "choices": [ { "label": "Supply", "value": 1 }, { "label": "Return", "value": 2 } ] }
+      ],
+      "vars": [ { "name": "nk", "expr": "min(neck, face*0.9)" } ],
+      "items": [
+        { "crect": [0, 0, "face", "face"] },
+        { "crect": [0, 0, "nk", "nk"] },
+        { "repeat": { "var": "k", "count": "rings", "items": [ { "crect": [0, 0, "nk + (face - nk)*(k + 1)/(rings + 1)", "nk + (face - nk)*(k + 1)/(rings + 1)"] } ] } },
+        { "line": ["-face/2", "-face/2", "face/2", "face/2"] },
+        { "when": "2 - kind", "line": ["-face/2", "face/2", "face/2", "-face/2"] }
+      ]
+    },
+    {
+      "id": "hvac.grille",
+      "title": "Grille or register with blades (face view)",
+      "grips": [ { "param": "length", "at": ["length/2", 0], "axis": "x", "per": 2 }, { "param": "height", "at": [0, "height/2"], "axis": "y", "per": 2 } ],
+      "layer": "M-HVAC", "color": 4, "lineweight": 18,
+      "params": [
+        { "name": "length", "label": "Length", "unit": "mm", "default": 600, "min": 100, "max": 3000 },
+        { "name": "height", "label": "Height", "unit": "mm", "default": 150, "min": 50, "max": 1200 },
+        { "name": "pitch", "label": "Blade pitch", "unit": "mm", "default": 25, "min": 10, "max": 100 },
+        { "name": "frame", "label": "Frame width", "unit": "mm", "default": 25, "min": 0, "max": 60 }
+      ],
+      "vars": [ { "name": "nb", "expr": "max(0, floor((height - 2*frame)/pitch) - 1)" } ],
+      "items": [
+        { "crect": [0, 0, "length", "height"] },
+        { "when": "frame", "crect": [0, 0, "length - 2*frame", "height - 2*frame"] },
+        { "repeat": { "var": "i", "count": "nb", "items": [ { "line": ["-length/2 + frame", "-height/2 + frame + (i + 1)*pitch", "length/2 - frame", "-height/2 + frame + (i + 1)*pitch"] } ] } }
+      ]
+    },
+    {
+      "id": "hvac.split.indoor",
+      "title": "Split AC indoor unit, wall-mounted (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
+      "layer": "M-HVAC", "color": 4, "lineweight": 25,
+      "params": [
+        { "name": "width", "label": "Unit width", "unit": "mm", "default": 900, "min": 600, "max": 1400 },
+        { "name": "depth", "label": "Unit depth", "unit": "mm", "default": 220, "min": 150, "max": 350 },
+        { "name": "tons", "label": "Capacity", "default": 1.5, "choices": [
+          { "label": "1 TR", "value": 1 }, { "label": "1.5 TR", "value": 1.5 }, { "label": "2 TR", "value": 2 }, { "label": "2.5 TR", "value": 2.5 } ] },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 60, "min": 10, "max": 500 }
+      ],
+      "items": [
+        { "rect": ["-width/2", 0, "width", "depth"] },
+        { "line": ["-width/2 + 40", "depth - 50", "width/2 - 40", "depth - 50"] },
+        { "linetype": "HIDDEN", "poly": { "pts": [["-width/2 + 100", "depth"], ["-width/2 + 100", "depth + 600"], ["width/2 - 100", "depth + 600"], ["width/2 - 100", "depth"]] } },
+        { "text": { "at": [0, "depth/2"], "height": "min(txt, depth*0.4)", "value": "IDU {tons}", "align": "c" } }
+      ]
+    },
+    {
+      "id": "hvac.split.outdoor",
+      "title": "Split AC outdoor unit (plan)",
+      "grips": [ { "param": "width", "at": ["width/2", "depth/2"], "axis": "x", "per": 2 }, { "param": "depth", "at": [0, "depth"], "axis": "y" } ],
+      "layer": "M-HVAC", "color": 4, "lineweight": 25,
+      "params": [
+        { "name": "width", "label": "Unit width", "unit": "mm", "default": 850, "min": 600, "max": 1400 },
+        { "name": "depth", "label": "Unit depth", "unit": "mm", "default": 320, "min": 250, "max": 600 },
+        { "name": "clear", "label": "Front clearance shown (0: none)", "unit": "mm", "default": 500, "min": 0, "max": 1500 },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 60, "min": 10, "max": 500 }
+      ],
+      "vars": [ { "name": "fr", "expr": "min(depth*0.42, width*0.3)" } ],
+      "items": [
+        { "rect": ["-width/2", 0, "width", "depth"] },
+        { "circle": ["-width/2 + depth/2 + 40", "depth/2", "fr"] },
+        { "line": ["-width/2 + depth/2 + 40 - fr", "depth/2", "-width/2 + depth/2 + 40 + fr", "depth/2"] },
+        { "line": ["-width/2 + depth/2 + 40", "depth/2 - fr", "-width/2 + depth/2 + 40", "depth/2 + fr"] },
+        { "when": "clear", "linetype": "HIDDEN", "rect": ["-width/2", "depth", "width", "clear"] },
+        { "text": { "at": ["width/4", "depth/2"], "height": "min(txt, depth*0.4)", "value": "ODU", "align": "c" } }
+      ]
+    },
+    {
+      "id": "hvac.fan.exhaust",
+      "title": "Exhaust fan (plan)",
+      "grips": [ { "param": "dia", "at": ["dia/2", 0], "axis": "x", "per": 2 } ],
+      "layer": "M-HVAC", "color": 4, "lineweight": 18,
+      "params": [
+        { "name": "dia", "label": "Fan size", "unit": "mm", "default": 300, "min": 150, "max": 900 },
+        { "name": "txt", "label": "Text height", "unit": "mm", "default": 50, "min": 10, "max": 500 }
+      ],
+      "items": [
+        { "crect": [0, 0, "dia + 50", "dia + 50"] },
+        { "circle": [0, 0, "dia/2"] },
+        { "circle": [0, 0, "dia/10"] },
+        { "line": [0, "dia/10", 0, "dia/2"] },
+        { "line": ["dia*0.0866", "-dia*0.05", "dia*0.433", "-dia*0.25"] },
+        { "line": ["-dia*0.0866", "-dia*0.05", "-dia*0.433", "-dia*0.25"] },
+        { "text": { "at": [0, "-dia/2 - 25 - 1.6*txt"], "height": "txt", "value": "EF {dia}", "align": "c" } }
+      ]
+    }
+  ]
+}
