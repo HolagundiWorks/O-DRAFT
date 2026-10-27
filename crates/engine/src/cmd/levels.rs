@@ -55,7 +55,7 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// A level named by id (number or numeric text) or by name.
-fn find(s: &Session, cmd: &str, p: &Value, key: &str) -> Result<LevelId> {
+pub(super) fn find(s: &Session, cmd: &str, p: &Value, key: &str) -> Result<LevelId> {
     let d = s.doc()?;
     let v = p.get(key).ok_or_else(|| bad(cmd, format!("`{key}` (a level id or name) is required")))?;
     if let Some(n) = v.as_u64().or_else(|| v.as_str().and_then(|t| t.trim().parse().ok())) {
@@ -402,7 +402,7 @@ fn level_refs(s: &Session, cmd: &str, p: &Value, key: &str) -> Result<Vec<LevelI
 }
 
 /// Apply the trace settings given in `p` to `t`.
-fn apply_trace_settings(t: &mut Trace, p: &Value) -> Result<()> {
+pub(super) fn apply_trace_settings(t: &mut Trace, p: &Value) -> Result<()> {
     const CMD: &str = "level.trace";
     if let Some(v) = p.get("fade").filter(|v| !v.is_null()) {
         let n = v.as_u64().filter(|n| *n <= 90).ok_or_else(|| bad(CMD, "`fade` is a whole number from 0 to 90 (percent)"))?;
@@ -488,4 +488,76 @@ fn run_trace(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let traces: Vec<Value> = d.level(on).map(|l| l.traces.iter().map(|t| trace_json(d, t)).collect()).unwrap_or_default();
     Ok(json!({ "level": d.level(on).map(|l| l.name.clone()), "traces": traces }))
+}
+
+/// What a layout viewport shows, as given to `viewport.set` / `viewport.add`. An outer `None` is
+/// "not given"; `Some(None)` clears the binding.
+#[derive(Default)]
+pub(super) struct Binding {
+    pub level: Option<Option<LevelId>>,
+    pub sheet_set: Option<Option<aad_doc::SheetSetId>>,
+    pub traces: Option<Vec<Trace>>,
+}
+
+impl Binding {
+    pub fn is_given(&self) -> bool {
+        self.level.is_some() || self.sheet_set.is_some() || self.traces.is_some()
+    }
+}
+
+/// Read `level`, `sheetSet` and `traces` (a list of `{level, fade?, colour?, order?, snap?, layers?}`,
+/// or null to clear) from `p`, resolving names. Setting a binding needs explicit levels.
+pub(super) fn parse_binding(s: &Session, cmd: &str, p: &Value) -> Result<Binding> {
+    let mut b = Binding::default();
+    let given = |k: &str| p.get(k).is_some();
+    if (given("level") || given("sheetSet") || given("traces")) && !s.doc()?.has_levels() {
+        let clearing = ["level", "sheetSet", "traces"].iter().all(|k| p.get(*k).is_none_or(Value::is_null));
+        if !clearing {
+            return Err(bad(cmd, "the drawing has one level; add another with level.new before binding a viewport"));
+        }
+    }
+    match p.get("level") {
+        None => {}
+        Some(Value::Null) => b.level = Some(None),
+        Some(v) => b.level = Some(Some(find(s, cmd, &json!({ "level": v }), "level")?)),
+    }
+    match p.get("sheetSet") {
+        None => {}
+        Some(Value::Null) => b.sheet_set = Some(None),
+        Some(v) => b.sheet_set = Some(Some(super::sheetset::find(s, cmd, v)?)),
+    }
+    match p.get("traces") {
+        None => {}
+        Some(Value::Null) => b.traces = Some(Vec::new()),
+        Some(Value::Array(a)) if a.len() <= aad_doc::MAX_TRACES => {
+            let mut out = Vec::new();
+            for item in a {
+                let lv = item.get("level").ok_or_else(|| bad(cmd, "each trace needs a `level`"))?;
+                let id = find(s, cmd, &json!({ "level": lv }), "level")?;
+                if out.iter().any(|t: &Trace| t.level == id) {
+                    return Err(bad(cmd, "a level is traced once per viewport"));
+                }
+                let mut t = Trace::new(id);
+                apply_trace_settings(&mut t, item)?;
+                out.push(t);
+            }
+            b.traces = Some(out);
+        }
+        Some(_) => return Err(bad(cmd, format!("`traces` is a list of at most {} traces, or null", aad_doc::MAX_TRACES))),
+    }
+    Ok(b)
+}
+
+/// The level, sheet set and traces of a viewport for the JSON listings.
+pub(super) fn viewport_binding_json(v: &aad_doc::Viewport) -> Value {
+    json!({
+        "level": v.level.map(|l| l.0),
+        "sheetSet": v.sheet_set.map(|x| x.0),
+        "traces": v.traces.iter().map(|t| json!({
+            "level": t.level.0, "fade": t.fade,
+            "colour": if t.colour == TraceColour::Grey { "grey" } else { "true" },
+            "order": if t.order == TraceOrder::Below { "below" } else { "above" },
+            "snap": t.snap, "layers": t.layers,
+        })).collect::<Vec<_>>(),
+    })
 }

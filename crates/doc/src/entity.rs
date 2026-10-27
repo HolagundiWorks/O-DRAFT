@@ -628,6 +628,15 @@ pub struct Viewport {
     /// contents are clipped to the polygon (even-odd); the border still uses width/height.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clip: Vec<Vec2>,
+    /// The level this viewport shows; `None` is the first level (every older file).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<crate::LevelId>,
+    /// The sheet set whose annotation of that level is drawn over it; `None` is plain geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet_set: Option<crate::SheetSetId>,
+    /// Other levels shown faded under or over this viewport's level (at most [`crate::MAX_TRACES`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub traces: Vec<crate::Trace>,
 }
 impl Default for Viewport {
     fn default() -> Self {
@@ -642,6 +651,9 @@ impl Default for Viewport {
             frozen_layers: Vec::new(),
             layer_colors: Vec::new(),
             clip: Vec::new(),
+            level: None,
+            sheet_set: None,
+            traces: Vec::new(),
         }
     }
 }

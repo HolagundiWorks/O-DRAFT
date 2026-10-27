@@ -532,4 +532,40 @@ mod tests {
             assert!(r.project.contains_key(LEVELS_NOTE_KEY), "case {i}: the user is told");
         }
     }
+
+    #[test]
+    fn a_viewport_keeps_its_level_sheet_set_and_traces_through_a_file() {
+        let (mut d, _) = three_levels();
+        let (ground, first) = (d.level_by_name("Ground").unwrap().id, d.level_by_name("First").unwrap().id);
+        let set = d.add_sheet_set("Electrical", "E-").unwrap();
+        let mut t = Trace::new(ground);
+        t.fade = 40;
+        t.layers = Some(vec!["A-WALL".into()]);
+        let vp = aad_doc::Viewport {
+            id: 2,
+            width: 100.0,
+            height: 80.0,
+            view_height: 50.0,
+            level: Some(first),
+            sheet_set: Some(set),
+            traces: vec![t.clone()],
+            ..Default::default()
+        };
+        let plain = aad_doc::Viewport { id: 3, width: 10.0, height: 10.0, view_height: 5.0, ..Default::default() };
+        let h = d.new_handle();
+        let h2 = d.new_handle();
+        let common = Common::default();
+        d.layouts[0].entities.push(Entity { handle: h, common: common.clone(), kind: EntityKind::Viewport(vp) });
+        d.layouts[0].entities.push(Entity { handle: h2, common, kind: EntityKind::Viewport(plain) });
+        let r = crate::read_dxf(crate::write_dxf(&d).as_bytes()).unwrap();
+        let get = |h| match &r.layouts[0].entities.get(h).unwrap().kind {
+            EntityKind::Viewport(v) => v.clone(),
+            k => panic!("{k:?}"),
+        };
+        let v = get(h);
+        assert_eq!((v.level, v.sheet_set), (Some(first), Some(set)));
+        assert_eq!(v.traces, vec![t]);
+        let p = get(h2);
+        assert_eq!((p.level, p.sheet_set, p.traces.len()), (None, None, 0), "an unbound viewport stays unbound");
+    }
 }

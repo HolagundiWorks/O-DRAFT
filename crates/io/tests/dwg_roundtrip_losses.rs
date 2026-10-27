@@ -27,6 +27,7 @@ fn viewport(id: u32) -> EntityKind {
         frozen_layers: vec![],
         layer_colors: vec![],
         clip: Vec::new(),
+        ..Default::default()
     })
 }
 

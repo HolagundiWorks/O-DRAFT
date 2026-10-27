@@ -503,6 +503,7 @@ fn pdf_layout_one_to_one_with_viewport() {
             frozen_layers: Vec::new(),
             layer_colors: Vec::new(),
             clip: Vec::new(),
+            ..Default::default()
         }),
     )
     .unwrap();
@@ -605,6 +606,7 @@ fn viewport_frozen_layers_roundtrip() {
             frozen_layers: frozen,
             layer_colors: Vec::new(),
             clip: Vec::new(),
+            ..Default::default()
         })
     };
     d.add(&paper, Common::default(), vp(2, vec!["Walls".into(), "A B".into()])).unwrap();
@@ -639,6 +641,7 @@ fn viewport_layer_colors_roundtrip() {
             frozen_layers: frozen,
             layer_colors: colors,
             clip: Vec::new(),
+            ..Default::default()
         })
     };
     let colors = vec![("Walls".to_string(), Color::Index(5)), ("A B".to_string(), Color::True(aad_color::Rgb(255, 128, 0)))];

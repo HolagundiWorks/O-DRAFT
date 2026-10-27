@@ -435,18 +435,24 @@ fn entity(kind: &str, tags: &[Tag]) -> Option<(Common, EntityKind)> {
             k
         }
         "ACAD_TABLE" => EntityKind::Table(acad_table(tags)),
-        "VIEWPORT" => EntityKind::Viewport(Viewport {
-            center: t.p(10),
-            width: t.fd(40, 1.0),
-            height: t.fd(41, 1.0),
-            view_center: Vec2::new(t.fd(12, 0.0), t.fd(22, 0.0)),
-            view_height: t.fd(45, 1.0),
-            id: t.i(69).unwrap_or(0) as u32,
-            locked: t.i(90).unwrap_or(0) & 16384 != 0,
-            frozen_layers: crate::dxf_ext::read_frozen(tags),
-            layer_colors: crate::dxf_ext::read_layer_colors(tags),
-            clip: crate::dxf_ext::read_vp_clip(tags),
-        }),
+        "VIEWPORT" => {
+            let (level, sheet_set, traces) = crate::dxf_ext::read_vpbind(tags);
+            EntityKind::Viewport(Viewport {
+                center: t.p(10),
+                width: t.fd(40, 1.0),
+                height: t.fd(41, 1.0),
+                view_center: Vec2::new(t.fd(12, 0.0), t.fd(22, 0.0)),
+                view_height: t.fd(45, 1.0),
+                id: t.i(69).unwrap_or(0) as u32,
+                locked: t.i(90).unwrap_or(0) & 16384 != 0,
+                frozen_layers: crate::dxf_ext::read_frozen(tags),
+                layer_colors: crate::dxf_ext::read_layer_colors(tags),
+                clip: crate::dxf_ext::read_vp_clip(tags),
+                level,
+                sheet_set,
+                traces,
+            })
+        }
         "WIPEOUT" => {
             let o = t.p(10);
             let u = t.p(11);

@@ -1,8 +1,9 @@
 # Levels and sheet sets
 
-**Status: Phases 1 and 3 and the non-UI parts of Phase 2 are done; the shell UI (level tabs, Trace
-flyout, sheet-set rail, annotation tool strip), Phases 4 and 5 are planned.** Only what the "Phase 1
-status", "Phase 2 status" and "Phase 3 status" sections list is implemented and tested.
+**Status: Phases 1, 3 and 4 and the non-UI parts of Phase 2 are done; the shell UI (level tabs, Trace
+flyout, sheet-set rail, annotation tool strip, a viewport Level / Sheet set / Traces editor) and
+Phase 5 are planned.** Only what the "Phase 1 status" to "Phase 4 status" sections list is
+implemented and tested.
 
 Summary: keep one drawing file, but split its single model space into named **levels** (each its own
 entity store at a shared origin) and add **sheet sets** (discipline annotation spaces that reference
@@ -275,6 +276,45 @@ Not built yet:
   entering the set (no layer visibility from a drawing space, no current styles yet).
 - Take-off is unchanged: it acts on the store being edited, so it never counts annotation in
   Design; the Layer manager "Show for" filter and viewport binding are Phases 5 and 4.
+
+## Phase 4 status: viewports and exchange export implemented in the engine, shell UI not built
+
+Implemented and tested (`crates/engine/tests/viewport_levels.rs`, `exchange.rs`,
+`crates/render/tests/level_traces.rs`, unit tests in `crates/io/src/dxf_ext.rs` and `levels_file.rs`):
+
+- A layout viewport carries `level`, `sheet_set` and `traces` (`aad_doc::Viewport`). `viewport.set`
+  takes `level` (id or name, null = the first level), `sheetSet` (null = plain geometry) and
+  `traces` (`[{level, fade?, colour?, order?, snap?, layers?}]`, null clears); `viewport.add` takes
+  the same. All changes are checked first: at most 8 traces, each level once, a viewport cannot
+  trace the level it shows, a locked viewport keeps its binding until unlocked, and a drawing with
+  one level cannot bind (it can always clear). `viewport.list` / `viewport.set` return a `binding`.
+- Rendering: a viewport draws, in order, its Below traces, the level it shows, that level's
+  annotation for its sheet set, then its Above traces. Traces are greyed and faded towards white
+  paper. An unbound viewport shows the first level (what every older file shows), so two viewports
+  on one sheet can show the Electrical and the Plumbing plan of the same floor. The viewport
+  tessellation cache is keyed by the identity of every store it draws, so a binding change shows at
+  once. Plots use the same path.
+- Entering a viewport (`mspace`) makes the level and sheet view it shows the one edits go to; an
+  unbound viewport edits the first level. A drawing without levels is not touched.
+- File format: the binding is a `VPBIND` group in the viewport's AAD xdata. A record that does not
+  parse, is over 64 KB, is not a JSON object, or has a trace fade over 90 percent is ignored; traces
+  are capped at 8.
+- `exchange.export {folder, sheetSets?, overwrite?}` (File > Export for Exchange) writes plain
+  single-level DXF files: `NN_<Level>.dxf` for each level and `NN_<Level>__<SheetSet>.dxf` for each
+  sheet set that has annotation on it (the geometry with the annotation on top). The files carry no
+  level or sheet-set data and no layout content, file names are made safe, an existing file is
+  never replaced without `overwrite`, and nothing is written if any file cannot be built. The
+  drawing is not changed.
+
+Not built yet:
+
+- The shell controls: a Level / Sheet set / Traces editor on the viewport properties, and a menu
+  item for Export for Exchange (the command is in the registry and has its menu path).
+- A sheet set's `space` (layer visibility) is not applied to a viewport; every layer that is on
+  shows.
+- A layout viewport's content is not an editable preview of the sheet in other CAD programs: there
+  a viewport bound to another level shows model space (the first level). Use the exchange files.
+- Exchange files carry no layouts; a bound layout sheet is exported as a PDF with `plot`.
 
 ## Risks
 

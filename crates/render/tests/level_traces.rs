@@ -188,3 +188,118 @@ fn design_mode_after_a_sheet_view_is_the_plain_list_again() {
     let plain = build(&d, &Space::Model, &Options::default());
     assert_eq!(build_with_traces(&d, &Options::default(), BG).prims.len(), plain.prims.len());
 }
+
+// ---------------- layout viewports bound to a level and a sheet set ----------------
+
+fn add_viewport(d: &mut Drawing, centre_x: f64, view_y: f64, bind: impl FnOnce(&mut aad_doc::Viewport)) {
+    // Paper-space viewport 50 x 50 at `centre_x`, showing a 10-unit-high window around (5, view_y): scale 5.
+    let mut vp = aad_doc::Viewport {
+        center: Vec3::new(centre_x, 25.0, 0.0),
+        width: 50.0,
+        height: 50.0,
+        view_center: aad_geom::Vec2::new(5.0, view_y),
+        view_height: 10.0,
+        id: 2,
+        ..Default::default()
+    };
+    bind(&mut vp);
+    let h = d.new_handle();
+    d.layouts[0].entities.push(aad_doc::Entity { handle: h, common: Common::default(), kind: EntityKind::Viewport(vp) });
+}
+
+/// Content primitives (model geometry seen through a viewport) whose first point is in `[x0, x1]`.
+fn content_in(l: &aad_render::DisplayList, x0: f64, x1: f64) -> Vec<aad_render::DPrim> {
+    l.prims.iter().filter(|p| p.handle == VIEWPORT_CONTENT && l.points(p).first().is_some_and(|q| q.x >= x0 && q.x <= x1)).copied().collect()
+}
+
+/// Ground has a red wall at y=0, First a blue wall at y=5, and Electrical an annotation line (green) on First.
+fn sheet_layout() -> (Drawing, aad_doc::LevelId, aad_doc::LevelId, aad_doc::SheetSetId) {
+    let (mut d, g, f) = two_levels(); // Ground: red at y=0 and a green one on HIDE at y=1; First: blue at y=100
+    let set = d.add_sheet_set("Electrical", "E-").unwrap();
+    d.enter_sheet_view(set).unwrap();
+    line(&mut d, 100.5, "E-ANNO", 3);
+    d.leave_sheet_view().unwrap();
+    (d, g, f, set)
+}
+
+#[test]
+fn viewports_show_their_own_level_and_sheet_set_side_by_side() {
+    let (mut d, _g, f, set) = sheet_layout();
+    d.layers.iter_mut().find(|l| l.name == "HIDE").unwrap().on = false; // keeps Ground to its one red wall
+    add_viewport(&mut d, 25.0, 0.0, |_| {}); // unbound: the first level (Ground)
+    add_viewport(&mut d, 125.0, 100.0, |v| {
+        v.level = Some(f);
+        v.sheet_set = Some(set);
+    });
+    add_viewport(&mut d, 225.0, 100.0, |v| v.level = Some(f)); // First, plain geometry
+    let l = build(&d, &Space::Paper("Layout1".into()), &Options::default());
+    let a = content_in(&l, 0.0, 50.0);
+    let b = content_in(&l, 100.0, 150.0);
+    let c = content_in(&l, 200.0, 250.0);
+    assert_eq!(a.len(), 1, "an unbound viewport shows the first level");
+    assert_eq!(a[0].display_rgb(BG), Rgb(255, 0, 0));
+    assert_eq!(b.len(), 2, "First plus its Electrical annotation");
+    assert_eq!(c.len(), 1, "First without a sheet set is plain geometry");
+    assert_eq!(c[0].display_rgb(BG), Rgb(0, 0, 255));
+    assert!(b.iter().any(|p| p.display_rgb(BG) == Rgb(0, 255, 0)), "the annotation line is drawn");
+}
+
+#[test]
+fn an_unbound_viewport_keeps_showing_the_first_level_whatever_tab_is_active() {
+    let (mut d, _g, f, _set) = sheet_layout();
+    d.layers.iter_mut().find(|l| l.name == "HIDE").unwrap().on = false;
+    add_viewport(&mut d, 25.0, 0.0, |_| {});
+    d.switch_level(f).unwrap();
+    let on_first = build(&d, &Space::Paper("Layout1".into()), &Options::default());
+    assert_eq!(content_in(&on_first, 0.0, 50.0).len(), 1);
+    assert_eq!(content_in(&on_first, 0.0, 50.0)[0].display_rgb(BG), Rgb(255, 0, 0), "still Ground's red wall");
+}
+
+#[test]
+fn a_viewport_trace_is_drawn_faded_towards_white_paper_and_follows_its_order() {
+    let (mut d, g, f, set) = sheet_layout();
+    d.layers.iter_mut().find(|l| l.name == "HIDE").unwrap().on = false;
+    let mut t = Trace::new(g);
+    t.fade = 50;
+    add_viewport(&mut d, 125.0, 100.0, |v| {
+        v.level = Some(f);
+        v.sheet_set = Some(set);
+        v.traces = vec![t];
+    });
+    // A tall window so both levels are in view.
+    let mut wide = d.clone();
+    for e in wide.layouts[0].entities.iter().map(|e| e.handle).collect::<Vec<_>>() {
+        wide.layouts[0].entities.modify(e, |x| {
+            if let EntityKind::Viewport(v) = &mut x.kind {
+                v.view_height = 400.0;
+                v.view_center = aad_geom::Vec2::new(5.0, 50.0);
+                v.height = 50.0;
+            }
+        });
+    }
+    let l = build(&wide, &Space::Paper("Layout1".into()), &Options::default());
+    let all = content_in(&l, 100.0, 150.0);
+    assert_eq!(all.len(), 3, "the trace's wall, First's wall and the annotation");
+    let traced = all[0];
+    let col = traced.display_rgb(BG);
+    assert!(col.0 == col.1 && col.1 == col.2, "grey: {col:?}");
+    assert!(col.0 > 100 && col.0 < 255, "faded towards white paper, not black: {col:?}");
+    assert_eq!(traced.lw, 0.0);
+    assert_eq!(all[1].display_rgb(BG), Rgb(0, 0, 255), "a Below trace is drawn first, the level over it");
+}
+
+#[test]
+fn changing_a_viewport_binding_changes_what_the_cached_tessellation_shows() {
+    let (mut d, _g, f, set) = sheet_layout();
+    d.layers.iter_mut().find(|l| l.name == "HIDE").unwrap().on = false;
+    add_viewport(&mut d, 125.0, 100.0, |v| v.level = Some(f));
+    let before = content_in(&build(&d, &Space::Paper("Layout1".into()), &Options::default()), 100.0, 150.0).len();
+    let h = d.layouts[0].entities.iter().next().unwrap().handle;
+    d.layouts[0].entities.modify(h, |x| {
+        if let EntityKind::Viewport(v) = &mut x.kind {
+            v.sheet_set = Some(set);
+        }
+    });
+    let after = content_in(&build(&d, &Space::Paper("Layout1".into()), &Options::default()), 100.0, 150.0).len();
+    assert_eq!((before, after), (1, 2), "binding the sheet set adds its annotation");
+}

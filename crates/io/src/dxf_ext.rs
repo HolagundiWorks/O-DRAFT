@@ -410,6 +410,50 @@ pub(crate) fn read_layer_colors(tags: &[Tag]) -> Vec<(String, Color)> {
     names.as_chunks::<2>().0.iter().filter_map(|[name, color]| Some((name.clone(), Color::parse(color)?))).collect()
 }
 
+/// Most characters of a viewport's binding record (hostile files).
+const MAX_VPBIND_CHARS: usize = 64 * 1024;
+
+#[derive(Serialize, Deserialize, Default)]
+struct VpBind {
+    #[serde(default)]
+    level: Option<aad_doc::LevelId>,
+    #[serde(default)]
+    sheet_set: Option<aad_doc::SheetSetId>,
+    #[serde(default)]
+    traces: Vec<aad_doc::Trace>,
+}
+
+/// A viewport's level, sheet set and traces as AAD xdata: `1000 VPBIND`, `1002 {`, the record as
+/// JSON in `1000` strings of at most 200 characters, `1002 }`.
+pub(crate) fn vpbind_xdata(level: Option<aad_doc::LevelId>, sheet_set: Option<aad_doc::SheetSetId>, traces: &[aad_doc::Trace]) -> Vec<Tag> {
+    let bind = VpBind { level, sheet_set, traces: traces.iter().take(aad_doc::MAX_TRACES).cloned().collect() };
+    let json = serde_json::to_string(&bind).unwrap_or_default();
+    let chars: Vec<char> = json.chars().collect();
+    let mut v = vec![Tag::s(1000, "VPBIND"), Tag::s(1002, "{")];
+    v.extend(chars.chunks(200).map(|c| Tag::s(1000, c.iter().collect::<String>())));
+    v.push(Tag::s(1002, "}"));
+    v
+}
+
+/// The binding written by [`vpbind_xdata`]; all empty for files from other writers or a record
+/// that does not parse. Traces are capped and their fade is limited to 90 percent.
+pub(crate) fn read_vpbind(tags: &[Tag]) -> (Option<aad_doc::LevelId>, Option<aad_doc::SheetSetId>, Vec<aad_doc::Trace>) {
+    let list = xdata_list(xdata(tags, APP), "VPBIND");
+    let mut json = String::new();
+    for t in list.iter().filter(|t| t.code == 1000) {
+        json.push_str(&t.str());
+        if json.len() > MAX_VPBIND_CHARS {
+            return (None, None, Vec::new());
+        }
+    }
+    // Only a JSON object is a record (serde would also read a short array as a sequence).
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) else { return (None, None, Vec::new()) };
+    let Some(mut b) = value.is_object().then(|| serde_json::from_value::<VpBind>(value).ok()).flatten() else { return (None, None, Vec::new()) };
+    b.traces.truncate(aad_doc::MAX_TRACES);
+    b.traces.retain(|t| t.fade <= 90 && t.layers.as_ref().is_none_or(|l| l.len() <= 256));
+    (b.level, b.sheet_set, b.traces)
+}
+
 /// Most clip vertices kept per insert/viewport (hostile files).
 pub(crate) const MAX_CLIP: usize = 10_000;
 
@@ -586,6 +630,35 @@ pub(crate) fn parse_plot_styles(text: &str) -> Option<Vec<PlotStyleTable>> {
 
 #[cfg(test)]
 mod tests {
+    fn record(json: &str) -> Vec<Tag> {
+        let mut v = vec![Tag::s(1001, APP), Tag::s(1000, "VPBIND"), Tag::s(1002, "{")];
+        v.extend(json.chars().collect::<Vec<_>>().chunks(200).map(|c| Tag::s(1000, c.iter().collect::<String>())));
+        v.push(Tag::s(1002, "}"));
+        v
+    }
+
+    #[test]
+    fn a_viewport_binding_is_read_back_and_hostile_records_are_bounded() {
+        let t = aad_doc::Trace::new(aad_doc::LevelId(3));
+        let mut tags = vec![Tag::s(1001, APP)];
+        tags.extend(vpbind_xdata(Some(aad_doc::LevelId(2)), Some(aad_doc::SheetSetId(1)), std::slice::from_ref(&t)));
+        let (l, s, ts) = read_vpbind(&tags);
+        assert_eq!((l, s, ts), (Some(aad_doc::LevelId(2)), Some(aad_doc::SheetSetId(1)), vec![t]));
+
+        // Not JSON, wrong shapes, over-long, too many and out-of-range traces.
+        assert_eq!(read_vpbind(&record("not json")), (None, None, Vec::new()));
+        assert_eq!(read_vpbind(&record("[1,2]")), (None, None, Vec::new()));
+        assert_eq!(read_vpbind(&record(r#"{"level": "x"}"#)), (None, None, Vec::new()));
+        assert_eq!(read_vpbind(&record(&"x".repeat(MAX_VPBIND_CHARS + 500))), (None, None, Vec::new()));
+        let one = r#"{"level":9,"fade":95,"colour":"Grey","order":"Below","snap":false,"layers":null}"#;
+        let (_, _, ts) = read_vpbind(&record(&format!(r#"{{"level":1,"traces":[{one}]}}"#)));
+        assert!(ts.is_empty(), "a fade over 90 is dropped");
+        let ok = r#"{"level":9,"fade":10,"colour":"Grey","order":"Below","snap":false,"layers":null}"#;
+        let many = vec![ok; 40].join(",");
+        let (l, _, ts) = read_vpbind(&record(&format!(r#"{{"level":1,"traces":[{many}]}}"#)));
+        assert_eq!((l, ts.len()), (Some(aad_doc::LevelId(1)), aad_doc::MAX_TRACES), "traces are capped");
+        assert_eq!(read_vpbind(&[]), (None, None, Vec::new()), "a viewport from another program has none");
+    }
     use super::*;
 
     #[test]

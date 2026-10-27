@@ -17,6 +17,7 @@ fn viewport(id: u32, frozen_layers: Vec<String>, layer_colors: Vec<(String, Colo
         frozen_layers,
         layer_colors,
         clip: Vec::new(),
+        ..Default::default()
     })
 }
 

@@ -18,7 +18,7 @@ pub const MAX_SHEET_SETS: usize = 32;
 pub const MAX_LAYER_PREFIX: usize = 8;
 
 /// Stable sheet-set identity: never reused.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SheetSetId(pub u32);
 
 /// Whose objects are in `Drawing::model`.

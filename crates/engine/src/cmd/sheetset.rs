@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn find(s: &Session, cmd: &str, v: &Value) -> Result<SheetSetId> {
+pub(super) fn find(s: &Session, cmd: &str, v: &Value) -> Result<SheetSetId> {
     let d = s.doc()?;
     if let Some(n) = v.as_u64().or_else(|| v.as_str().and_then(|t| t.trim().parse().ok())) {
         let id = SheetSetId(u32::try_from(n).unwrap_or(u32::MAX));

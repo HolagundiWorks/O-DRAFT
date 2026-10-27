@@ -19,6 +19,7 @@ mod draw;
 mod draw2;
 mod edit;
 mod electrical;
+mod exchange;
 mod extract;
 pub mod file;
 mod floorregion;
@@ -254,6 +255,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(vdb::specs());
         v.extend(levels::specs());
         v.extend(sheetset::specs());
+        v.extend(exchange::specs());
         v.extend(sheet::specs());
         v.extend(layout::specs());
         v.extend(props::specs());

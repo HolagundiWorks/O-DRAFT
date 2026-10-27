@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{p1?, p2? (default: printable area), count?: 1-4, arrangement?: vertical|horizontal|left|right|above|below, layout?}")
             .interactive(|_| Ok(Box::new(MviewM::new(1, true)))),
         CommandSpec::new("viewport.set", "Viewport Properties", run_viewport_set).params(
-            "{handle? (default: selected viewports), scale?: paper units per model unit | \"1:50\", viewHeight?, center?: [x,y], locked?, freeze?: [layer], thaw?: [layer], colors?: {layer: color | null}}",
+            "{handle? (default: selected viewports), scale?: paper units per model unit | \"1:50\", viewHeight?, center?: [x,y], locked?, freeze?: [layer], thaw?: [layer], colors?: {layer: color | null}, level? (level id or name; null = the first level), sheetSet? (sheet set id or name; null = plain geometry), traces? ([{level, fade?, colour?, order?, snap?, layers?}] or null)}",
         ),
         CommandSpec::new("vplayer", "Viewport Layer Freeze", run_viewport_set)
             .params("{handle?, freeze?: [layer], thaw?: [layer], colors?: {layer: color (\"red\" | 1..255 | \"r,g,b\") | null to clear}} (typed: option prompts)")
@@ -119,11 +119,31 @@ fn run_mspace(s: &mut Session, p: &Value) -> Result<Value> {
             None => return Err(bad("mspace", "There are no active model space viewports.")),
         }
     };
+    // Edits inside the viewport go to what it shows: its level, and its sheet set's annotation.
+    if let Some((_, vp)) = vps.iter().find(|(x, _)| *x == pick) {
+        show_viewport_target(s, vp)?;
+    }
     let st = s.state_mut()?;
     st.mspace = Some(pick);
     st.selection.clear();
     s.echo("MSPACE");
     Ok(json!({ "viewport": pick.hex() }))
+}
+
+/// Make the level (and sheet view) a viewport shows the one edits go to. A viewport with no
+/// binding shows the first level. Nothing changes when the drawing has no levels or the target
+/// is already the one being edited.
+fn show_viewport_target(s: &mut Session, vp: &Viewport) -> Result<()> {
+    let d = s.doc()?;
+    let Some(level) = vp.level.filter(|id| d.level(*id).is_some()).or_else(|| d.levels.first().map(|l| l.id)) else { return Ok(()) };
+    let to = match vp.sheet_set.filter(|x| d.sheet_set(*x).is_some()) {
+        Some(x) => aad_doc::EditTarget::Sheet(x, level),
+        None => aad_doc::EditTarget::Level(level),
+    };
+    if d.target() != Some(to) {
+        s.doc_mut()?.switch_target(to).map_err(|e| bad("mspace", e.to_string()))?;
+    }
+    Ok(())
 }
 
 fn run_pspace(s: &mut Session, _p: &Value) -> Result<Value> {
@@ -460,6 +480,7 @@ fn add_viewports(s: &mut Session, space: &Space, rect: Bounds2, count: usize, ar
             frozen_layers: vp_frozen.clone(),
             layer_colors: Vec::new(),
             clip: Vec::new(),
+            ..Default::default()
         };
         out.push(d.add(space, common.clone(), EntityKind::Viewport(vp))?);
     }
@@ -600,6 +621,7 @@ fn viewport_json(h: Handle, v: &Viewport) -> Value {
         "locked": v.locked,
         "frozenLayers": v.frozen_layers,
         "layerColors": v.layer_colors.iter().map(|(l, c)| json!({ "layer": l, "color": c.name() })).collect::<Vec<_>>(),
+        "binding": super::levels::viewport_binding_json(v),
     })
 }
 
@@ -659,7 +681,8 @@ fn run_viewport_set(s: &mut Session, p: &Value) -> Result<Value> {
             colors.push((layer.clone(), col));
         }
     }
-    let changes_view = scale.is_some() || view_height.is_some() || center.is_some();
+    let bind = super::levels::parse_binding(s, cmd, p)?;
+    let changes_view = scale.is_some() || view_height.is_some() || center.is_some() || bind.is_given();
     let mut out = Vec::new();
     for h in hs {
         let Some(EntityKind::Viewport(cur)) = s.doc()?.entity(h).map(|e| e.kind.clone()) else { continue };
@@ -693,6 +716,20 @@ fn run_viewport_set(s: &mut Session, p: &Value) -> Result<Value> {
             if let Some(c) = c {
                 v.layer_colors.push((layer.clone(), *c));
             }
+        }
+        if let Some(l) = bind.level {
+            v.level = l;
+        }
+        if let Some(x) = bind.sheet_set {
+            v.sheet_set = x;
+        }
+        if let Some(ts) = &bind.traces {
+            v.traces = ts.clone();
+        }
+        // A viewport cannot trace the level it shows (an unbound one shows the first level).
+        let shown = v.level.or_else(|| s.doc().ok().and_then(|d| d.levels.first().map(|l| l.id)));
+        if shown.is_some() && v.traces.iter().any(|t| Some(t.level) == shown) {
+            return Err(bad(cmd, "a viewport cannot trace the level it shows"));
         }
         out.push(viewport_json(h, &v));
         s.doc_mut()?.modify_entity(h, |e| e.kind = EntityKind::Viewport(v)).map_err(|e| bad(cmd, e.to_string()))?;

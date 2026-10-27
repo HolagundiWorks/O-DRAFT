@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use aad_color::{Color, Rgb};
 use aad_doc::{Drawing, Entity, EntityKind, Handle, Lineweight, Prim, Space};
-use aad_geom::{Bounds2, Mat3, Polyline, Vec2, TAU};
+use aad_geom::{Bounds2, Mat3, Polyline, TAU, Vec2};
 
 pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, dimension_geometry, dimension_geometry_with, format_linear_value};
 pub use fill::{triangulate_evenodd, triangulate_outline};
@@ -743,13 +743,11 @@ fn model_tess_key(
     colors: &[(String, Color)],
     pan_cell: (i64, i64),
     view_height_bits: u64,
+    sources: &[trace::Source<'_>],
 ) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    d.model.len().hash(&mut h);
-    for e in d.model.iter() {
-        (std::sync::Arc::as_ptr(e) as usize).hash(&mut h);
-    }
+    trace::hash_sources(sources, &mut h);
     for l in &d.layers {
         l.name.hash(&mut h);
         l.on.hash(&mut h);
@@ -953,7 +951,8 @@ fn viewport(b: &mut Builder, d: &Drawing, e: &Entity, vp: &aad_doc::Viewport) {
     // Tessellate a generous band around the view; pans within the cell only re-transform.
     let cell = vp.view_height.max(1e-9) * VP_PAN_CELL_MULT;
     let pan_cell = ((vp.view_center.x / cell).round() as i64, (vp.view_center.y / cell).round() as i64);
-    let key = model_tess_key(d, b.opts, lt_factor, &vp.frozen_layers, &vp.layer_colors, pan_cell, vp.view_height.to_bits());
+    let sources = trace::viewport_sources(d, vp);
+    let key = model_tess_key(d, b.opts, lt_factor, &vp.frozen_layers, &vp.layer_colors, pan_cell, vp.view_height.to_bits(), &sources);
     // Cover the whole cell plus the visible half-window (entity bounds are approximate).
     let tess_win = {
         let c = Vec2::new(pan_cell.0 as f64 * cell, pan_cell.1 as f64 * cell);
@@ -964,21 +963,8 @@ fn viewport(b: &mut Builder, d: &Drawing, e: &Entity, vp: &aad_doc::Viewport) {
     let world = if let Some(list) = vp_model_get(key) {
         list
     } else {
-        let mut sub = Builder { list: DisplayList::default(), opts: b.opts, plotting: b.plotting, styles: b.styles, named: None, budget: None };
         // Tessellate in model/world coordinates; pan within the cell only changes the transform.
-        for me in d.model.iter() {
-            if matches!(me.kind, EntityKind::Viewport(_)) {
-                continue;
-            }
-            if !matches!(me.kind, EntityKind::Ray(_) | EntityKind::XLine(_)) {
-                let eb = aad_doc::entity_bounds(d, me, 0);
-                if !eb.is_empty() && !eb.intersects(&tess_win) {
-                    continue;
-                }
-            }
-            entity(&mut sub, &Ctx { lt_factor, ..top_ctx(d, Mat3::IDENTITY, VIEWPORT_CONTENT, &vp.frozen_layers, &vp.layer_colors) }, me);
-        }
-        let list = Arc::new(sub.list);
+        let list = Arc::new(trace::tessellate_sources(b, d, vp, &sources, lt_factor, tess_win));
         vp_model_put(key, Arc::clone(&list));
         list
     };
@@ -1052,10 +1038,12 @@ fn append_clipped_arc(dst: &mut DisplayList, p: &DPrim, pts: &[Vec2], sweep: f32
     let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { return };
     let bb = arc_world_bounds(*center, *rim, sweep);
     let hits = match poly {
-        Some(poly) => bb.intersects(&Bounds2::from_points(poly.iter().copied())) && {
-            // Cheap reject: if the AABB misses the polygon AABB we already failed; otherwise flatten.
-            true
-        },
+        Some(poly) => {
+            bb.intersects(&Bounds2::from_points(poly.iter().copied())) && {
+                // Cheap reject: if the AABB misses the polygon AABB we already failed; otherwise flatten.
+                true
+            }
+        }
         None => bb.intersects(rect),
     };
     if !hits {

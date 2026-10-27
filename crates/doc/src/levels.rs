@@ -22,17 +22,17 @@ pub const MAX_LEVEL_NAME: usize = 64;
 pub const LEVELS_NOTE_KEY: &str = "levelsNote";
 
 /// Stable level identity: never reused, names may change.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct LevelId(pub u32);
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TraceColour {
     #[default]
     Grey,
     TrueColour,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TraceOrder {
     #[default]
     Below,
@@ -40,7 +40,7 @@ pub enum TraceOrder {
 }
 
 /// A read-only faded display of another level under the one being edited.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Trace {
     pub level: LevelId,
     /// 0..=90 percent.

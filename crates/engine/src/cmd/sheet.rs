@@ -748,6 +748,7 @@ fn viewport_json(h: aad_doc::Handle, v: &aad_doc::Viewport) -> Value {
         "handle": h.hex(), "rect": [x0, y0, x0 + v.width, y0 + v.height], "width": v.width, "height": v.height,
         "scale": scale, "scaleText": scale_text(scale), "locked": v.locked, "frozen": v.frozen_layers,
         "viewCenter": [v.view_center.x, v.view_center.y], "viewHeight": v.view_height,
+        "binding": super::levels::viewport_binding_json(v),
     })
 }
 
@@ -787,6 +788,11 @@ fn run_vp_add(s: &mut Session, p: &Value) -> Result<Value> {
     }
     if let Some(l) = p.get("locked") {
         set["locked"] = l.clone();
+    }
+    for key in ["level", "sheetSet", "traces"] {
+        if let Some(v) = p.get(key) {
+            set[key] = v.clone();
+        }
     }
     if set.as_object().is_some_and(|o| o.len() > 1) {
         s.execute("viewport.set", &set)?;
