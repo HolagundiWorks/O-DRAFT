@@ -689,3 +689,23 @@ fn activating_a_level_moves_the_floor_selector_to_the_same_floor() {
     s.execute("level.activate", &json!({"level": "Plant room"})).unwrap();
     assert_eq!(floor(&mut s), json!("Roof"));
 }
+
+#[test]
+fn trace_settings_accept_what_a_dialog_sends() {
+    let mut s = Session::new();
+    s.execute("level.setup", &json!({"floors": ["Ground", "First"], "sheetSets": false})).unwrap();
+    s.execute("level.activate", &json!({"level": "First"})).unwrap();
+    // A dialog sends the fade as a float and the layers as one text.
+    let r = s.execute("level.trace", &json!({"add": "Ground", "fade": 40.0, "layers": " A-WALL, A-DOOR ,", "snap": true})).unwrap();
+    assert_eq!(r["traces"][0]["fade"], 40);
+    assert_eq!(r["traces"][0]["layers"], json!(["A-WALL", "A-DOOR"]));
+    // `*` (or nothing) means every layer again; editing keeps what is not given.
+    let r = s.execute("level.trace", &json!({"add": "Ground", "layers": "*"})).unwrap();
+    assert_eq!((r["traces"][0]["fade"].as_u64(), r["traces"][0]["snap"].as_bool()), (Some(40), Some(true)));
+    assert!(r["traces"][0]["layers"].is_null());
+    for bad in [json!({"add": "Ground", "fade": 40.5}), json!({"add": "Ground", "fade": 91.0}), json!({"add": "Ground", "fade": -1.0})] {
+        assert!(s.execute("level.trace", &bad).is_err(), "{bad}");
+    }
+    let too_many = (0..300).map(|i| format!("L{i}")).collect::<Vec<_>>().join(",");
+    assert!(s.execute("level.trace", &json!({"add": "Ground", "layers": too_many})).is_err());
+}

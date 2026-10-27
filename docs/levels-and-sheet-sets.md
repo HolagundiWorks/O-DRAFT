@@ -1,7 +1,7 @@
 # Levels and sheet sets
 
 **Status: the engine side of all five phases is done. The WinUI shell has level tabs and a sheet-set
-rail (see "WinUI shell status"); the Trace settings flyout, annotation tool strip, a viewport Level /
+rail and a Trace settings form (see "WinUI shell status"); the annotation tool strip, a viewport Level /
 Sheet set / Traces editor, a Show-for dropdown in the Layer manager, the new-drawing option, the
 take-off level ids and the egui tabs are not built.** Only what the "Phase N status" sections list is
 implemented and tested.
@@ -222,9 +222,8 @@ Implemented and tested:
 
 Not built yet (so the Phase 2 done-when is only partly met):
 
-- **The Trace settings flyout** (fade, colour, order, snap, layers). The level tabs exist (see
-  "WinUI shell status") and their menu only switches a trace on or off with the default settings;
-  the settings are reachable through `level.trace`.
+- The Trace settings are a form opened from the level tab menu (see "WinUI shell status"), not a
+  flyout beside the tabs; a per-layer picker is not built (layers are typed as names).
 - The egui canvas does not draw traces.
 - No per-store display-list or mesh cache: every rebuild re-tessellates every trace, and switching
   level tabs rebuilds everything. The plan's budget that a tab switch rebuilds no unchanged mesh
@@ -373,10 +372,15 @@ carried `levels`, `sheetSets` and `designMode`):
   `level.activate`. The bar is always present; with one implicit level it shows only the add button.
 - **Tab menu** (right-click, opens upward): *Rename, elevation and height...* (the engine form
   `level.set`, prefilled with the level), *Trace over the current level* (a tick that runs
-  `level.trace` add or remove with the default settings), *Delete level...* (the engine form
+  `level.trace` add or remove with the default settings), *Trace settings...* (the engine form
+  `level.trace`: fade 0 to 90, colour grey or true, drawn below or above, snap, and the layers to
+  show typed as names separated by commas, `*` for all; prefilled with the trace's current
+  values, which the chrome JSON carries per level as `trace`), *Delete level...* (the engine form
   `level.delete`, with a "delete although objects or traces are on it" option). The add button
   opens the engine form `level.new`. These three forms live in `crates/engine/src/forms.rs` and
-  are also what a typed `level.new`, `level.set` or `level.delete` starts.
+  are also what a typed `level.new`, `level.set`, `level.trace` or `level.delete` starts. To take what
+  a dialog sends, `level.trace` accepts a whole-number float for `fade` and a comma-separated text
+  (or `*`) for `layers`, besides the JSON forms it took before.
 - **Sheet-set rail** left of the tool strip: Design, then one entry per sheet set, the active one
   selected; a click runs `sheetset.activate`. The rail is hidden while the drawing has no sheet
   sets (create them with `level.setup` or `sheetset.new`, from the Architecture menu or the
@@ -390,9 +394,11 @@ carried `levels`, `sheetSets` and `designMode`):
 
 Verified: the engine forms and the floor follow are covered by tests (`forms.rs`, `levels.rs`);
 the shell itself was built and driven by hand in the running app (tab and rail clicks, the tab
-menu, the Level Settings form opened and cancelled, a screenshot of each). There is no automated
-UI test for the tabs or the rail. Not tried by hand: submitting the forms with OK, the add button,
-Delete level, the Trace tick, and a drawing with many levels (the tab strip scrolls).
+menu, the Level Settings form opened and cancelled, the Trace settings form opened prefilled and
+submitted with a changed fade and order, which the engine then reported; a screenshot of each). There is no automated
+UI test for the tabs or the rail. Not tried by hand: submitting the Level Settings, New Level and
+Delete forms with OK, the add button, the Trace tick, the layers field of the Trace form, and a
+drawing with many levels (the tab strip scrolls).
 
 Known limits: the floating Ask pill covers the middle of the bar, so with many levels the later
 tabs are expected to sit under it until the strip is scrolled (not tried with more than four); tabs cannot be reordered by

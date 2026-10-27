@@ -145,3 +145,28 @@ fn level_forms_round_trip_through_their_commands() {
     s.execute("level.delete", &forms::parse_input(del, &json!({"level": "Terrace", "force": true})).unwrap()).unwrap();
     assert_eq!(names(&mut s).len(), 1);
 }
+
+#[test]
+fn the_trace_form_adds_and_edits_a_trace() {
+    let mut s = session();
+    s.execute("level.setup", &json!({"floors": ["Ground", "First"], "sheetSets": false})).unwrap();
+    s.execute("level.activate", &json!({"level": "First"})).unwrap();
+    let f = forms::get("level.trace").unwrap();
+    let go = |s: &mut Session, input: serde_json::Value| s.execute("level.trace", &forms::parse_input(f, &input).unwrap()).unwrap();
+    let r = go(&mut s, json!({"add": "Ground", "fade": "25", "colour": "TRUE", "order": "above", "snap": true, "layers": "A-WALL"}));
+    let t = r["traces"][0].clone();
+    assert_eq!(
+        (t["fade"].as_u64(), t["colour"].as_str(), t["order"].as_str(), t["snap"].as_bool()),
+        (Some(25), Some("true"), Some("above"), Some(true))
+    );
+    assert_eq!(t["layers"], json!(["A-WALL"]));
+    // The same dialog edits it: only what is typed changes, and `*` clears the layer filter.
+    let r = go(&mut s, json!({"add": "Ground", "fade": "70", "colour": "grey", "order": "below", "snap": false, "layers": "*"}));
+    let t = r["traces"][0].clone();
+    assert_eq!(
+        (t["fade"].as_u64(), t["colour"].as_str(), t["order"].as_str(), t["snap"].as_bool()),
+        (Some(70), Some("grey"), Some("below"), Some(false))
+    );
+    assert!(t["layers"].is_null());
+    assert!(forms::parse_input(f, &json!({"add": "Ground", "colour": "red"})).is_err());
+}

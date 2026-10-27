@@ -197,6 +197,16 @@ pub fn chrome_json(session: &Session, cursor: Option<aad_geom::Vec2>, draft: &st
                     "name": l.name,
                     "active": state.doc.active_level == Some(l.id),
                     "traced": active.is_some_and(|a| a.traces.iter().any(|t| t.level == l.id)),
+                    // The settings of the trace that shows this level under or over the active one.
+                    "trace": active.and_then(|a| a.traces.iter().find(|t| t.level == l.id)).map(|t| {
+                        serde_json::json!({
+                            "fade": t.fade,
+                            "colour": if t.colour == aad_engine::doc::TraceColour::Grey { "grey" } else { "true" },
+                            "order": if t.order == aad_engine::doc::TraceOrder::Below { "below" } else { "above" },
+                            "snap": t.snap,
+                            "layers": t.layers,
+                        })
+                    }),
                     "elevation": l.elevation,
                 })
             })

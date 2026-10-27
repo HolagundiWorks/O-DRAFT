@@ -2609,6 +2609,14 @@ mod tests {
         assert_eq!(tabs.iter().map(|t| t["name"].as_str().unwrap()).collect::<Vec<_>>(), ["Ground", "First", "Terrace"]);
         assert_eq!((row("First")["active"].as_bool(), row("Ground")["active"].as_bool()), (Some(true), Some(false)));
         assert_eq!((row("Ground")["traced"].as_bool(), row("Terrace")["traced"].as_bool()), (Some(true), Some(false)));
+        // The settings of a trace travel with its tab; an untraced level has none.
+        assert_eq!(row("Ground")["trace"], json!({ "fade": 60, "colour": "grey", "order": "below", "snap": false, "layers": null }));
+        assert!(row("Terrace")["trace"].is_null());
+        host.execute("level.trace", &json!({ "add": "Ground", "fade": 30, "order": "above", "snap": true, "layers": ["A-WALL"] })).unwrap();
+        assert_eq!(
+            levels(&host).iter().find(|t| t["name"] == "Ground").unwrap()["trace"],
+            json!({ "fade": 30, "colour": "grey", "order": "above", "snap": true, "layers": ["A-WALL"] })
+        );
     }
 
     #[test]

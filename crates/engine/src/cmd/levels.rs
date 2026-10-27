@@ -29,7 +29,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{level, force? (delete although objects or traces are on it)} → {deleted, active}"),
         CommandSpec::new("level.trace", "Trace Levels", run_trace)
             .menu(&["Architecture", "Levels", "Trace"])
-            .params("{level? (default the active one), add? (level or list), remove? (level or list), set? (an existing traced level to edit), fade? 0..90, colour? grey|true, order? below|above, snap? bool, layers? [names] | null (all)} → {level, traces}. A trace shows another level read-only and faded under (or over) this one; settings apply to each added trace and to `set`."),
+            .params("{level? (default the active one), add? (level or list), remove? (level or list), set? (an existing traced level to edit), fade? 0..90, colour? grey|true, order? below|above, snap? bool, layers? [names] | \"A, B\" | null or \"*\" (all)} → {level, traces}. A trace shows another level read-only and faded under (or over) this one; settings apply to each added trace and to `set`."),
         CommandSpec::new("level.moveto", "Move to Level", run_moveto)
             .menu(&["Architecture", "Levels", "Move to Level"])
             .params("{level, handles? (default the selection)} → {moved}. Moves objects of the active level to another level at the same coordinates."),
@@ -523,7 +523,9 @@ fn level_refs(s: &Session, cmd: &str, p: &Value, key: &str) -> Result<Vec<LevelI
 pub(super) fn apply_trace_settings(t: &mut Trace, p: &Value) -> Result<()> {
     const CMD: &str = "level.trace";
     if let Some(v) = p.get("fade").filter(|v| !v.is_null()) {
-        let n = v.as_u64().filter(|n| *n <= 90).ok_or_else(|| bad(CMD, "`fade` is a whole number from 0 to 90 (percent)"))?;
+        // A dialog sends numbers as floats: a whole float is fine.
+        let whole = v.as_u64().or_else(|| v.as_f64().filter(|f| f.fract() == 0.0 && (0.0..=90.0).contains(f)).map(|f| f as u64));
+        let n = whole.filter(|n| *n <= 90).ok_or_else(|| bad(CMD, "`fade` is a whole number from 0 to 90 (percent)"))?;
         t.fade = n as u8;
     }
     if let Some(c) = str_param(p, "colour").or_else(|| str_param(p, "color")) {
@@ -550,7 +552,15 @@ pub(super) fn apply_trace_settings(t: &mut Trace, p: &Value) -> Result<()> {
             let names: Option<Vec<String>> = a.iter().map(|v| v.as_str().filter(|n| n.chars().count() <= 255).map(str::to_string)).collect();
             t.layers = Some(names.ok_or_else(|| bad(CMD, "`layers` is a list of layer names"))?);
         }
-        Some(_) => return Err(bad(CMD, "`layers` is a list of at most 256 layer names, or null for all")),
+        // Typed in a dialog: names separated by commas, `*` or nothing for all layers.
+        Some(Value::String(text)) => {
+            let names: Vec<String> = text.split(',').map(str::trim).filter(|n| !n.is_empty()).map(str::to_string).collect();
+            if names.len() > 256 || names.iter().any(|n| n.chars().count() > 255) {
+                return Err(bad(CMD, "`layers` is at most 256 layer names of at most 255 characters"));
+            }
+            t.layers = if names.is_empty() || names == ["*"] { None } else { Some(names) };
+        }
+        Some(_) => return Err(bad(CMD, "`layers` is a list of at most 256 layer names, a comma-separated text, or null for all")),
     }
     Ok(())
 }

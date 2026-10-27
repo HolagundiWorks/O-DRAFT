@@ -22,6 +22,21 @@ public sealed partial class MainWindow
         public bool Active { get; set; }
         public bool Traced { get; set; }
         public double Elevation { get; set; }
+
+        /// <summary>The settings of the trace that shows this level under or over the active one.</summary>
+        public TraceSettings? Trace { get; set; }
+    }
+
+    private sealed class TraceSettings
+    {
+        public int Fade { get; set; } = 60;
+        public string Colour { get; set; } = "grey";
+        public string Order { get; set; } = "below";
+        public bool Snap { get; set; }
+        public List<string>? Layers { get; set; }
+
+        public override string ToString() =>
+            Fade + "% fade, " + Colour + ", " + Order + (Snap ? ", snaps" : "") + (Layers is { Count: > 0 } ? ", " + Layers.Count + " layer(s)" : "");
     }
 
     private sealed class SheetSetTab
@@ -45,7 +60,7 @@ public sealed partial class MainWindow
 
     private void ShowLevelTabs(ChromeState state)
     {
-        var key = state.DesignMode + "|" + string.Join("|", state.Levels.Select(l => l.Id + ":" + l.Name + ":" + l.Active + ":" + l.Traced + ":" + l.Elevation))
+        var key = state.DesignMode + "|" + string.Join("|", state.Levels.Select(l => l.Id + ":" + l.Name + ":" + l.Active + ":" + l.Traced + ":" + l.Elevation + ":" + l.Trace))
             + "|" + string.Join("|", state.SheetSets.Where(s => s.Active).Select(s => s.Name));
         if (key == _levelKey)
         {
@@ -93,7 +108,7 @@ public sealed partial class MainWindow
         var tip = level.Name + "  elevation " + level.Elevation.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
         if (level.Traced)
         {
-            tip += "  shown as a trace";
+            tip += "  shown as a trace (" + (level.Trace?.ToString() ?? "default settings") + ")";
         }
         ToolTipService.SetToolTip(tab, tip + "  (right-click for more)");
         tab.Click += (_, _) =>
@@ -101,7 +116,12 @@ public sealed partial class MainWindow
             tab.IsChecked = level.Active; // the engine decides; the next refresh sets the real state
             RunShellCommand("level.activate", new Dictionary<string, object> { ["level"] = level.Id });
         };
-        tab.ContextFlyout = BuildLevelMenu(level, design);
+        // Opened by hand: the bar is at the window bottom, and a context flyout does not always honour its placement.
+        tab.RightTapped += (_, e) =>
+        {
+            e.Handled = true;
+            BuildLevelMenu(level, design).ShowAt(tab, new FlyoutShowOptions { Placement = FlyoutPlacementMode.TopEdgeAlignedLeft });
+        };
         return tab;
     }
 
@@ -118,6 +138,9 @@ public sealed partial class MainWindow
                 "level.trace",
                 new Dictionary<string, object> { [trace.IsChecked ? "add" : "remove"] = new[] { level.Id } });
             menu.Items.Add(trace);
+            var settingsItem = new MenuFlyoutItem { Text = level.Traced ? "Trace settings..." : "Trace with settings..." };
+            settingsItem.Click += (_, _) => StartTraceForm(level);
+            menu.Items.Add(settingsItem);
         }
         menu.Items.Add(new MenuFlyoutSeparator());
         var delete = new MenuFlyoutItem { Text = "Delete level..." };
@@ -221,6 +244,30 @@ public sealed partial class MainWindow
         if (id == "level.set")
         {
             form = InjectFormField(form, "elevation", level.Elevation.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+        }
+        FormDialog.Show(this, _host, form, AfterCommand);
+    }
+
+    /// <summary>Open the Trace Settings form for <paramref name="level"/>, filled with the trace's current settings.</summary>
+    private void StartTraceForm(LevelTab level)
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        var form = Native.ReadForm(_host, "level.trace");
+        if (form == null)
+        {
+            return;
+        }
+        form = InjectFormField(form, "add", level.Name);
+        if (level.Trace is { } trace)
+        {
+            form = InjectFormField(form, "fade", trace.Fade.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            form = InjectFormField(form, "colour", trace.Colour);
+            form = InjectFormField(form, "order", trace.Order);
+            form = InjectFormField(form, "snap", trace.Snap ? "true" : "false");
+            form = InjectFormField(form, "layers", trace.Layers is { Count: > 0 } layers ? string.Join(", ", layers) : "*");
         }
         FormDialog.Show(this, _host, form, AfterCommand);
     }

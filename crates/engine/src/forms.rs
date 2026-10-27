@@ -183,6 +183,19 @@ pub static FORMS: &[Form] = &[
         ],
     },
     Form {
+        id: "level.trace",
+        title: "Trace Settings",
+        wrap: None,
+        fields: &[
+            field("add", "Level to show as a trace (name)", Kind::Text).req(),
+            field("fade", "Fade: 0 (solid) to 90 percent", Kind::Number).def("60"),
+            field("colour", "Colour", Kind::Choice(&["grey", "true"])).def("grey"),
+            field("order", "Drawn", Kind::Choice(&["below", "above"])).def("below"),
+            field("snap", "Snap to the traced level", Kind::Bool),
+            field("layers", "Layers to show (names separated by commas; * for all; blank: keep)", Kind::Text),
+        ],
+    },
+    Form {
         id: "level.delete",
         title: "Delete Level",
         wrap: None,
