@@ -98,6 +98,15 @@ BOQ. Finishes and net areas stay with O-CoreOp. Hand-off for O-CoreOp (row shape
 value or source change and in-place update; hand-edited lines refused unless `force`, detach;
 cycle and hostile params change nothing; graph survives DXF round-trip and evaluates after reload.
 
+## O-Dynamo companion (separate process)
+
+A Windows named-pipe companion evaluates a small 2D drafting graph (doors, windows, columns,
+stairs, grid, plus `levelSelect` / `projectField` context nodes). Engine commands:
+`companion.connect`, `disconnect`, `status`, `evaluate`, `subscribe`, `unsubscribe`, `preview`.
+Protocol and status: [architecture/DYNAMO_INTEGRATION.md](architecture/DYNAMO_INTEGRATION.md).
+Roadmap: [dynamo-enhancement-plan.md](dynamo-enhancement-plan.md). This does not replace
+`param.*` wall take-off.
+
 ## Not done
 
 - WinUI (or egui) node-graph editor.
@@ -105,5 +114,7 @@ cycle and hostile params change nothing; graph survives DXF round-trip and evalu
 - ShilpiDB-hosted component library (schemas are in code).
 - An O-CoreOp `measure(component, rule, revision)` API (the published contract is measured-fact rows
   through the bridge / `takeoff.record`; derived finishes must not be sent from O-Draft).
-- Columns, beams, slabs and other component types beyond `osas.wall`.
+- Columns, beams, slabs and other component types beyond `osas.wall` in `aad-param` (companion
+  has draft geometry nodes; commit is Phase 3).
 - Agent tools for `param.*` (engine commands exist; the agent registry does not expose them yet).
+- Companion canvas ghost overlay and `companion.commit`.

@@ -14,6 +14,7 @@ mod bridge;
 pub mod clipboard;
 mod clipcmd;
 mod companyfile;
+pub mod companion;
 pub mod context;
 mod draw;
 mod draw2;
@@ -237,6 +238,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(electrical::specs());
         v.extend(walls::specs());
         v.extend(param::specs());
+        v.extend(companion::specs());
         v.extend(structure::specs());
         v.extend(symbols::specs());
         v.extend(bridge::specs());
