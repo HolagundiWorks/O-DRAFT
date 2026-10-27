@@ -267,7 +267,7 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
         let w = f64::from(p.lw) * PT_PER_MM;
         let w = if w.is_finite() && w > 0.0 { w.min(100.0) } else { 0.0 };
         match p.kind {
-            Kind::Polyline | Kind::Arc { .. } | Kind::Infinite { .. } => {
+            Kind::Polyline | Kind::Arc { .. } | Kind::Ellipse { .. } | Kind::Infinite { .. } => {
                 let pts: Vec<Vec2> = match p.kind {
                     Kind::Infinite { ray } => match (raw.first(), raw.get(1)) {
                         (Some(base), Some(dir)) => {
@@ -285,8 +285,25 @@ fn content_stream(list: &aad_render::DisplayList, map: &Map, clip_pt: &Bounds2) 
                             let radius = center.dist(*rim);
                             let start = center.angle_to(*rim);
                             let mut tess = Vec::new();
-                            aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                            aad_geom::Arc::new(*center, radius, start, start + aad_render::sweep_radians(sweep))
+                                .tessellate((radius * 1e-3).max(1e-6), &mut tess);
                             tess.iter().map(|q| map.pt(*q)).collect()
+                        }
+                        _ => continue,
+                    },
+                    Kind::Ellipse { start, sweep } => match (raw.first(), raw.get(1), raw.get(2)) {
+                        (Some(center), Some(u_tip), Some(v_tip)) => {
+                            let u = *u_tip - *center;
+                            let v = *v_tip - *center;
+                            let sw = aad_render::sweep_radians(sweep);
+                            let a0 = f64::from(start);
+                            let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
+                            (0..=n)
+                                .map(|i| {
+                                    let t = a0 + sw * i as f64 / n as f64;
+                                    map.pt(*center + u * t.cos() + v * t.sin())
+                                })
+                                .collect()
                         }
                         _ => continue,
                     },

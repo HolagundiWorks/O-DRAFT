@@ -46,6 +46,12 @@ pub enum Kind {
     /// Circular stroke: `verts[start]` = centre, `verts[start+1]` = rim point (radius).
     /// `sweep` is the CCW span in radians from the rim angle; ≥ 2π − ε is a full circle.
     Arc { sweep: f32 },
+    /// Elliptical stroke: `verts[start]` = centre, `verts[start+1]` = centre+U,
+    /// `verts[start+2]` = centre+V. Parametric `P(t) = C + U·cos(t) + V·sin(t)` for
+    /// `t ∈ [start, start+sweep]`. U and V are conjugate diameters (perpendicular for DXF
+    /// ellipses; any linearly independent pair after a non-uniform transform). Continuous
+    /// linetype only — dashed styles stay polylines.
+    Ellipse { start: f32, sweep: f32 },
     /// `tris[start..start+len]`, three vertices per triangle.
     Tris,
     /// A wipeout: triangles laid out like [`Kind::Tris`], filled with the background colour
@@ -345,30 +351,69 @@ impl Builder<'_> {
         }
         self.list.prims.push(DPrim { handle: ctx.top, color: color.rgb, aci7: color.aci7, lw, kind: Kind::Polyline, start, len: pts.len() as u32 });
     }
-    /// Emit a GPU distance-field arc when `ctx.xf` is a similarity; otherwise return false so the
-    /// caller can tessellate.
+    /// Emit a GPU distance-field arc when `ctx.xf` is a similarity; otherwise an elliptical
+    /// ring when the affine image is a non-degenerate ellipse. Returns false so the caller can
+    /// tessellate (dashed linetypes, degenerate transforms).
     fn try_arc(&mut self, ctx: &Ctx, color: Ink, lw: f32, center: Vec2, radius: f64, start: f64, sweep: f64) -> bool {
-        let Some((c, r, a0, sw)) = map_similarity_arc(ctx.xf, center, radius, start, sweep) else {
+        if let Some((c, r, a0, sw)) = map_similarity_arc(ctx.xf, center, radius, start, sweep) {
+            if !(r.is_finite() && r > 1e-12 && sw.is_finite() && sw > 0.0) {
+                return false;
+            }
+            let (color, lw) = self.styled(color, lw);
+            let rim = Vec2::polar(c, r, a0);
+            let at = self.list.verts.len() as u32;
+            self.list.bounds.add(c - Vec2::new(r, r));
+            self.list.bounds.add(c + Vec2::new(r, r));
+            self.list.verts.push(c);
+            self.list.verts.push(rim);
+            self.list.prims.push(DPrim {
+                handle: ctx.top,
+                color: color.rgb,
+                aci7: color.aci7,
+                lw,
+                kind: Kind::Arc { sweep: sw as f32 },
+                start: at,
+                len: 2,
+            });
+            return true;
+        }
+        let Some((c, u, v, a0, sw)) = map_affine_arc(ctx.xf, center, radius, start, sweep) else {
             return false;
         };
-        if !(r.is_finite() && r > 1e-12 && sw.is_finite() && sw > 0.0) {
+        self.push_ellipse(ctx, color, lw, c, u, v, a0, sw)
+    }
+
+    /// Emit a GPU elliptical ring when continuous; returns false for degenerate axes.
+    fn try_ellipse(&mut self, ctx: &Ctx, color: Ink, lw: f32, el: &aad_geom::Ellipse) -> bool {
+        let Some((c, u, v, a0, sw)) = map_affine_ellipse(ctx.xf, el) else {
+            return false;
+        };
+        self.push_ellipse(ctx, color, lw, c, u, v, a0, sw)
+    }
+
+    fn push_ellipse(&mut self, ctx: &Ctx, color: Ink, lw: f32, c: Vec2, u: Vec2, v: Vec2, start: f64, sweep: f64) -> bool {
+        if !(c.is_finite() && u.is_finite() && v.is_finite() && start.is_finite() && sweep.is_finite()) {
+            return false;
+        }
+        if sweep <= 0.0 || u.len() <= 1e-12 || v.len() <= 1e-12 || (u.x * v.y - u.y * v.x).abs() <= 1e-18 {
             return false;
         }
         let (color, lw) = self.styled(color, lw);
-        let rim = Vec2::polar(c, r, a0);
+        let bb = ellipse_world_bounds(c, u, v, start as f32, sweep as f32);
+        self.list.bounds.add(bb.min);
+        self.list.bounds.add(bb.max);
         let at = self.list.verts.len() as u32;
-        self.list.bounds.add(c - Vec2::new(r, r));
-        self.list.bounds.add(c + Vec2::new(r, r));
         self.list.verts.push(c);
-        self.list.verts.push(rim);
+        self.list.verts.push(c + u);
+        self.list.verts.push(c + v);
         self.list.prims.push(DPrim {
             handle: ctx.top,
             color: color.rgb,
             aci7: color.aci7,
             lw,
-            kind: Kind::Arc { sweep: sw as f32 },
+            kind: Kind::Ellipse { start: start as f32, sweep: sweep as f32 },
             start: at,
-            len: 2,
+            len: 3,
         });
         true
     }
@@ -702,6 +747,14 @@ pub fn rebuild(old: &DisplayList, old_doc: &Drawing, new_doc: &Drawing, opts: &O
                     bounds.add(b.max);
                 }
             }
+            Kind::Ellipse { start, sweep } => {
+                let pts = out.points(p);
+                if let (Some(c), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                    let b = ellipse_world_bounds(*c, *u_tip - *c, *v_tip - *c, start, sweep);
+                    bounds.add(b.min);
+                    bounds.add(b.max);
+                }
+            }
             Kind::Tris | Kind::Mask => {
                 for q in out.points(p) {
                     bounds.add(*q);
@@ -829,10 +882,89 @@ fn map_similarity_arc(xf: Mat3, center: Vec2, radius: f64, start: f64, sweep: f6
     Some((c, r, a0, sw))
 }
 
+/// Map a circular arc through a general affine transform to conjugate-diameter form.
+/// `P(t) = C + U·cos(t) + V·sin(t)` with the same parametric `[start, start+sweep]`.
+fn map_affine_arc(xf: Mat3, center: Vec2, radius: f64, start: f64, sweep: f64) -> Option<(Vec2, Vec2, Vec2, f64, f64)> {
+    if !(radius.is_finite() && radius > 1e-12 && start.is_finite() && sweep.is_finite() && sweep > 0.0) {
+        return None;
+    }
+    let c = xf.apply(center);
+    let u = xf.apply_vec(Vec2::new(radius, 0.0));
+    let v = xf.apply_vec(Vec2::new(0.0, radius));
+    if !c.is_finite() || !u.is_finite() || !v.is_finite() {
+        return None;
+    }
+    if u.len() <= 1e-12 || v.len() <= 1e-12 || (u.x * v.y - u.y * v.x).abs() <= 1e-18 {
+        return None;
+    }
+    let (a0, sw, v) = if xf.is_mirroring() {
+        // Reflection reverses parametric orientation; flip V and start from the far end.
+        (start + sweep, sweep.min(TAU), Vec2::new(-v.x, -v.y))
+    } else {
+        (start, if sweep >= TAU - 1e-9 { TAU } else { sweep }, v)
+    };
+    Some((c, u, v, a0, sw))
+}
+
+/// Map a DXF-style ellipse through `xf` to conjugate diameters (still an ellipse).
+fn map_affine_ellipse(xf: Mat3, el: &aad_geom::Ellipse) -> Option<(Vec2, Vec2, Vec2, f64, f64)> {
+    let sweep = el.sweep();
+    if !(el.major.is_finite() && el.ratio.is_finite() && sweep.is_finite() && sweep > 0.0) {
+        return None;
+    }
+    if el.major.len() <= 1e-12 || el.ratio <= 1e-12 {
+        return None;
+    }
+    let c = xf.apply(el.center);
+    let u = xf.apply_vec(el.major);
+    let v = xf.apply_vec(el.minor());
+    if !c.is_finite() || !u.is_finite() || !v.is_finite() {
+        return None;
+    }
+    if u.len() <= 1e-12 || v.len() <= 1e-12 || (u.x * v.y - u.y * v.x).abs() <= 1e-18 {
+        return None;
+    }
+    let (a0, sw, v) = if xf.is_mirroring() {
+        (el.start + sweep, sweep.min(TAU), Vec2::new(-v.x, -v.y))
+    } else {
+        (el.start, if sweep >= TAU - 1e-9 { TAU } else { sweep }, v)
+    };
+    Some((c, u, v, a0, sw))
+}
+
+/// Expand a stored `f32` sweep to `f64` radians. `f32::TAU` rounds *above* `f64::TAU`; feeding
+/// that into [`aad_geom::ccw_sweep`] collapses a full circle to a near-zero arc.
+pub fn sweep_radians(sweep: f32) -> f64 {
+    if !sweep.is_finite() || sweep <= 0.0 {
+        return 0.0;
+    }
+    if sweep >= std::f32::consts::TAU - 1e-4 { TAU } else { f64::from(sweep).min(TAU) }
+}
+
 fn arc_world_bounds(center: Vec2, rim: Vec2, sweep: f32) -> Bounds2 {
     let radius = center.dist(rim);
     let start = center.angle_to(rim);
-    aad_geom::Arc::from_sweep(center, radius, start, f64::from(sweep)).bounds()
+    aad_geom::Arc::new(center, radius, start, start + sweep_radians(sweep)).bounds()
+}
+
+/// Axis-aligned bounds of `C + U·cos(t) + V·sin(t)` over a parametric sweep.
+fn ellipse_world_bounds(center: Vec2, u: Vec2, v: Vec2, start: f32, sweep: f32) -> Bounds2 {
+    let start = f64::from(start);
+    let sweep = sweep_radians(sweep);
+    let at = |t: f64| center + u * t.cos() + v * t.sin();
+    let mut b = Bounds2::from_points([at(start), at(start + sweep)]);
+    // Coordinate extrema of the supporting full ellipse; keep those that fall in the sweep.
+    for angle in [v.x.atan2(u.x), v.x.atan2(u.x) + std::f64::consts::PI, v.y.atan2(u.y), v.y.atan2(u.y) + std::f64::consts::PI] {
+        let mut a = angle - start;
+        a -= (a / TAU).floor() * TAU;
+        if a < 0.0 {
+            a += TAU;
+        }
+        if sweep >= TAU - 1e-9 || a <= sweep + 1e-9 {
+            b.add(at(angle));
+        }
+    }
+    b
 }
 
 /// Map every point of `src` by `xf` (infinite lines map base and direction).
@@ -859,17 +991,55 @@ fn transform_list(src: &DisplayList, xf: Mat3) -> DisplayList {
                 if let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) {
                     let radius = center.dist(*rim);
                     let start_a = center.angle_to(*rim);
-                    if let Some((c, r, a0, sw)) = map_similarity_arc(xf, *center, radius, start_a, f64::from(sweep)) {
+                    let sw0 = sweep_radians(sweep);
+                    if let Some((c, r, a0, sw)) = map_similarity_arc(xf, *center, radius, start_a, sw0) {
                         let start = out.verts.len() as u32;
                         out.verts.push(c);
                         out.verts.push(Vec2::polar(c, r, a0));
                         out.prims.push(DPrim { start, len: 2, kind: Kind::Arc { sweep: sw as f32 }, ..*p });
+                    } else if let Some((c, u, v, a0, sw)) = map_affine_arc(xf, *center, radius, start_a, sw0) {
+                        let start = out.verts.len() as u32;
+                        out.verts.push(c);
+                        out.verts.push(c + u);
+                        out.verts.push(c + v);
+                        out.prims.push(DPrim { start, len: 3, kind: Kind::Ellipse { start: a0 as f32, sweep: sw as f32 }, ..*p });
                     } else {
                         let mut tess = Vec::new();
-                        aad_geom::Arc::from_sweep(*center, radius, start_a, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                        aad_geom::Arc::new(*center, radius, start_a, start_a + sw0).tessellate((radius * 1e-3).max(1e-6), &mut tess);
                         let start = out.verts.len() as u32;
                         out.verts.extend(tess.iter().copied().map(map));
                         out.prims.push(DPrim { start, len: tess.len() as u32, kind: Kind::Polyline, ..*p });
+                    }
+                }
+            }
+            Kind::Ellipse { start: a0, sweep } => {
+                if let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                    // U/V may not be perpendicular after earlier maps; transform axes directly.
+                    let c = map(*center);
+                    let u = xf.apply_vec(*u_tip - *center);
+                    let v0 = xf.apply_vec(*v_tip - *center);
+                    let sw0 = sweep_radians(sweep);
+                    let a0f = f64::from(a0);
+                    let (a0t, sw, v) = if xf.is_mirroring() { (a0f + sw0, sw0, Vec2::new(-v0.x, -v0.y)) } else { (a0f, sw0, v0) };
+                    if u.len() > 1e-12 && v.len() > 1e-12 && (u.x * v.y - u.y * v.x).abs() > 1e-18 {
+                        let start = out.verts.len() as u32;
+                        out.verts.push(c);
+                        out.verts.push(c + u);
+                        out.verts.push(c + v);
+                        out.prims.push(DPrim { start, len: 3, kind: Kind::Ellipse { start: a0t as f32, sweep: sw as f32 }, ..*p });
+                    } else {
+                        let mut tess = Vec::new();
+                        let n = 32usize.max((sw0.abs() / 0.1) as usize);
+                        let u0 = *u_tip - *center;
+                        let v0 = *v_tip - *center;
+                        for i in 0..=n {
+                            let ti = a0f + sw0 * i as f64 / n as f64;
+                            tess.push(map(*center + u0 * ti.cos() + v0 * ti.sin()));
+                        }
+                        let start = out.verts.len() as u32;
+                        let len = tess.len() as u32;
+                        out.verts.extend(tess);
+                        out.prims.push(DPrim { start, len, kind: Kind::Polyline, ..*p });
                     }
                 }
             }
@@ -892,6 +1062,14 @@ fn transform_list(src: &DisplayList, xf: Mat3) -> DisplayList {
                 let pts = out.points(prim);
                 if let (Some(c), Some(rim)) = (pts.first(), pts.get(1)) {
                     let b = arc_world_bounds(*c, *rim, sweep);
+                    bounds.add(b.min);
+                    bounds.add(b.max);
+                }
+            }
+            Kind::Ellipse { start, sweep } => {
+                let pts = out.points(prim);
+                if let (Some(c), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                    let b = ellipse_world_bounds(*c, *u_tip - *c, *v_tip - *c, start, sweep);
                     bounds.add(b.min);
                     bounds.add(b.max);
                 }
@@ -984,6 +1162,13 @@ fn viewport(b: &mut Builder, d: &Drawing, e: &Entity, vp: &aad_doc::Viewport) {
                     Bounds2::default()
                 }
             }
+            Kind::Ellipse { start, sweep } => {
+                if let (Some(c), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                    ellipse_world_bounds(*c, *u_tip - *c, *v_tip - *c, start, sweep)
+                } else {
+                    Bounds2::default()
+                }
+            }
             _ => Bounds2::from_points(pts.iter().copied()),
         };
         if !bb.is_empty() && !bb.intersects(&win) {
@@ -1011,6 +1196,7 @@ fn append_clipped(dst: &mut DisplayList, src: &DisplayList, rect: &Bounds2) {
                 }
             }
             Kind::Arc { sweep } => append_clipped_arc(dst, p, pts, sweep, rect, None),
+            Kind::Ellipse { start, sweep } => append_clipped_ellipse(dst, p, pts, start, sweep, rect, None),
             Kind::Tris | Kind::Mask => {
                 let t = clip::clip_triangles(pts, rect);
                 push_raw(dst, p, p.kind, &t);
@@ -1037,41 +1223,70 @@ fn append_clipped(dst: &mut DisplayList, src: &DisplayList, rect: &Bounds2) {
 fn append_clipped_arc(dst: &mut DisplayList, p: &DPrim, pts: &[Vec2], sweep: f32, rect: &Bounds2, poly: Option<&[Vec2]>) {
     let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) else { return };
     let bb = arc_world_bounds(*center, *rim, sweep);
-    let hits = match poly {
-        Some(poly) => {
-            bb.intersects(&Bounds2::from_points(poly.iter().copied())) && {
-                // Cheap reject: if the AABB misses the polygon AABB we already failed; otherwise flatten.
-                true
-            }
-        }
-        None => bb.intersects(rect),
-    };
-    if !hits {
+    if !clip_bounds_hit(&bb, rect, poly) {
         return;
     }
-    let fully_inside = match poly {
-        Some(poly) => {
-            let corners = [bb.min, Vec2::new(bb.max.x, bb.min.y), bb.max, Vec2::new(bb.min.x, bb.max.y)];
-            corners.iter().all(|q| aad_geom::point_in_polygon(poly, *q))
-        }
-        None => rect.contains(bb.min) && rect.contains(bb.max),
-    };
-    if fully_inside {
+    if clip_bounds_inside(&bb, rect, poly) {
         push_raw(dst, p, Kind::Arc { sweep }, pts);
         return;
     }
     let radius = center.dist(*rim);
     let start = center.angle_to(*rim);
     let mut tess = Vec::new();
-    aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+    aad_geom::Arc::new(*center, radius, start, start + sweep_radians(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+    append_clipped_tess(dst, p, &tess, rect, poly);
+}
+
+/// Keep a GPU ellipse when fully inside the clip; otherwise flatten and clip as a polyline.
+fn append_clipped_ellipse(dst: &mut DisplayList, p: &DPrim, pts: &[Vec2], start: f32, sweep: f32, rect: &Bounds2, poly: Option<&[Vec2]>) {
+    let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) else { return };
+    let u = *u_tip - *center;
+    let v = *v_tip - *center;
+    let bb = ellipse_world_bounds(*center, u, v, start, sweep);
+    if !clip_bounds_hit(&bb, rect, poly) {
+        return;
+    }
+    if clip_bounds_inside(&bb, rect, poly) {
+        push_raw(dst, p, Kind::Ellipse { start, sweep }, pts);
+        return;
+    }
+    let mut tess = Vec::new();
+    let sw = sweep_radians(sweep);
+    let a0 = f64::from(start);
+    let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
+    for i in 0..=n {
+        let t = a0 + sw * i as f64 / n as f64;
+        tess.push(*center + u * t.cos() + v * t.sin());
+    }
+    append_clipped_tess(dst, p, &tess, rect, poly);
+}
+
+fn clip_bounds_hit(bb: &Bounds2, rect: &Bounds2, poly: Option<&[Vec2]>) -> bool {
+    match poly {
+        Some(poly) => bb.intersects(&Bounds2::from_points(poly.iter().copied())),
+        None => bb.intersects(rect),
+    }
+}
+
+fn clip_bounds_inside(bb: &Bounds2, rect: &Bounds2, poly: Option<&[Vec2]>) -> bool {
     match poly {
         Some(poly) => {
-            for piece in clip::clip_polyline_poly(&tess, poly) {
+            let corners = [bb.min, Vec2::new(bb.max.x, bb.min.y), bb.max, Vec2::new(bb.min.x, bb.max.y)];
+            corners.iter().all(|q| aad_geom::point_in_polygon(poly, *q))
+        }
+        None => rect.contains(bb.min) && rect.contains(bb.max),
+    }
+}
+
+fn append_clipped_tess(dst: &mut DisplayList, p: &DPrim, tess: &[Vec2], rect: &Bounds2, poly: Option<&[Vec2]>) {
+    match poly {
+        Some(poly) => {
+            for piece in clip::clip_polyline_poly(tess, poly) {
                 push_raw(dst, p, Kind::Polyline, &piece);
             }
         }
         None => {
-            for piece in clip::clip_polyline(&tess, rect) {
+            for piece in clip::clip_polyline(tess, rect) {
                 push_raw(dst, p, Kind::Polyline, &piece);
             }
         }
@@ -1099,6 +1314,10 @@ fn append_clipped_poly(dst: &mut DisplayList, src: &DisplayList, poly: &[Vec2]) 
             Kind::Arc { sweep } => {
                 let rect = Bounds2::from_points(poly.iter().copied());
                 append_clipped_arc(dst, p, pts, sweep, &rect, Some(poly));
+            }
+            Kind::Ellipse { start, sweep } => {
+                let rect = Bounds2::from_points(poly.iter().copied());
+                append_clipped_ellipse(dst, p, pts, start, sweep, &rect, Some(poly));
             }
             Kind::Tris | Kind::Mask => {
                 let t = clip::clip_triangles_poly(pts, poly);
@@ -1128,7 +1347,7 @@ fn append_clipped_poly(dst: &mut DisplayList, src: &DisplayList, poly: &[Vec2]) 
 fn push_raw(dst: &mut DisplayList, p: &DPrim, kind: Kind, pts: &[Vec2]) {
     let min = match kind {
         Kind::Polyline | Kind::Arc { .. } => 2,
-        Kind::Tris | Kind::Mask => 3,
+        Kind::Ellipse { .. } | Kind::Tris | Kind::Mask => 3,
         _ => 1,
     };
     if pts.len() < min {
@@ -1429,6 +1648,7 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
                         c.tessellate(tol, &mut pts);
                         stroke(b, &pts);
                     }
+                    Prim::Ellipse(el) if lt.is_none() && b.try_ellipse(ctx, rgb, lw, &el) => {}
                     Prim::Ellipse(el) => {
                         let mut pts = Vec::new();
                         el.tessellate(tol, &mut pts);

@@ -1,7 +1,7 @@
 //! Far-zoom LOD and model frustum cull cut display-list work when zoomed in.
 
-use aad_doc::{Circle, Common, Drawing, EntityKind, Hatch, HatchLoop, Space};
-use aad_geom::{PolyVertex, Vec2, Vec3};
+use aad_doc::{Circle, Common, Drawing, Ellipse, EntityKind, Hatch, HatchLoop, Space};
+use aad_geom::{PolyVertex, TAU, Vec2, Vec3};
 use aad_render::{Options, build, lod_flags_for_view, lod_for_view};
 
 fn hatch_and_circles() -> Drawing {
@@ -42,6 +42,49 @@ fn continuous_circles_emit_gpu_arc_prims() {
     assert_eq!(arcs, 20, "each continuous circle should be one Kind::Arc, not a tessellated polyline");
     let mesh = aad_render::mesh::build_mesh(&list, aad_geom::Vec2::ZERO, aad_color::Rgb(0, 0, 0), false);
     assert_eq!(mesh.ring_instances(), 20);
+}
+
+#[test]
+fn continuous_ellipses_emit_gpu_ellipse_prims() {
+    let mut d = Drawing::new_metric();
+    for i in 0..8 {
+        d.add(
+            &Space::Model,
+            Common::default(),
+            EntityKind::Ellipse(Ellipse {
+                center: Vec3::new(f64::from(i) * 40.0, 0.0, 0.0),
+                major: Vec3::new(10.0, 0.0, 0.0),
+                ratio: 0.4,
+                start: 0.0,
+                end: TAU,
+            }),
+        )
+        .unwrap();
+    }
+    let list = build(&d, &Space::Model, &Options { view_height: 2000.0, tolerance: 0.01, ..Default::default() });
+    let ellipses = list.prims.iter().filter(|p| matches!(p.kind, aad_render::Kind::Ellipse { .. })).count();
+    assert_eq!(ellipses, 8, "each continuous ellipse should be one Kind::Ellipse, not a tessellated polyline");
+    let mesh = aad_render::mesh::build_mesh(&list, aad_geom::Vec2::ZERO, aad_color::Rgb(0, 0, 0), false);
+    assert_eq!(mesh.ring_instances(), 8);
+}
+
+#[test]
+fn non_uniform_block_scale_maps_circle_to_gpu_ellipse() {
+    let mut d = Drawing::new_metric();
+    let mut block = aad_doc::Block::new("CIR");
+    block.entities.push(aad_doc::Entity::new(aad_doc::Handle(1_000_000), EntityKind::Circle(Circle { center: Vec3::ZERO, radius: 5.0 })));
+    d.blocks.insert("CIR".into(), std::sync::Arc::new(block));
+    d.add(
+        &Space::Model,
+        Common::default(),
+        EntityKind::Insert(aad_doc::Insert { block: "CIR".into(), insert: Vec3::ZERO, scale: Vec3::new(2.0, 1.0, 1.0), ..Default::default() }),
+    )
+    .unwrap();
+    let list = build(&d, &Space::Model, &Options { view_height: 100.0, tolerance: 0.01, ..Default::default() });
+    let ellipses = list.prims.iter().filter(|p| matches!(p.kind, aad_render::Kind::Ellipse { .. })).count();
+    assert_eq!(ellipses, 1, "non-uniform insert scale should emit Kind::Ellipse, got {:?}", list.prims);
+    let mesh = aad_render::mesh::build_mesh(&list, Vec2::ZERO, aad_color::Rgb(0, 0, 0), false);
+    assert_eq!(mesh.ring_instances(), 1);
 }
 
 #[test]

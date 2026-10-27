@@ -4,7 +4,7 @@ use aad_color::Rgb;
 use aad_geom::{Bounds2, Vec2};
 use tiny_skia::{FillRule, LineCap, LineJoin, Paint, PathBuilder, Pixmap, Stroke, Transform};
 
-use crate::{DisplayList, Kind};
+use crate::{DPrim, DisplayList, Kind};
 
 /// A 2D view: world point at the image centre and pixels per drawing unit.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -94,25 +94,22 @@ pub fn render(list: &DisplayList, view: &View, o: &RasterOptions) -> Option<Pixm
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
-                let bb = Bounds2::from_points(tess.iter().copied());
-                if !bb.intersects(&vis) {
-                    continue;
+                aad_geom::Arc::new(*center, radius, start, start + crate::sweep_radians(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                stroke_tess(&mut pm, &paint, view, &vis, &tess, p, o);
+            }
+            Kind::Ellipse { start, sweep } => {
+                let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) else { continue };
+                let u = *u_tip - *center;
+                let v = *v_tip - *center;
+                let mut tess = Vec::new();
+                let sw = crate::sweep_radians(sweep);
+                let a0 = f64::from(start);
+                let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
+                for i in 0..=n {
+                    let t = a0 + sw * i as f64 / n as f64;
+                    tess.push(*center + u * t.cos() + v * t.sin());
                 }
-                let mut pb = PathBuilder::new();
-                for (i, q) in tess.iter().enumerate() {
-                    let (x, y) = view.to_screen(*q);
-                    if i == 0 {
-                        pb.move_to(x, y);
-                    } else {
-                        pb.line_to(x, y);
-                    }
-                }
-                if let Some(path) = pb.finish() {
-                    let w = if o.px_per_mm > 0.0 && p.lw > 0.0 { (p.lw * o.px_per_mm).max(o.hairline) } else { o.hairline };
-                    let stroke = Stroke { width: w, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Default::default() };
-                    pm.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
-                }
+                stroke_tess(&mut pm, &paint, view, &vis, &tess, p, o);
             }
             Kind::Tris | Kind::Mask => {
                 if p.kind == Kind::Mask {
@@ -161,6 +158,27 @@ pub fn render(list: &DisplayList, view: &View, o: &RasterOptions) -> Option<Pixm
         }
     }
     Some(pm)
+}
+
+fn stroke_tess(pm: &mut Pixmap, paint: &Paint, view: &View, vis: &Bounds2, tess: &[Vec2], p: &DPrim, o: &RasterOptions) {
+    let bb = Bounds2::from_points(tess.iter().copied());
+    if tess.len() < 2 || !bb.intersects(vis) {
+        return;
+    }
+    let mut pb = PathBuilder::new();
+    for (i, q) in tess.iter().enumerate() {
+        let (x, y) = view.to_screen(*q);
+        if i == 0 {
+            pb.move_to(x, y);
+        } else {
+            pb.line_to(x, y);
+        }
+    }
+    if let Some(path) = pb.finish() {
+        let w = if o.px_per_mm > 0.0 && p.lw > 0.0 { (p.lw * o.px_per_mm).max(o.hairline) } else { o.hairline };
+        let stroke = Stroke { width: w, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Default::default() };
+        pm.stroke_path(&path, paint, &stroke, Transform::identity(), None);
+    }
 }
 
 /// Render and encode as PNG.

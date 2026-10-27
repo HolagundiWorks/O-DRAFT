@@ -288,7 +288,8 @@ fn instance_layout() -> wgpu::VertexBufferLayout<'static> {
 }
 
 fn ring_layout() -> wgpu::VertexBufferLayout<'static> {
-    const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Unorm8x4];
+    // centre, U, V, (start,sweep,width,pad), colour — see RING_INSTANCE_SIZE.
+    const ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Float32x4, 4 => Unorm8x4];
     wgpu::VertexBufferLayout { array_stride: RING_INSTANCE_SIZE as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &ATTRS }
 }
 

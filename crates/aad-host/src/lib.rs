@@ -95,6 +95,10 @@ struct FrameCache {
     mesh: Option<MeshData>,
     mesh_origin: Vec2,
     pending: Option<PendingList>,
+    /// Last synchronous display-list build time (ms). Worker rebuilds do not update this.
+    list_build_ms: f64,
+    /// Last mesh pack time (ms).
+    mesh_ms: f64,
 }
 
 /// Identity of the last GPU present: document mesh, overlay, view uniform, and clear colour.
@@ -117,6 +121,8 @@ impl Default for FrameCache {
             mesh: None,
             mesh_origin: Vec2::ZERO,
             pending: None,
+            list_build_ms: 0.0,
+            mesh_ms: 0.0,
         }
     }
 }
@@ -1219,6 +1225,14 @@ impl Host {
     fn control_inspect(&self) -> Value {
         let view = self.session.state().map(|state| state.view()).unwrap_or(aad_engine::View { center: Vec2::ZERO, height: 1.0 });
         let settings = &self.session.settings;
+        let (prims, rings, mesh_bytes) = match &self.frame.mesh {
+            Some(m) => (
+                self.frame.list.as_ref().map(|l| l.prims.len()).unwrap_or(0),
+                m.ring_instances(),
+                m.lines.len() + m.tris.len() + m.quads.len() + m.rings.len(),
+            ),
+            None => (self.frame.list.as_ref().map(|l| l.prims.len()).unwrap_or(0), 0, 0),
+        };
         json_ok(serde_json::json!({
             "shell": "winui",
             "canvas": { "width": self.width, "height": self.height, "visible": self.canvas_visible },
@@ -1234,6 +1248,14 @@ impl Host {
             "assistant": self.assistant.phase().to_string(),
             "closePrompt": Value::Null,
             "focus": Value::Null,
+            "perf": {
+                "buildMs": self.frame.list_build_ms,
+                "meshMs": self.frame.mesh_ms,
+                "prims": prims,
+                "rings": rings,
+                "meshBytes": mesh_bytes,
+                "renderer": "gpu",
+            },
         }))
     }
 
@@ -1969,6 +1991,7 @@ impl Host {
             } else if !same_drawing {
                 self.frame.pending = None;
                 aad_engine::spatial::warm(state.doc.clone(), state.space.clone());
+                let t0 = std::time::Instant::now();
                 let incremental = match (&self.frame.list, &self.frame.list_doc) {
                     (Some(old), Some(old_doc))
                         if matches!(state.space, Space::Model)
@@ -1985,6 +2008,7 @@ impl Host {
                     _ => None,
                 };
                 self.frame.list = Some(incremental.unwrap_or_else(|| build_list(&state.doc, &state.space, &opts, background)));
+                self.frame.list_build_ms = t0.elapsed().as_secs_f64() * 1000.0;
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
                 self.frame.mesh_key = None;
@@ -1993,7 +2017,9 @@ impl Host {
             // same_drawing with pending still building: keep showing the previous list.
             if self.frame.list.is_none() {
                 aad_engine::spatial::warm(state.doc.clone(), state.space.clone());
+                let t0 = std::time::Instant::now();
                 self.frame.list = Some(build_list(&state.doc, &state.space, &opts, background));
+                self.frame.list_build_ms = t0.elapsed().as_secs_f64() * 1000.0;
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
                 self.frame.mesh_key = None;
@@ -2015,6 +2041,7 @@ impl Host {
             ^ (band as u64).rotate_left(40)
             ^ u64::from(true_scale).rotate_left(48);
         if self.frame.mesh_key != Some(mesh_key) || self.frame.mesh.is_none() {
+            let t0 = std::time::Instant::now();
             let mut built = mesh::build_mesh_mode(list, origin, paper, lw_mode);
             let world_width = view.height * f64::from(self.width.max(1)) / f64::from(self.height.max(1));
             mesh::append_infinite(&mut built, list, origin, view.center, world_width, view.height, paper);
@@ -2023,6 +2050,7 @@ impl Host {
             } else {
                 mesh::expand_hairlines(&mut built);
             }
+            self.frame.mesh_ms = t0.elapsed().as_secs_f64() * 1000.0;
             self.frame.mesh = Some(built);
             self.frame.mesh_key = Some(mesh_key);
             self.frame.mesh_origin = origin;

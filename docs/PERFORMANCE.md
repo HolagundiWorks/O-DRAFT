@@ -162,6 +162,19 @@ before micro-optimising.
   `crates/render/tests/viewport_pan_cache.rs`, `lod_and_frustum.rs`. WinUI fine pans keep the mesh
   key (`fine_pan_keeps_the_cached_mesh`).
 
+## Update: GPU analytic curves + inspect perf fields (Phase A)
+
+- **Implemented:** continuous ellipses and non-uniform-scaled circles/arcs emit `Kind::Ellipse`
+  (conjugate diameters U/V) into the shared ring instance buffer; continuous similarity circles/arcs
+  stay `Kind::Arc`. Dashed linetypes and degenerate axes still flatten to polylines. CPU raster and
+  clip paths tessellate rings; `aad_render::sweep_radians` expands stored `f32` sweeps so a full
+  circle does not collapse when `f32::TAU` exceeds `f64::TAU`.
+- **Inspect hooks:** WinUI and egui `ui.inspect` `perf` include `buildMs`, `meshMs`, `prims`,
+  `rings`, and `meshBytes` (egui also keeps `frameMs` / `drawMs` / `renderer`). Absolute times are
+  not re-measured here — use `aad-cli perf` / `perf_probe` on a reference machine before quoting.
+- **Proposed (not in this change):** tiled display-list / dirty mesh upload (Phases B–C), glyph
+  atlas (Phase D), Vello spike, WinUI GPU timestamp queries behind a flag.
+
 ## Update: file I/O path
 
 - Control `app.open` / `app.save`: start worker, defer the JSON reply until `Host::pump` polls

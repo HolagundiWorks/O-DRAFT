@@ -68,9 +68,12 @@ fn display_units_change_dimension_text_not_geometry() {
 fn annotation_sizes_follow_the_plot_scale_and_unit() {
     let mut s = mm_session();
     let r = s.execute("plot.config", &json!({"scale": "1:100", "paper": "A1"})).unwrap();
-    assert_eq!(r["sizes"]["textHeight"], json!(350.0), "3.5 mm (ISO medium text for A1) printed at 1:100 is 350 mm in a millimetre drawing");
+    // Default textMm is ISO medium for the paper (A1 → 3.5 mm), not the legacy 2.5 mm.
+    assert_eq!(r["sizes"]["textHeight"], json!(350.0), "3.5 mm printed at 1:100 is 350 mm in a millimetre drawing");
     assert_eq!(s.doc().unwrap().header.f64("TEXTSIZE", 0.0), 350.0);
     assert_eq!(s.doc().unwrap().dim_styles[0].text_height, 350.0);
+    let r = s.execute("plot.config", &json!({"scale": "1:100", "paper": "A1", "textMm": 2.5})).unwrap();
+    assert_eq!(r["sizes"]["textHeight"], json!(250.0), "explicit 2.5 mm still scales the same way");
     // The same print in a metre drawing; a different scale; a custom sheet.
     s.execute("drawing.units", &json!({"units": "m", "mode": "metadata"})).unwrap();
     let r = s.execute("plot.config", &json!({"scale": 50, "paper": [900, 600], "textMm": 3.5})).unwrap();

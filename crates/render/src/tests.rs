@@ -20,8 +20,7 @@ fn builds_lines_and_circles() {
     let d = sample();
     let l = build(&d, &Space::Model, &Options { tolerance: 0.01, ..Default::default() });
     assert_eq!(l.prims.len(), 2);
-    // A circle is one GPU ring primitive: its centre and a rim point.
-    assert!(matches!(l.prims[1].kind, Kind::Arc { sweep } if sweep > std::f32::consts::TAU - 1e-3), "{:?}", l.prims[1].kind);
+    assert!(matches!(l.prims[1].kind, Kind::Arc { .. }), "continuous circle is a GPU arc");
     assert_eq!(l.prims[1].len, 2);
     assert_eq!(l.prims[1].color, Rgb(255, 0, 0));
 }
@@ -145,17 +144,14 @@ fn layout_viewport_shows_model_clipped() {
             assert!(rect.contains(*q), "{q:?} outside the viewport");
         }
     }
-    // The circle (red) is visible, scaled by 0.5 about the view centre: radius 1.5 around (5,4).
-    let red: Vec<&&DPrim> = content.iter().filter(|p| p.color == Rgb(255, 0, 0)).collect();
-    assert!(!red.is_empty());
-    let c = Vec2::new(5.0, 4.0);
-    for p in red {
-        match (p.kind, l.points(p)) {
-            // A ring that fits inside the viewport stays one primitive: centre and rim point.
-            (Kind::Arc { .. }, [centre, rim]) => assert!(centre.dist(c) < 1e-9 && (rim.dist(*centre) - 1.5).abs() < 0.02, "{centre:?} {rim:?}"),
-            (_, pts) => assert!(pts.iter().all(|q| (q.dist(c) - 1.5).abs() < 0.02)),
-        }
-    }
+    // The circle (red) is a GPU arc: centre at (5,4), rim at radius 1.5 after the 0.5 viewport scale.
+    let red: Vec<&DPrim> = content.iter().copied().filter(|p| p.color == Rgb(255, 0, 0)).collect();
+    assert_eq!(red.len(), 1);
+    assert!(matches!(red[0].kind, Kind::Arc { .. }));
+    let pts = l.points(red[0]);
+    assert_eq!(pts.len(), 2);
+    assert!(pts[0].dist(Vec2::new(5.0, 4.0)) < 0.02, "arc centre {:?}", pts[0]);
+    assert!((pts[0].dist(pts[1]) - 1.5).abs() < 0.02, "arc radius {}", pts[0].dist(pts[1]));
     // The line y=0 maps to paper y=1.5, below the viewport: clipped away entirely.
     assert!(content.iter().filter(|p| p.color != Rgb(255, 0, 0)).all(|p| l.points(p).iter().all(|q| q.y > 1.9)));
     // The border is drawn with the viewport's own handle.

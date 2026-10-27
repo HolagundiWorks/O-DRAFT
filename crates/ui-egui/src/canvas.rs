@@ -96,6 +96,10 @@ pub struct CanvasState {
     infinite: Vec<usize>,
     /// Milliseconds spent converting the display list to vertex data (last rebuild).
     pub mesh_ms: f64,
+    /// Ring instances in the last GPU mesh (for `ui.inspect` perf).
+    pub mesh_rings: usize,
+    /// Byte size of the last GPU mesh buffers (for `ui.inspect` perf).
+    pub mesh_bytes: usize,
     pub rect: Option<Rect>,
     pub xf: Option<Xf>,
     pub hover: Option<Handle>,
@@ -336,7 +340,29 @@ fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay:
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate(px.max(1e-9), &mut tess);
+                aad_geom::Arc::new(*center, radius, start, start + aad_render::sweep_radians(sweep)).tessellate(px.max(1e-9), &mut tess);
+                let bb = Bounds2::from_points(tess.iter().copied());
+                if !bb.intersects(&vis) {
+                    continue;
+                }
+                let w = if lwdisplay && prim.lw > 0.0 { (prim.lw * 3.78).clamp(1.0, 12.0) } else { 1.0 };
+                let screen: Vec<Pos2> = tess.iter().map(|q| xf.to_screen(*q)).collect();
+                if screen.len() >= 2 {
+                    shapes.push(Shape::line(screen, Stroke::new(w, col)));
+                }
+            }
+            Kind::Ellipse { start, sweep } => {
+                let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) else { continue };
+                let u = *u_tip - *center;
+                let v = *v_tip - *center;
+                let mut tess = Vec::new();
+                let sw = aad_render::sweep_radians(sweep);
+                let a0 = f64::from(start);
+                let n = 32usize.max(((sw.abs() / px.max(1e-9)).ceil() as usize).min(512));
+                for i in 0..=n {
+                    let t = a0 + sw * i as f64 / n as f64;
+                    tess.push(*center + u * t.cos() + v * t.sin());
+                }
                 let bb = Bounds2::from_points(tess.iter().copied());
                 if !bb.intersects(&vis) {
                     continue;
@@ -404,6 +430,8 @@ fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdis
         } else {
             crate::gpu::expand_hairlines(&mut mesh);
         }
+        c.mesh_rings = mesh.ring_instances();
+        c.mesh_bytes = mesh.lines.len() + mesh.tris.len() + mesh.quads.len() + mesh.rings.len();
         if let Ok(mut slot) = c.mesh_slot.lock() {
             *slot = Some(mesh);
         }
@@ -456,7 +484,26 @@ fn draw_highlight(p: &egui::Painter, xf: &Xf, list: &DisplayList, prims: &[usize
                 let radius = center.dist(*rim);
                 let start = center.angle_to(*rim);
                 let mut tess = Vec::new();
-                aad_geom::Arc::from_sweep(*center, radius, start, f64::from(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                aad_geom::Arc::new(*center, radius, start, start + aad_render::sweep_radians(sweep)).tessellate((radius * 1e-3).max(1e-6), &mut tess);
+                let screen: Vec<Pos2> = tess.iter().map(|q| xf.to_screen(*q)).collect();
+                if dashed {
+                    shapes.extend(Shape::dashed_line(&screen, Stroke::new(width, color), 6.0, 4.0));
+                } else if screen.len() >= 2 {
+                    shapes.push(Shape::line(screen, Stroke::new(width, color)));
+                }
+            }
+            Kind::Ellipse { start, sweep } => {
+                let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) else { continue };
+                let u = *u_tip - *center;
+                let v = *v_tip - *center;
+                let mut tess = Vec::new();
+                let sw = aad_render::sweep_radians(sweep);
+                let a0 = f64::from(start);
+                let n = 32usize.max(((sw.abs() / 0.05) as usize).min(512));
+                for i in 0..=n {
+                    let t = a0 + sw * i as f64 / n as f64;
+                    tess.push(*center + u * t.cos() + v * t.sin());
+                }
                 let screen: Vec<Pos2> = tess.iter().map(|q| xf.to_screen(*q)).collect();
                 if dashed {
                     shapes.extend(Shape::dashed_line(&screen, Stroke::new(width, color), 6.0, 4.0));

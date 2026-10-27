@@ -799,7 +799,7 @@ impl FormRun {
     }
 
     fn has(&self, f: &Field) -> bool {
-        self.values.get(f.key).is_some_and(|v| !matches!(v, Value::Null) && !(v.is_string() && text_of(v).is_empty()))
+        self.values.get(f.key).is_some_and(|v| !(matches!(v, Value::Null) || (v.is_string() && text_of(v).is_empty())))
     }
 
     /// Move to the next field that must be asked.
@@ -942,7 +942,12 @@ mod tests {
         assert!(parse_input(g, &json!({"size": "1 2 3"})).is_err());
         assert!(parse_input(g, &json!({"size": "1,inf"})).is_err());
         let p = get("project").unwrap();
-        assert_eq!(parse_input(p, &json!({"title": " House ", "owner": ""})).unwrap(), json!({"title": "House"}), "project settings are flat");
+        // Flat Project Settings fields (wrap is None); `project` nests details / structure itself.
+        assert_eq!(parse_input(p, &json!({"title": " House ", "owner": ""})).unwrap(), json!({"title": "House"}));
+        assert_eq!(
+            parse_input(p, &json!({"title": "A", "slabMm": "150", "beamMm": "450"})).unwrap(),
+            json!({"title": "A", "slabMm": 150.0, "beamMm": 450.0})
+        );
     }
 
     #[test]
@@ -962,10 +967,11 @@ mod tests {
     #[test]
     fn tables_become_arrays_of_objects_and_rates_a_map() {
         let f = get("floors").unwrap();
-        let p = parse_input(f, &json!({"floors": [["Ground"], [""], {"name": "First"}]})).unwrap();
+        // Floors dialog collects names only; heights default from project settings in the command.
+        let p = parse_input(f, &json!({"floors": [["Ground"], [""], {"name": "First", "floorToFloor": 3}]})).unwrap();
         assert_eq!(p["floors"].as_array().unwrap().len(), 2, "blank rows are dropped");
-        assert_eq!(p["floors"][0]["name"], "Ground");
-        assert_eq!(p["floors"][1]["name"], "First");
+        assert_eq!(p["floors"][0], json!({"name": "Ground"}));
+        assert_eq!(p["floors"][1], json!({"name": "First"}), "keys outside the column list are ignored");
         assert!(parse_input(f, &json!({"floors": []})).is_err());
         let r = get("takeoff.rates").unwrap();
         let p = parse_input(r, &json!({"rates": [["Bricks", "m3", "5200"], ["", "", ""]]})).unwrap();
