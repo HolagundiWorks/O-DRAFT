@@ -220,6 +220,10 @@ fn system_font() -> Option<&'static str> {
 #[test]
 fn truetype_text_is_filled_or_outlined() {
     let Some(font) = system_font() else { return };
+    // Drawing text uses DRAWING_FONT (Segoe UI → Arial…), not the style name; skip when absent.
+    if !aad_fonts::TextFont::resolve(font).is_outline() {
+        return;
+    }
     let mut d = text_doc(font, "OH");
     let l = build(&d, &Space::Model, &Options::default());
     assert!(l.prims.iter().any(|p| p.kind == Kind::Tris), "TEXTFILL=1 fills glyphs");
@@ -268,6 +272,9 @@ fn backwards_and_upside_down_mirror_text() {
 #[test]
 fn truetype_mtext_and_dimension_text() {
     let Some(font) = system_font() else { return };
+    if !aad_fonts::TextFont::resolve(font).is_outline() {
+        return;
+    }
     let mut d = Drawing::new_imperial();
     d.text_styles.iter_mut().for_each(|s| s.font = font.into());
     d.add(

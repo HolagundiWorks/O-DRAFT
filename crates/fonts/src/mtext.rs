@@ -2,6 +2,8 @@
 
 use aad_geom::{Bounds2, Vec2};
 
+use aad_geom::Mat3;
+
 use crate::{Shaped, TextFont, shape_line, text_width};
 
 /// Strip MTEXT formatting codes to plain text with `\n` paragraph breaks.
@@ -401,7 +403,7 @@ fn seg_shape(seg: &Seg, f: &Fmt, x: f64) -> Shaped {
             return Shaped::default();
         }
         let mut sh = shape_line(&f.font, s, size, f.wf, f.oblique);
-        sh.map(|p| p + at);
+        sh.transform(Mat3::translate(at));
         sh
     };
     let w = seg_width(seg, f);
@@ -536,7 +538,7 @@ pub fn layout_mtext_with(contents: &str, p: &MTextParams) -> MTextLayout {
         _ => block_h,
     };
     let insert = p.insert;
-    let xf = |q: Vec2| insert + q.rotate(rotation);
+    let world_xf = Mat3::translate(insert).then_before(Mat3::rotate(rotation));
     let mut out = MTextLayout { lines: lines.iter().map(|l| l.text.clone()).collect(), ..Default::default() };
     for (l, base_y) in lines.iter().zip(baselines) {
         let x0 = match col {
@@ -548,7 +550,7 @@ pub fn layout_mtext_with(contents: &str, p: &MTextParams) -> MTextLayout {
             let fm = fmt(*f);
             let mut sh = seg_shape(sg, fm, *x);
             let off = Vec2::new(x0, top + base_y);
-            sh.map(|q| xf(q + off));
+            sh.transform(world_xf.then_before(Mat3::translate(off)));
             match out.pieces.last_mut() {
                 Some(pc) if pc.color == fm.color => pc.shaped.extend(sh),
                 _ => out.pieces.push(MTextPiece { color: fm.color, shaped: sh }),
@@ -564,7 +566,8 @@ pub fn layout_mtext_with(contents: &str, p: &MTextParams) -> MTextLayout {
         _ => -block_w,
     };
     out.bounds = Bounds2::from_points(
-        [Vec2::new(x0, top), Vec2::new(x0 + block_w, top), Vec2::new(x0 + block_w, top - block_h), Vec2::new(x0, top - block_h)].map(xf),
+        [Vec2::new(x0, top), Vec2::new(x0 + block_w, top), Vec2::new(x0 + block_w, top - block_h), Vec2::new(x0, top - block_h)]
+            .map(|q| world_xf.apply(q)),
     );
     out
 }

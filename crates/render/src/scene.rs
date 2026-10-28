@@ -6,6 +6,10 @@
 //!
 //! Layout viewport model tessellation uses the same process-wide LRU ([`crate::vp_model_get`]) —
 //! no longer `thread_local` — so worker threads can share it.
+//!
+//! Phase D text/hatch retention uses process-wide content-keyed caches
+//! ([`crate::glyph_mesh`], hatch pattern expansion in [`crate::hatch`]). Dirty-tile
+//! [`rebuild_scene`] does not flush them; a new tessellation band selects different keys.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
