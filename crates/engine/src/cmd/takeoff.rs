@@ -361,6 +361,127 @@ fn match_deductions(walls: &[Wall], deds: &[Deduction], tol: f64) -> (Vec<Matche
     (matched, orphans)
 }
 
+/// Deduction midpoints that live inside an opening insert's block, keyed by the insert handle.
+fn opening_block_deductions(d: &Drawing, space: &Space) -> Vec<(Handle, Vec2)> {
+    let mut out = Vec::new();
+    let Some(store) = d.space(space) else { return out };
+    for e in store.iter().filter(|e| d.is_visible(e)) {
+        let EntityKind::Insert(i) = &e.kind else { continue };
+        let Some(b) = d.block(&i.block) else { continue };
+        let (sin, cos) = i.rotation.sin_cos();
+        let tf = |p: aad_geom::Vec3| {
+            let (x, y) = ((p.x - b.base.x) * i.scale.x, (p.y - b.base.y) * i.scale.y);
+            Vec2::new(i.insert.x + x * cos - y * sin, i.insert.y + x * sin + y * cos)
+        };
+        for be in b.entities.iter() {
+            if let EntityKind::Line(l) = &be.kind
+                && on_layer(be, L_DEDUCT)
+            {
+                let a = tf(l.a);
+                let bpt = tf(l.b);
+                out.push((e.handle, (a + bpt) * 0.5));
+            }
+        }
+    }
+    out
+}
+
+/// For each opening insert whose `MEASURE-DEDUCT` line sits on a measured wall, the wall handle.
+/// Prefer this over insert-point proximity when writing `wall_ref` (same match `takeoff.brick` uses).
+pub(crate) fn opening_wall_by_deduct(d: &Drawing, space: &Space, wall_handles: &[Handle], tol: f64) -> std::collections::HashMap<u64, Handle> {
+    let layers = [L_FULL, L_HALF];
+    let all = walls(d, space, &layers);
+    let ws: Vec<Wall> = all.into_iter().filter(|w| wall_handles.iter().any(|h| *h == w.handle)).collect();
+    let mut out = std::collections::HashMap::new();
+    for (ins, mid) in opening_block_deductions(d, space) {
+        if out.contains_key(&ins.0) {
+            continue;
+        }
+        let best = ws
+            .iter()
+            .map(|w| (w.handle, w.seg.closest(mid).dist(mid)))
+            .filter(|(_, dist)| *dist <= tol)
+            .min_by(|a, b| a.1.total_cmp(&b.1).then(a.0.0.cmp(&b.0.0)));
+        if let Some((h, _)) = best {
+            out.insert(ins.0, h);
+        }
+    }
+    out
+}
+
+/// Thickness in millimetres from parallel `A-WALL` face spacing beside a MEASURE centre line.
+/// Returns `None` when faces are missing or ambiguous so the caller can keep the layer nominal.
+pub(crate) fn thickness_from_faces_mm(d: &Drawing, space: &Space, measure: Handle, unit_mm: f64) -> Option<f64> {
+    if !(unit_mm.is_finite() && unit_mm > 0.0) {
+        return None;
+    }
+    let e = d.entity(measure)?;
+    let segs = segments_of(&e.kind);
+    let measure_seg = segs.into_iter().max_by(|a, b| a.len().total_cmp(&b.len()))?;
+    if measure_seg.len() < 1e-9 {
+        return None;
+    }
+    let (ms, me) = (measure_seg.start(), measure_seg.end());
+    let mdir = me - ms;
+    let mlen = mdir.len();
+    if mlen < 1e-9 {
+        return None;
+    }
+    let mu = mdir * (1.0 / mlen);
+    let mid = measure_seg.mid();
+    // Search band ≈ half a metre each side of the centre line.
+    let reach = 500.0 / unit_mm;
+    let mut offsets: Vec<f64> = Vec::new();
+    let Some(store) = d.space(space) else { return None };
+    for face in store.iter().filter(|e| d.is_visible(e) && on_layer(e, super::walls::WALL)) {
+        for seg in segments_of(&face.kind) {
+            if seg.len() < 1e-9 {
+                continue;
+            }
+            let (a, b) = (seg.start(), seg.end());
+            let dir = b - a;
+            let len = dir.len();
+            if len < 1e-9 {
+                continue;
+            }
+            let u = dir * (1.0 / len);
+            // Parallel (or anti-parallel) to the measure line.
+            if u.dot(mu).abs() < 0.98 {
+                continue;
+            }
+            let closest = measure_seg.closest(seg.mid());
+            if closest.dist(seg.mid()) > reach {
+                continue;
+            }
+            // Along-measure overlap: face midpoint projects onto the measure segment.
+            let t = (seg.mid() - ms).dot(mu);
+            if t < -1e-6 || t > mlen + 1e-6 {
+                continue;
+            }
+            let off = (seg.mid() - mid).x * (-mu.y) + (seg.mid() - mid).y * mu.x;
+            if off.is_finite() && off.abs() > 1e-9 {
+                offsets.push(off);
+            }
+        }
+    }
+    if offsets.len() < 2 {
+        return None;
+    }
+    let (mut pos, mut neg): (Vec<f64>, Vec<f64>) = offsets.into_iter().partition(|o| *o > 0.0);
+    if pos.is_empty() || neg.is_empty() {
+        return None;
+    }
+    pos.sort_by(|a, b| a.total_cmp(b));
+    neg.sort_by(|a, b| a.total_cmp(b));
+    let med = |v: &[f64]| v[v.len() / 2];
+    let thick_du = med(&pos) - med(&neg);
+    if !(thick_du.is_finite() && thick_du > 0.0) {
+        return None;
+    }
+    let mm = (thick_du * unit_mm * 10.0).round() / 10.0;
+    (75.0..=600.0).contains(&mm).then_some(mm)
+}
+
 // ---------------------------------------------------------------------------------------------
 // Output: labels, tables, saved results
 

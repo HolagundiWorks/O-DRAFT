@@ -449,14 +449,14 @@ fn rows_carry_what_o_coreop_needs_to_use_them_without_guessing() {
     let db = read(&path);
     let rows = |k: u64| -> Vec<Value> { db.iter().filter(|(id, _)| kind(**id) == k).map(|(_, (p, _))| p.clone()).collect() };
 
-    // Walls: the thickness the layer implies, flagged as nominal on the row for O-CoreOp.
+    // Walls: A-WALL faces give a measured thickness (scene uses wall.draw at 230 mm); no nominal note.
     for w in rows(3) {
         assert_eq!(w["thickness_mm"], json!(230.0), "{w}");
-        assert!(w["_note"].as_str().is_some_and(|n| n.contains("nominal")), "{w}");
+        assert!(w.get("_note").is_none(), "measured thickness needs no honesty note: {w}");
     }
     assert!(
-        r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|w| w.contains("nominal"))),
-        "the thickness is said to be nominal"
+        !r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|w| w.contains("nominal"))),
+        "faces were measured, so thickness is not called nominal: {r}"
     );
 
     // Rooms: level and both sides, rectangular.
@@ -468,10 +468,11 @@ fn rows_carry_what_o_coreop_needs_to_use_them_without_guessing() {
         "{room}"
     );
 
-    // Openings: both sit on the front wall (y = 0).
+    // Openings: MEASURE-DEDUCT matches the front wall (y = 0); no proximity honesty note.
     let front = format!("W{}", scene.wall_a.hex());
     for o in rows(4) {
         assert_eq!(o["wall_ref"], json!(front), "{o}");
+        assert!(o.get("_note").is_none(), "deduct match needs no proximity note: {o}");
     }
     assert!(!r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|w| w.contains("not on a measured wall"))));
 
@@ -483,6 +484,68 @@ fn rows_carry_what_o_coreop_needs_to_use_them_without_guessing() {
         db.iter().filter(|(id, _)| kind(**id) == 4).map(|(_, (p, _))| p.clone()).filter(|o| o.get("wall_ref").is_none()).collect();
     assert_eq!(stray.len(), 1, "{stray:?}");
     assert!(again["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|w| w.contains("1 opening(s) are not on a measured wall"))));
+    cleanup(&path);
+}
+
+#[test]
+fn brick_walls_without_a_wall_faces_keep_nominal_thickness_and_note() {
+    let mut s = session("mm");
+    s.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.15, "ceiling": 3.0, "lintel": 2.1, "slab": 150, "beam": 450}]}))
+        .unwrap();
+    s.execute("takeoff.start", &json!({})).unwrap();
+    layer(&mut s, "MEASURE-FULLBRICK");
+    s.execute("line", &json!({"points": [[0, 0], [5000, 0]]})).unwrap();
+    s.execute("takeoff.brick", &json!({"table": false})).unwrap();
+    let path = temp("nominal-only");
+    let r = record(&mut s, &path);
+    let db = read(&path);
+    let walls: Vec<_> = db.iter().filter(|(id, _)| kind(**id) == 3).map(|(_, (p, _))| p.clone()).collect();
+    assert_eq!(walls.len(), 1);
+    assert_eq!(walls[0]["thickness_mm"], json!(230.0));
+    assert!(walls[0]["_note"].as_str().is_some_and(|n| n.contains("nominal")), "{}", walls[0]);
+    assert!(r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("nominal"))), "{r}");
+    cleanup(&path);
+}
+
+#[test]
+fn a_second_drawing_on_the_same_project_and_floor_is_warned_at_record_time() {
+    let path = temp("overlap");
+    let context = json!({
+        "v": 1, "prepared_on": "2026-10-28", "company": { "name": "Studio One" },
+        "project": { "project": { "name": "Mehta residence" }, "client": { "name": "Mehta" },
+            "project_ref": { "v": 1, "company_uuid": "u-1", "project_id": 7 } }
+    });
+    let mut a = session("mm");
+    scene(&mut a);
+    a.execute("companyfile", &json!({ "context": context })).unwrap();
+    let first = record(&mut a, &path);
+    assert!(
+        !first["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("double-count"))),
+        "first drawing alone is not a double-count: {first}"
+    );
+
+    let mut b = session("mm");
+    scene(&mut b);
+    b.execute("companyfile", &json!({ "context": context })).unwrap();
+    let second = record(&mut b, &path);
+    assert!(
+        second["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| { w.as_str().is_some_and(|t| t.contains("double-count") && t.contains("Ground") && t.contains("same company-file project")) }),
+        "second drawing on the same project and floor must warn: {second}"
+    );
+
+    // Different floor: no overlap warning.
+    let mut c = session("mm");
+    scene(&mut c);
+    c.execute("companyfile", &json!({ "context": context })).unwrap();
+    let other_floor = c.execute("takeoff.record", &json!({"path": path.to_string_lossy(), "annotate": false, "level": "First"})).unwrap();
+    assert!(
+        !other_floor["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("double-count"))),
+        "a different stamped level is not an overlap: {other_floor}"
+    );
     cleanup(&path);
 }
 
@@ -544,13 +607,8 @@ fn multi_floor_drawing_warns_when_level_is_not_passed() {
         r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("2 floors") && t.contains("Pass `level`"))),
         "{r}"
     );
-    let explicit = s
-        .execute("takeoff.record", &json!({"path": path.to_string_lossy(), "annotate": false, "level": "First"}))
-        .unwrap();
-    assert!(
-        !explicit["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("Pass `level`"))),
-        "{explicit}"
-    );
+    let explicit = s.execute("takeoff.record", &json!({"path": path.to_string_lossy(), "annotate": false, "level": "First"})).unwrap();
+    assert!(!explicit["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("Pass `level`"))), "{explicit}");
     let db = read(&path);
     let walls: Vec<_> = db.iter().filter(|(id, _)| kind(**id) == 3).map(|(_, (p, _))| p.clone()).collect();
     assert!(!walls.is_empty());

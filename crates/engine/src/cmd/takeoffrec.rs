@@ -397,6 +397,86 @@ fn drawing_id_of(payload: &[u8]) -> Option<String> {
     v.get("source")?.get("drawing_id")?.as_str().map(str::to_string)
 }
 
+/// Company uuid + project id from `source.project_ref`, when both are present.
+fn project_key_of(source: &Value) -> Option<(String, i64)> {
+    let r = source.get("project_ref")?;
+    let company = r.get("company_uuid")?.as_str()?.to_string();
+    let id = r.get("project_id")?.as_i64().or_else(|| r.get("project_id")?.as_u64().and_then(|n| i64::try_from(n).ok()))?;
+    Some((company, id))
+}
+
+fn project_key(header: &Value) -> Option<(String, i64)> {
+    project_key_of(header.get("source")?)
+}
+
+/// Display name for another drawing in an overlap warning.
+fn other_drawing_label(header: &Value) -> String {
+    header
+        .get("source")
+        .and_then(|s| s.get("drawing").and_then(Value::as_str).filter(|n| !n.is_empty()).or_else(|| s.get("drawing_id").and_then(Value::as_str)))
+        .unwrap_or("another drawing")
+        .to_string()
+}
+
+/// Levels already recorded as measured rows in `slot` (walls, openings, columns, lintels, rooms, slabs).
+fn levels_in_slot(sink: &mut dyn Sink, slot: u32) -> Result<std::collections::BTreeSet<String>> {
+    let mut levels = std::collections::BTreeSet::new();
+    for id in sink.ids()? {
+        if slot_of(id) != slot || !OWN_KINDS.contains(&kind_of(id)) || kind_of(id) == KIND_HEADER || kind_of(id) == KIND_PDF {
+            continue;
+        }
+        let Some(p) = sink.payload(id)? else { continue };
+        let Ok(v) = serde_json::from_slice::<Value>(&p) else { continue };
+        if let Some(name) = v.get("level").and_then(Value::as_str).filter(|n| !n.is_empty()) {
+            levels.insert(name.to_string());
+        }
+    }
+    Ok(levels)
+}
+
+/// Warn when another complete take-off in this database already measures the same company-file project and floor.
+/// Mirrors O-CoreOp's import overlap warning (warn only; recording still completes).
+fn warn_record_overlap(sink: &mut dyn Sink, our_slot: u32, root: &Map<String, Value>, stamped_level: &str) -> Result<Vec<String>> {
+    let Some(ours) = root.get("source").and_then(project_key_of) else {
+        return Ok(Vec::new());
+    };
+    if stamped_level.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut warnings = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for id in sink.ids()? {
+        if kind_of(id) != KIND_HEADER || slot_of(id) == our_slot {
+            continue;
+        }
+        let Some(p) = sink.payload(id)? else { continue };
+        let Ok(header) = serde_json::from_slice::<Value>(&p) else { continue };
+        if header.get("format").and_then(Value::as_str) != Some(FORMAT) {
+            continue;
+        }
+        if header.get("state").and_then(Value::as_str) != Some("complete") {
+            continue;
+        }
+        let Some(theirs) = project_key(&header) else { continue };
+        if theirs != ours {
+            continue;
+        }
+        let other_slot = slot_of(id);
+        let levels = levels_in_slot(sink, other_slot)?;
+        if !levels.contains(stamped_level) {
+            continue;
+        }
+        let label = other_drawing_label(&header);
+        if seen.insert(format!("{label}|{stamped_level}")) {
+            warnings.push(format!(
+                "drawing `{label}` already has take-off on `{stamped_level}` for the same company-file project; \
+                 recording this drawing too may double-count that floor (O-CoreOp also warns at import)"
+            ));
+        }
+    }
+    Ok(warnings)
+}
+
 /// The slot this drawing records into: the slot kept in the drawing when it is still ours, else the first free one
 /// from `slot_for`, probing past a slot another drawing holds.
 fn find_slot(sink: &mut dyn Sink, drawing_id: &str, kept: Option<u32>) -> Result<u32> {
@@ -671,6 +751,9 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
         let built = build(&c, probe_slot)?;
         let out = write_slot(sink.as_mut(), &c, &built, Some(probe_slot), pdf_ref, file_path.is_some())?;
         project::set(s.doc_mut()?, SLOT_KEY, &json!({ "drawingId": c.drawing_id, "slot": out.slot }));
+
+        let stamped_level = c.items.iter().find_map(|i| i.row.get("level").and_then(Value::as_str)).unwrap_or("");
+        warnings.extend(warn_record_overlap(sink.as_mut(), out.slot, &c.root, stamped_level)?);
 
         let mut result = target;
         result["headerId"] = json!(header_id(out.slot));
