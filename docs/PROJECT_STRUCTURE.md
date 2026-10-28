@@ -9,7 +9,7 @@ files on `main` on 2026-10-19.
 | Path | Purpose |
 |---|---|
 | `Cargo.toml`, `Cargo.lock` | Workspace definition (members `crates/*`, `apps/*`, `xtask`), shared version, profiles. The lockfile is committed and `cargo build --locked` is used for packaging |
-| `crates/` | The 18 library crates |
+| `crates/` | The library crates (including `auditor`) |
 | `apps/` | `aad` (desktop app, shipped as `o-draft.exe`), `aad-cli` (command-line tool, MCP), `aad-web` (WASM build, compile-checked only), `aad-winui` (C# WinUI shell, `ODraft.WinUi.exe`; excluded from the Cargo workspace) |
 | `xtask/` | Repository tasks: `cargo xtask ci`, `layers`, `assets`, `wasm`, `parity`, `version`, `logo`, `stats`, `licenses`. `xtask/data/menu-catalog.txt` is the menu-name list used by `parity` |
 | `docs/` | Documentation (index in [README.md](../README.md)); maintenance rules in [documentation-policy.md](documentation-policy.md) |
@@ -42,7 +42,7 @@ Generated and ignored (see `.gitignore`): `target/` (Cargo build output), `dist/
 | `engine` | `src/lib.rs` (`Session`, including `param_cache`), `cmd/` (commands, one file per area plus subfolders `blocks/`, `layer/`, `layout/`, `props/`; includes `param.rs`), `snap.rs` and `snap/`, `select.rs`, `spatial.rs`, `finite.rs`, `guard.rs`, `flatten.rs`, `audit.rs`, `assoc.rs`; `tests/` (91 files, includes `param.rs`); `benches/` |
 | `ui-egui` | `src/` canvas, menus, command line, panels, dialogs, icons (drawn in code); `tests/` |
 | `aad-host` | C ABI, registry menu, command line, pointer input, and Win32 child window for the WinUI shell. `apps/aad-winui` is the C# project and is excluded from the Cargo workspace |
-| `mcp`, `agent`, `llm` | MCP server, allow-listed tool layer, model runtime facade |
+| `mcp`, `agent`, `auditor`, `llm` | MCP server, allow-listed tool layer, Auditor v0 detect-only checks, model runtime facade |
 | `office` | Loads the OSAS `office.dll` at run time (Windows) and reads the company file; the `companyfile` command uses it |
 | `aorms` | AORMS sign-in client and project calls (network; engine commands only — no shell connect UI) |
 | `vdb` (`aad-vdb`) | `.vdb` store on ShilpiDB: `file.rs` (embedded codec and `SpatialGrid`), `client.rs` (`VdbClient` for a running `shilpid`). A library, not a program; the engine commands `vdb.export`, `vdb.info` and `vdb.query` use it |

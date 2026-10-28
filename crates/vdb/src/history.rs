@@ -224,11 +224,7 @@ impl HistoryDb {
                     return Err(Error::msg(format!("{} is not a history database (format {:?})", path.display(), h.format)));
                 }
                 if h.drawing_id != drawing_id {
-                    return Err(Error::msg(format!(
-                        "{} belongs to another drawing (expected {drawing_id}, found {})",
-                        path.display(),
-                        h.drawing_id
-                    )));
+                    return Err(Error::msg(format!("{} belongs to another drawing (expected {drawing_id}, found {})", path.display(), h.drawing_id)));
                 }
                 if h.state != "complete" && h.state != "writing" {
                     return Err(Error::msg(format!("{} has an unknown header state", path.display())));
@@ -359,17 +355,8 @@ impl HistoryDb {
 
     /// Load a milestone's object and definition payloads.
     pub fn load_milestone(&self, id: u32) -> Result<MilestoneOut, Error> {
-        let summary = self
-            .header
-            .milestones
-            .iter()
-            .find(|m| m.id == id)
-            .cloned()
-            .ok_or_else(|| Error::msg(format!("milestone {id} not found")))?;
-        let hr = self
-            .records
-            .get(&record_id(KIND_MANIFEST, u64::from(id)))
-            .ok_or_else(|| Error::msg(format!("milestone {id}: missing manifest")))?;
+        let summary = self.header.milestones.iter().find(|m| m.id == id).cloned().ok_or_else(|| Error::msg(format!("milestone {id} not found")))?;
+        let hr = self.records.get(&record_id(KIND_MANIFEST, u64::from(id))).ok_or_else(|| Error::msg(format!("milestone {id}: missing manifest")))?;
         let man: Value = serde_json::from_slice(&hr.payload)?;
         let stores_json = man.get("stores").and_then(Value::as_array).ok_or_else(|| Error::msg("manifest stores missing"))?;
         if stores_json.len() > MAX_STORES {
@@ -418,12 +405,7 @@ impl HistoryDb {
         if name.is_empty() || name.len() > 200 {
             return Err(Error::msg("milestone name must be 1..200 characters"));
         }
-        let idx = self
-            .header
-            .milestones
-            .iter()
-            .position(|m| m.id == id)
-            .ok_or_else(|| Error::msg(format!("milestone {id} not found")))?;
+        let idx = self.header.milestones.iter().position(|m| m.id == id).ok_or_else(|| Error::msg(format!("milestone {id} not found")))?;
         if self.header.milestones[idx].kind == "revision" {
             return Err(Error::msg("issued revisions cannot be renamed; void them in the register instead"));
         }
@@ -700,19 +682,15 @@ mod tests {
     }
 
     fn bundle(target: &str, objects: Vec<RowIn>) -> StoreBundle {
-        let hash = format!("{:016x}", content_n(&objects.iter().fold(Vec::new(), |mut a, o| {
-            a.extend_from_slice(&o.payload);
-            a
-        })));
+        let hash = format!(
+            "{:016x}",
+            content_n(&objects.iter().fold(Vec::new(), |mut a, o| {
+                a.extend_from_slice(&o.payload);
+                a
+            }))
+        );
         StoreBundle {
-            meta: StoreMeta {
-                target: target.into(),
-                name: target.into(),
-                object_count: 0,
-                content_hash: hash,
-                member_chunks: 0,
-                definitions: 0,
-            },
+            meta: StoreMeta { target: target.into(), name: target.into(), object_count: 0, content_hash: hash, member_chunks: 0, definitions: 0 },
             objects,
             definitions: vec![row(br#"{"layer":"0"}"#, ZERO_BOX)],
         }

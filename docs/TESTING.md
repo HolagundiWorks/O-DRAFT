@@ -22,6 +22,7 @@ local run is a green CI run, apart from machine differences.
 | Unit | `src/**` (`#[cfg(test)]`) | One function or module: geometry, parsing, units, snapping, command validation | `cargo test -p <crate>` |
 | Crate integration | `crates/*/tests/` | A feature through its public API: commands, forms, sheets, xrefs, schedules, take-off | `cargo test -p <crate> --test <name>` |
 | Workflow | `apps/aad-cli/tests/` | Real files and real processes: project folders, floors, Xrefs, batch plot, DWG isolation | `cargo test -p aad-cli` |
+| Auditor v0 (detect-only) | `crates/auditor`, agent/MCP wrappers, `aad-cli auditor` | Drawing `audit`/`validate` with `fix: false`, command/menu parity, WinUI token scan; combined JSON report; no auto repair | `cargo test -p aad-auditor`; `cargo test -p aad-agent`; `cargo test -p aad-mcp`; `aad-cli auditor --sample --checks audit,validate` |
 | UI | `crates/ui-egui/tests/` | Dialogs, panels, widgets, docking, the click-driven drawing workflow and the menu walk through `egui_kittest` (see [UI_TESTING_STRATEGY.md](UI_TESTING_STRATEGY.md)) | `cargo test -p aad-ui-egui` |
 | Property-based | `crates/geom/tests/properties.rs`, `crates/engine/tests/properties.rs` | Invariants over generated inputs (below) | `PROPTEST_CASES=20000 cargo test -p aad-engine --test properties` |
 | Mutation (file readers) | `crates/io/tests/mutation_robustness.rs` | Corrupted copies of valid DXF files never panic, hang or break writing back | `AAD_MUTATION_ITERS=4000 cargo test -p aad-io --test mutation_robustness` |
@@ -132,6 +133,8 @@ treat them as unverified until the first run is green.
 
 - No coverage measurement yet, so "how much is tested" is judged by the layers above, not a number.
 - No automated visual comparison; screenshots were used by hand during development.
+  Auditor v0 documents the Windows `ui.screenshot` / MCP `screenshot` hook in its JSON report
+  but does not run screenshot golden CI on Linux.
 - UI tests are headless; GPU rendering is not under test.
 - The DWG worker has no memory cap.
 - Large-drawing stress (1M entities) is a benchmark (`AAD_BENCH_LARGE=1`, `aad-cli perf`), not

@@ -86,6 +86,11 @@ fn schemas_are_offered_in_function_calling_format_and_only_for_built_tools() {
             "pull_shilpidb",
             "flatten_drawing",
             "audit_drawing",
+            "validate_drawing",
+            "check_command_parity",
+            "check_command_menu_coverage",
+            "check_ui_tokens",
+            "auditor_report",
             "purge_unused",
             "recover_file",
             "set_drawing_units",
@@ -168,6 +173,40 @@ fn audit_reports_without_confirmation_and_repairs_only_after_it() {
     let fix = call("audit_drawing", json!({"fix": true}));
     assert!(matches!(a.propose(&mut s, &fix, false), Outcome::NeedsConfirmation { .. }));
     assert!(matches!(a.propose(&mut s, &fix, true), Outcome::Done { .. }));
+}
+
+#[test]
+fn validate_drawing_is_detect_only_unless_fix_is_confirmed() {
+    let mut s = Session::new();
+    let mut a = Agent::default();
+    a.begin_request();
+    match a.propose(&mut s, &call("validate_drawing", json!({})), false) {
+        Outcome::Done { result, .. } => {
+            assert_eq!(result["detectOnly"], true);
+            assert_ne!(result["fixed"], true);
+        }
+        o => panic!("{o:?}"),
+    }
+    let fix = call("validate_drawing", json!({"fix": true}));
+    assert!(matches!(a.propose(&mut s, &fix, false), Outcome::NeedsConfirmation { .. }));
+}
+
+#[test]
+fn auditor_report_detect_only_covers_drawing_checks() {
+    let mut s = Session::new();
+    let mut a = Agent::default();
+    a.begin_request();
+    match a.propose(&mut s, &call("auditor_report", json!({"checks": "audit,validate"})), false) {
+        Outcome::Done { result, .. } => {
+            assert_eq!(result["tool"], "auditor_report");
+            assert_eq!(result["detectOnly"], true);
+            assert_eq!(result["version"], "v0");
+            assert!(result["checks"]["audit_drawing"].is_object());
+            assert!(result["checks"]["validate_drawing"].is_object());
+            assert_eq!(result["screenshotCapture"]["availableInThisReport"], false);
+        }
+        o => panic!("{o:?}"),
+    }
 }
 
 #[test]

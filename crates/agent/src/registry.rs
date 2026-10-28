@@ -349,7 +349,7 @@ pub fn registry() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "audit_drawing",
-            description: "Check the open drawing for database errors. With fix=true, repair them (one undo step); without it, only report.",
+            description: "Check the open drawing for database errors. With fix=true, repair them (one undo step); without it, only report. Auditor v0 detect path uses fix=false.",
             schema: || {
                 json!({
                     "type": "object",
@@ -365,7 +365,89 @@ pub fn registry() -> Vec<ToolDef> {
                     "Audit the drawing (report only)".into()
                 }
             },
-            run: |s, a| exec(s, "audit", json!({ "fix": a.get("fix").and_then(Value::as_bool).unwrap_or(false) })),
+            run: |s, a| {
+                if a.get("fix") == Some(&Value::Bool(true)) { exec(s, "audit", json!({ "fix": true })) } else { aad_auditor::audit_drawing(s) }
+            },
+        },
+        ToolDef {
+            name: "validate_drawing",
+            description: "Validate the open drawing: audit plus entity-type counts. With fix=true, repair audit issues (one undo step); without it, detect-only (Auditor v0).",
+            schema: || {
+                json!({
+                    "type": "object",
+                    "properties": { "fix": { "type": "boolean", "description": "repair audit errors found (default false: report only)" } },
+                    "additionalProperties": false
+                })
+            },
+            risk: |a| if a.get("fix") == Some(&Value::Bool(true)) { Risk::Mutating } else { Risk::Read },
+            summary: |a| {
+                if a.get("fix") == Some(&Value::Bool(true)) {
+                    "Validate the drawing and repair the errors found".into()
+                } else {
+                    "Validate the drawing (report only)".into()
+                }
+            },
+            run: |s, a| {
+                if a.get("fix") == Some(&Value::Bool(true)) { exec(s, "validate", json!({ "fix": true })) } else { aad_auditor::validate_drawing(s) }
+            },
+        },
+        ToolDef {
+            name: "check_command_parity",
+            description: "Detect-only: compare the reference menu catalog to registered commands (same breadth metric as cargo xtask parity). Needs the O-Draft source tree (AAD_REPO_ROOT or cwd). Does not rewrite docs/parity-checklist.md.",
+            schema: empty_schema,
+            risk: |_| Risk::Read,
+            summary: |_| "Check command/menu parity (detect only)".into(),
+            run: |_s, _| {
+                let root = aad_auditor::repo_root_or_err()?;
+                aad_auditor::check_command_parity(&root)
+            },
+        },
+        ToolDef {
+            name: "check_command_menu_coverage",
+            description: "Detect-only: same as check_command_parity — report which reference menu items lack a matching registered command.",
+            schema: empty_schema,
+            risk: |_| Risk::Read,
+            summary: |_| "Check command/menu coverage (detect only)".into(),
+            run: |_s, _| {
+                let root = aad_auditor::repo_root_or_err()?;
+                aad_auditor::check_command_menu_coverage(&root)
+            },
+        },
+        ToolDef {
+            name: "check_ui_tokens",
+            description: "Detect-only: scan apps/aad-winui for window-template and hard-coded dimension problems (same rules as cargo xtask ui). Needs the O-Draft source tree.",
+            schema: empty_schema,
+            risk: |_| Risk::Read,
+            summary: |_| "Check WinUI design-system tokens (detect only)".into(),
+            run: |_s, _| {
+                let root = aad_auditor::repo_root_or_err()?;
+                aad_auditor::check_ui_tokens(&root)
+            },
+        },
+        ToolDef {
+            name: "auditor_report",
+            description: "Auditor v0: one JSON detect report (audit, validate, command/menu parity, UI tokens). Never repairs. Screenshot capture is documented in the report; use the live Windows control ui.screenshot / MCP screenshot separately.",
+            schema: || {
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "checks": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "description": "comma list: audit,validate,parity,ui (default all)"
+                        }
+                    },
+                    "additionalProperties": false
+                })
+            },
+            risk: |_| Risk::Read,
+            summary: |_| "Run Auditor v0 detect report".into(),
+            run: |s, a| {
+                let checks = aad_auditor::DetectChecks::parse(a.get("checks").and_then(Value::as_str).unwrap_or(""))?;
+                let root = if checks.parity || checks.ui_tokens { Some(aad_auditor::repo_root_or_err()?) } else { None };
+                let report = aad_auditor::run_detect(s, root.as_deref(), checks)?;
+                Ok(report.value)
+            },
         },
         ToolDef {
             name: "purge_unused",

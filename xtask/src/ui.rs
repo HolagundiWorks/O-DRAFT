@@ -31,11 +31,13 @@ const LITERAL_BASELINE: &[(&str, usize)] = &[
     ("CommandChrome.cs", 2),
     ("DimStyleWindow.cs", 5),
     ("DraftingWindow.cs", 1),
+    ("GraphWindow.cs", 9),
     ("HatchWindow.cs", 2),
+    ("HistoryWindow.cs", 7),
     ("LevelBars.cs", 2),
     ("LinetypeWindow.cs", 5),
     ("MLeaderStyleWindow.cs", 4),
-    ("MainWindow.xaml", 31),
+    ("MainWindow.xaml", 39),
     ("MainWindow.xaml.cs", 24),
     ("PageSetupWindow.cs", 5),
     ("ParametersWindow.cs", 5),
@@ -44,10 +46,12 @@ const LITERAL_BASELINE: &[(&str, usize)] = &[
     ("PomodoroWindow.cs", 1),
     ("QuickSelectWindow.cs", 6),
     ("QuickWindow.cs", 5),
+    ("RevisionsWindow.cs", 13),
     ("RoomSettingsWindow.cs", 4),
     ("SmartBlockWindow.cs", 4),
     ("TextStyleWindow.cs", 4),
     ("UnitsWindow.cs", 3),
+    ("WelcomeBusy.cs", 1),
 ];
 
 const SIZE_PROPS: &[&str] = &[

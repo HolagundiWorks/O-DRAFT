@@ -186,9 +186,9 @@ fn run_issue(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let by = str_param(p, "by").unwrap_or("").to_string();
     let checked = str_param(p, "checked").unwrap_or("").to_string();
-    let date = str_param(p, "date").map(str::to_string).unwrap_or_else(|| {
-        super::bridge::iso_time().map(|t| t.chars().take(10).collect()).unwrap_or_else(|| "1970-01-01".into())
-    });
+    let date = str_param(p, "date")
+        .map(str::to_string)
+        .unwrap_or_else(|| super::bridge::iso_time().map(|t| t.chars().take(10).collect()).unwrap_or_else(|| "1970-01-01".into()));
     if date.len() > 32 {
         return Err(bad("revision.issue", "date is too long"));
     }
@@ -379,12 +379,7 @@ fn run_table(s: &mut Session, p: &Value) -> Result<Value> {
     let at = point_param(p, "at");
     let layouts: Vec<String> = if all {
         let nameplates = [sheet::TITLE_PLATE_L, sheet::TITLE_PLATE_P, sheet::TITLE_PLATE];
-        s.doc()?
-            .layouts
-            .iter()
-            .filter(|l| !nameplates.iter().any(|n| l.name.eq_ignore_ascii_case(n)))
-            .map(|l| l.name.clone())
-            .collect()
+        s.doc()?.layouts.iter().filter(|l| !nameplates.iter().any(|n| l.name.eq_ignore_ascii_case(n))).map(|l| l.name.clone()).collect()
     } else if let Some(n) = str_param(p, "layout") {
         vec![n.to_string()]
     } else {
@@ -466,11 +461,7 @@ fn draw_table_on(s: &mut Session, layout: &str, at: Option<Vec2>, height_mm: f64
             for (ri, row) in std::iter::once(header.map(String::from)).chain(body.iter().cloned()).enumerate() {
                 let mut x = at.x;
                 for (cell, w) in row.iter().zip(&widths) {
-                    let text = if cell.chars().count() > 40 {
-                        format!("{}…", cell.chars().take(39).collect::<String>())
-                    } else {
-                        cell.clone()
-                    };
+                    let text = if cell.chars().count() > 40 { format!("{}…", cell.chars().take(39).collect::<String>()) } else { cell.clone() };
                     let kind = make_text(
                         s,
                         Vec2::new(x + th * 0.4, y - rh * 0.5),
@@ -527,7 +518,9 @@ fn run_clouds(s: &mut Session, p: &Value) -> Result<Value> {
         Some(v) => Some(v.as_u64().ok_or_else(|| bad("revision.clouds", "`to` must be a milestone id or \"now\""))? as u32),
     };
     let gap = f64_or(p, "gap", 0.0);
-    let gap = if gap.is_finite() && gap >= 0.0 { gap } else {
+    let gap = if gap.is_finite() && gap >= 0.0 {
+        gap
+    } else {
         return Err(bad("revision.clouds", "`gap` must be zero or positive"));
     };
     // Default gap: 5% of drawing extents diagonal, or 1000 drawing units.

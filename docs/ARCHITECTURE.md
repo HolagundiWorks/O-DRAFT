@@ -28,9 +28,10 @@ shape (layering, never-crash, everything-is-a-command, clean-room) are in [CLAUD
 | L5 | `host` | Windows shell host: a session, cached display list / GPU mesh (async zoom-band rebuild), pointer clicks, pan, wheel, snaps, grips, dynamic input, the registry menu, the command line, form descriptions, a revision-tagged properties/layers/blocks snapshot, the last command result, the assistant step machine (it may call `agent`; `agent` does not call `host`), a loopback JSON control channel (open/save replies deferred across `pump`), and the C ABI `apps/aad-winui` calls. The drawing is a Win32 child because wgpu 30 has no SwapChainPanel surface |
 | L5 | `mcp` | MCP server (JSON-RPC 2.0 over stdio) on a headless session or bridged to a running app |
 | L5 | `agent` | Tool layer for a local language model: registry, validation, confirmation, loop limits, audit log ([ai-agent.md](ai-agent.md)) |
+| L5 | `auditor` | Auditor v0 detect-only: drawing audit/validate wrappers, command/menu parity, WinUI token scan, combined JSON report ([ai-agent.md](ai-agent.md), [TESTING.md](TESTING.md)) |
 | app | `aad` | Desktop app. On Windows the default binary only launches `aad-winui` (no eframe). Optional `aad --features egui -- --egui` keeps the eframe window; macOS/Linux/BSD always link egui/eframe |
 | app | `aad-winui` | Unpackaged WinUI 3 shell over `aad-host`: registry menus, command line, dynamic input, grips, snaps, form dialogs, file pickers, plot preview (nameplate PDF), calculator, Pomodoro, panel pin and float, Project / Properties / Layer / Blocks side tabs, and resizable Classic/Pro panels around the child drawing window (`aorms.*` remains engine-only; no connect UI) |
-| app | `aad-cli` | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp` |
+| app | `aad-cli` | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp`, `auditor` |
 | app | `aad-web` | WASM build of the same UI (no DWG) |
 | tool | `xtask` | `ci` (fmt, clippy, tests, assets, layers, licences, ui, wasm), `layers`, `assets`, `licenses`, `ui`, `wasm`, `parity`, `stats`, `logo`, `corpus` |
 

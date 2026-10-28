@@ -35,7 +35,14 @@ Example client configuration (Claude Code / Claude Desktop):
 | `query_entities {type?, layer?, window?, crossing?, limit?, offset?}` | Filtered entities with handles and geometry. `window` `[[x0,y0],[x1,y1]]` finds objects whose geometry is inside it or crosses it (`crossing: false`: entirely inside). `count` is every match, `returned` the page (`offset`, `limit`, default 500). |
 | `render {width?, height?, fit?}` | A PNG image of the drawing. |
 | `new_drawing {metric?}`, `open {path}`, `save {path?}`, `cancel` | Files and Escape. `save` to a `.svg`, `.png` or `.pdf` path exports: the drawing keeps its name and unsaved changes. |
-| `screenshot`, `ui_inspect`, `ui_click {x, y}` | Only when connected to the app. |
+| `screenshot`, `ui_inspect`, `ui_click {x, y}` | Only when connected to the app. `screenshot` is the Auditor v0 capture hook on a live Windows shell. |
+| `audit_drawing` | Auditor v0 detect-only: engine `audit` with `fix: false` (never repairs). |
+| `validate_drawing` | Auditor v0 detect-only: engine `validate` with `fix: false`. |
+| `check_command_parity` | Auditor v0: menu catalog vs registered commands (needs O-Draft source tree / `AAD_REPO_ROOT`). |
+| `check_ui_tokens` | Auditor v0: WinUI token/template scan (same rules as `cargo xtask ui`; needs source tree). |
+| `auditor_report {checks?}` | Auditor v0: one JSON detect report. `checks` is a comma list `audit,validate,parity,ui` (default all). Screenshot capture is documented in the report only; use `screenshot` / `ui_inspect` when connected. |
+
+Headless CLI report (no MCP): `aad-cli auditor [--file FILE | --sample] [--checks LIST] [--out REPORT.json]`.
 
 Resources: `aad://drawing` (inspect JSON) and `aad://commands` (catalog).
 

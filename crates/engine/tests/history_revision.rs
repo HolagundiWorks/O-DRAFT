@@ -47,19 +47,21 @@ fn save_and_restore_round_trip_model() {
 
     let saved = s.execute("history.save", &json!({"name": "m1", "scope": "project"})).unwrap();
     let id = saved["id"].as_u64().unwrap();
-    assert!(path.with_extension("dxf.history.vdb").exists() || {
-        // sidecar is path + ".history.vdb"
-        let mut p = path.as_os_str().to_os_string();
-        p.push(".history.vdb");
-        PathBuf::from(p).exists()
-    });
+    assert!(
+        path.with_extension("dxf.history.vdb").exists() || {
+            // sidecar is path + ".history.vdb"
+            let mut p = path.as_os_str().to_os_string();
+            p.push(".history.vdb");
+            PathBuf::from(p).exists()
+        }
+    );
 
     let handles: Vec<_> = s.doc().unwrap().model.handles().iter().map(|h| json!(h.hex())).collect();
     s.execute("erase", &json!({"handles": handles})).unwrap();
     assert_eq!(s.doc().unwrap().model.len(), 0);
 
     let r = s.execute("history.restore", &json!({"id": id})).unwrap();
-    assert!(r["stores"].as_array().unwrap().len() >= 1);
+    assert!(!r["stores"].as_array().unwrap().is_empty());
     assert_eq!(s.doc().unwrap().model.len(), n0);
 
     // Undo restores the empty model.
@@ -154,6 +156,12 @@ fn revision_table_replaces_on_second_draw() {
     let d1 = s.execute("revision.table", &json!({"layout": "Layout1"})).unwrap();
     let n1 = d1["drawn"][0]["objects"].as_u64().unwrap();
     let count = |s: &Session| {
+        s.doc().unwrap().layouts.iter().find(|l| l.name == "Layout1").unwrap().entities.iter().filter(|e| e.common.layer == "A-ANNO-REVT").count()
+    };
+    assert_eq!(count(&s), n1 as usize);
+    s.execute("revision.table", &json!({"layout": "Layout1"})).unwrap();
+    assert_eq!(count(&s), n1 as usize, "second draw replaces the first table");
+    assert!(
         s.doc()
             .unwrap()
             .layouts
@@ -162,15 +170,8 @@ fn revision_table_replaces_on_second_draw() {
             .unwrap()
             .entities
             .iter()
-            .filter(|e| e.common.layer == "A-ANNO-REVT")
-            .count()
-    };
-    assert_eq!(count(&s), n1 as usize);
-    s.execute("revision.table", &json!({"layout": "Layout1"})).unwrap();
-    assert_eq!(count(&s), n1 as usize, "second draw replaces the first table");
-    assert!(s.doc().unwrap().layouts.iter().find(|l| l.name == "Layout1").unwrap().entities.iter().any(|e| {
-        e.common.layer == "A-ANNO-REVT" && matches!(e.kind, EntityKind::Text(_))
-    }));
+            .any(|e| { e.common.layer == "A-ANNO-REVT" && matches!(e.kind, EntityKind::Text(_)) })
+    );
 }
 
 #[test]
@@ -235,10 +236,10 @@ fn revision_clouds_propose_and_accept() {
     let id = s.execute("history.save", &json!({"name": "c0", "scope": "project"})).unwrap()["id"].as_u64().unwrap();
     s.execute("line", &json!({"points": [[100.0, 100.0], [110.0, 100.0]]})).unwrap();
     let prop = s.execute("revision.clouds", &json!({"from": id, "gap": 50.0})).unwrap();
-    assert!(prop["proposals"].as_array().unwrap().len() >= 1, "{prop}");
+    assert!(!prop["proposals"].as_array().unwrap().is_empty(), "{prop}");
     let before = s.doc().unwrap().model.len();
     let placed = s.execute("revision.clouds", &json!({"from": id, "gap": 50.0, "accept": true})).unwrap();
-    assert!(placed["placed"].as_array().unwrap().len() >= 1);
+    assert!(!placed["placed"].as_array().unwrap().is_empty());
     assert!(s.doc().unwrap().model.len() > before);
 }
 

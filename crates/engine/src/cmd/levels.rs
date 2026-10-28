@@ -366,12 +366,9 @@ fn copyto_targets(s: &Session, p: &Value) -> Result<Vec<LevelId>> {
     } else if let Some(v) = p.get("level") {
         // One target (form / shortcut menu) or a comma-separated name list.
         match v {
-            Value::String(text) if text.contains(',') => text
-                .split(',')
-                .map(str::trim)
-                .filter(|n| !n.is_empty())
-                .map(|n| Value::String(n.to_string()))
-                .collect(),
+            Value::String(text) if text.contains(',') => {
+                text.split(',').map(str::trim).filter(|n| !n.is_empty()).map(|n| Value::String(n.to_string())).collect()
+            }
             other => vec![other.clone()],
         }
     } else {

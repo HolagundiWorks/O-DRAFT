@@ -10,5 +10,6 @@ workspace = true
 
 [dependencies]
 aad-engine = { workspace = true }
+aad-auditor = { workspace = true }
 aad-llm = { workspace = true }
 serde_json = { workspace = true }

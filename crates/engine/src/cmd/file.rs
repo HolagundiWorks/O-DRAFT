@@ -240,6 +240,15 @@ fn run_closeall(s: &mut Session, _p: &Value) -> Result<Value> {
 
 pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<usize> {
     let hooks = io().ok_or_else(|| bad("save", "file formats are not available in this build"))?;
+    // Stamp history.drawingId before writing a drawing file so the bytes include it. Otherwise the
+    // post-save auto snapshot would add the id after commit_save and leave the drawing dirty (#327 /
+    // history restore points must not undo "saved" for the user).
+    #[cfg(not(target_arch = "wasm32"))]
+    if is_drawing_file(path)
+        && let Err(e) = super::history::ensure_drawing_id(s)
+    {
+        s.echo(format!("Drawing history id not prepared: {e}"));
+    }
     let bytes = (hooks.write)(&super::xref::without_overlays(s.doc()?), path).map_err(|e| bad("save", e))?;
     let n = commit_save(s, path, &bytes, store)?;
     #[cfg(not(target_arch = "wasm32"))]
@@ -249,6 +258,10 @@ pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<usize> {
             s.echo(format!("Drawing revision not recorded: {e}"));
         }
         super::history::auto_snapshot_after_save(s, path);
+        // Auto-snapshot / prune must never leave a successful drawing save looking unsaved.
+        if let Ok(st) = s.state_mut() {
+            st.saved = st.doc.clone();
+        }
     }
     Ok(n)
 }

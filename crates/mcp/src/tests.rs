@@ -139,3 +139,24 @@ fn list_commands_filter_matches_names_not_docs() {
     let r = tool(&mut s, "list_commands", json!({"filter": "pl"}));
     assert!(r.as_array().unwrap().iter().any(|c| c["id"] == "pline"), "aliases and ids match");
 }
+
+#[test]
+fn auditor_v0_detect_tools_are_listed_and_run_without_repair() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    let tools = call(&mut s, 1, "tools/list", json!({}));
+    let names: Vec<&str> = tools["result"]["tools"].as_array().unwrap().iter().filter_map(|t| t["name"].as_str()).collect();
+    for n in ["audit_drawing", "validate_drawing", "check_command_parity", "check_ui_tokens", "auditor_report"] {
+        assert!(names.contains(&n), "missing {n} in {names:?}");
+    }
+    let a = tool(&mut s, "audit_drawing", json!({}));
+    assert_eq!(a["detectOnly"], true);
+    assert_ne!(a["fixed"], true);
+    let v = tool(&mut s, "validate_drawing", json!({}));
+    assert_eq!(v["detectOnly"], true);
+    assert_eq!(v["ok"], true);
+    let report = tool(&mut s, "auditor_report", json!({"checks": "audit,validate"}));
+    assert_eq!(report["tool"], "auditor_report");
+    assert_eq!(report["detectOnly"], true);
+    assert_eq!(report["ok"], true);
+    assert!(report["checks"]["audit_drawing"].is_object());
+}

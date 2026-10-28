@@ -239,9 +239,7 @@ fn send_to_level_shifts_by_origin_match_defaulting_to_site() {
     s.execute("site.origin", &json!({ "point": [0.0, 0.0] })).unwrap();
     let h = s.doc().unwrap().model.iter().next().unwrap().handle.hex();
     // Line sits at y=100; pick origin (0,100) → site (0,0) so it lands on Ground's base.
-    let r = s
-        .execute("level.moveto", &json!({ "level": "First", "handles": [h], "from": [0.0, 100.0] }))
-        .unwrap();
+    let r = s.execute("level.moveto", &json!({ "level": "First", "handles": [h], "from": [0.0, 100.0] })).unwrap();
     assert_eq!(r["moved"], 1);
     assert_eq!(r["shifted"], json!([0.0, -100.0]));
     let d = s.doc().unwrap();
@@ -252,12 +250,7 @@ fn send_to_level_shifts_by_origin_match_defaulting_to_site() {
     s.execute("level.activate", &json!({ "level": "Ground" })).unwrap();
     line(&mut s, 50.0);
     let h2 = s.doc().unwrap().model.iter().next().unwrap().handle.hex();
-    let r = s
-        .execute(
-            "level.copyto",
-            &json!({ "level": "First", "handles": [h2], "from": [0.0, 50.0], "to": [10.0, 20.0] }),
-        )
-        .unwrap();
+    let r = s.execute("level.copyto", &json!({ "level": "First", "handles": [h2], "from": [0.0, 50.0], "to": [10.0, 20.0] })).unwrap();
     assert_eq!(r["copied"], 1);
     assert_eq!(r["shifted"], json!([10.0, -30.0]));
     assert_eq!(xs(&s, "Ground"), 1, "source stays");

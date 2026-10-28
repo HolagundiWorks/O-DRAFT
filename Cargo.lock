@@ -27,6 +27,7 @@ dependencies = [
 name = "aad-agent"
 version = "0.6.0"
 dependencies = [
+ "aad-auditor",
  "aad-engine",
  "aad-llm",
  "serde_json",
@@ -43,10 +44,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "aad-auditor"
+version = "0.6.0"
+dependencies = [
+ "aad-engine",
+ "serde_json",
+]
+
+[[package]]
 name = "aad-cli"
 version = "0.6.0"
 dependencies = [
  "aad-agent",
+ "aad-auditor",
  "aad-dwg",
  "aad-engine",
  "aad-fonts",
@@ -182,6 +192,7 @@ dependencies = [
 name = "aad-mcp"
 version = "0.6.0"
 dependencies = [
+ "aad-auditor",
  "aad-engine",
  "aad-render",
  "log",

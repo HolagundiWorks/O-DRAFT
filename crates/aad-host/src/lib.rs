@@ -2559,20 +2559,22 @@ mod tests {
             h.pointer(Pointer { x: 12.0, y: 12.0, action: POINTER_RIGHT, wheel: 0.0, mods: 0 }).unwrap();
             serde_json::from_str(&h.take_popup()).unwrap()
         };
-        let entry = |m: &serde_json::Value| -> Option<serde_json::Value> {
-            m["groups"].as_array().unwrap().iter().flat_map(|g| g.as_array().unwrap().iter()).find(|i| i["label"] == "Move to Level").cloned()
+        // Nested under "Send to Level" → "Move to Level" (copy is a sibling).
+        let move_entry = |m: &serde_json::Value| -> Option<serde_json::Value> {
+            let send = m["groups"].as_array()?.iter().flat_map(|g| g.as_array().into_iter().flatten()).find(|i| i["label"] == "Send to Level")?;
+            send["items"].as_array()?.iter().find(|i| i["label"] == "Move to Level").cloned()
         };
         host.session.set_selection(vec![handle]);
-        assert!(entry(&menu(&mut host)).is_none(), "a drawing with one level has nowhere to move to");
+        assert!(move_entry(&menu(&mut host)).is_none(), "a drawing with one level has nowhere to move to");
         host.execute("level.new", &json!({ "name": "First", "first": "Ground" })).unwrap();
         host.execute("level.new", &json!({ "name": "Second" })).unwrap();
         host.session.set_selection(vec![handle]);
-        let m = entry(&menu(&mut host)).expect("two other levels");
+        let m = move_entry(&menu(&mut host)).expect("two other levels");
         let labels: Vec<&str> = m["items"].as_array().unwrap().iter().map(|i| i["label"].as_str().unwrap()).collect();
         assert_eq!(labels, ["First", "Second"], "every level but the active one, in tab order");
         assert!(m["items"].as_array().unwrap().iter().all(|i| i["run"] == "levelmove"));
         host.session.set_selection(Vec::new());
-        assert!(entry(&menu(&mut host)).is_none(), "nothing selected, nothing to move");
+        assert!(move_entry(&menu(&mut host)).is_none(), "nothing selected, nothing to move");
         // Choosing an entry is `level.moveto` with that id: the line leaves Ground for First.
         host.session.set_selection(vec![handle]);
         let id: u64 = m["items"][0]["id"].as_str().unwrap().parse().unwrap();
@@ -2586,7 +2588,7 @@ mod tests {
         host.execute("text", &json!({ "at": [1.0, 1.0], "text": "x", "height": 1.0 })).unwrap();
         let note = host.session.doc().unwrap().model.iter().next().unwrap().handle;
         host.session.set_selection(vec![note]);
-        assert!(entry(&menu(&mut host)).is_none());
+        assert!(move_entry(&menu(&mut host)).is_none());
     }
 
     #[test]

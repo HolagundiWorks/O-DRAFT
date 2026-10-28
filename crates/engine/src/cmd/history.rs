@@ -37,7 +37,9 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("history.save", "Save Milestone", run_save)
             .menu(&["File", "History", "Save Milestone…"])
             .alias(&["hmile", "savemilestone"])
-            .params("{name, scope?: current|level|sheet|project|object, level?, sheetSet?, kind?: milestone|auto|revision, author?} → {id, path, stores}")
+            .params(
+                "{name, scope?: current|level|sheet|project|object, level?, sheetSet?, kind?: milestone|auto|revision, author?} → {id, path, stores}",
+            )
             .noundo(),
         CommandSpec::new("history.list", "History", run_list)
             .menu(&["File", "History", "List…"])
@@ -47,8 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("history.restore", "Restore Milestone", run_restore)
             .menu(&["File", "History", "Restore…"])
             .alias(&["hrestore"])
-            .params("{id, scope?: subset of milestone, mode?: replace|copy, definitions?: keep|snapshot, layouts?: bool} → {id, stores, warnings}")
-            ,
+            .params("{id, scope?: subset of milestone, mode?: replace|copy, definitions?: keep|snapshot, layouts?: bool} → {id, stores, warnings}"),
         CommandSpec::new("history.rename", "Name Version", run_rename)
             .menu(&["File", "History", "Name This Version…"])
             .alias(&["hrename"])
@@ -83,10 +84,15 @@ pub fn specs() -> Vec<CommandSpec> {
 pub fn preview_entities(state: &HistoryPreviewState) -> HistoryGhostEntities {
     HistoryGhostEntities {
         added: state.added.clone(),
-        removed: state.removed.iter().cloned().map(|mut e| {
-            e.common.linetype = "DASHED".into();
-            e
-        }).collect(),
+        removed: state
+            .removed
+            .iter()
+            .cloned()
+            .map(|mut e| {
+                e.common.linetype = "DASHED".into();
+                e
+            })
+            .collect(),
         changed: state.changed.clone(),
     }
 }
@@ -111,7 +117,9 @@ fn drawing_id(d: &Drawing) -> Option<String> {
     project::get(d, HIST_KEY).get("drawingId").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string)
 }
 
-fn ensure_drawing_id(s: &mut Session) -> Result<String> {
+/// Ensure project data carries a stable history `drawingId`. Used before a drawing-file save so the
+/// written DXF/DWG includes the id and the post-save auto snapshot does not dirty a just-saved drawing.
+pub(crate) fn ensure_drawing_id(s: &mut Session) -> Result<String> {
     if let Some(id) = drawing_id(s.doc()?) {
         return Ok(id);
     }
@@ -305,13 +313,10 @@ fn store_entities<'a>(d: &'a Drawing, r: &StoreRef) -> Result<&'a EntityStore> {
 
 fn store_name(d: &Drawing, r: &StoreRef) -> String {
     match *r {
-        StoreRef::Level(id) => d.level(id).map(|l| l.name.clone()).unwrap_or_else(|| {
-            if id.0 == 0 && d.levels.is_empty() {
-                "Model".into()
-            } else {
-                format!("Level {}", id.0)
-            }
-        }),
+        StoreRef::Level(id) => d
+            .level(id)
+            .map(|l| l.name.clone())
+            .unwrap_or_else(|| if id.0 == 0 && d.levels.is_empty() { "Model".into() } else { format!("Level {}", id.0) }),
         StoreRef::Sheet(set, level) => {
             let sn = d.sheet_set(set).map(|s| s.name.as_str()).unwrap_or("?");
             let ln = d.level(level).map(|l| l.name.as_str()).unwrap_or("?");
@@ -328,11 +333,7 @@ fn entity_row(d: &Drawing, e: &Entity) -> Result<RowIn> {
         return Err(bad("history.save", format!("object {} is too large to store", e.handle.hex())));
     }
     let b = entity_bounds(d, e, 0);
-    let bbox = if b.is_empty() {
-        [0.0, 0.0, 0.0, 0.0]
-    } else {
-        [b.min.x, b.min.y, b.max.x, b.max.y]
-    };
+    let bbox = if b.is_empty() { [0.0, 0.0, 0.0, 0.0] } else { [b.min.x, b.min.y, b.max.x, b.max.y] };
     if !bbox.iter().all(|v| v.is_finite()) {
         return Err(bad("history.save", format!("object {} has a non-finite box", e.handle.hex())));
     }
@@ -984,11 +985,7 @@ fn entity_bounds_from_entity(e: &Entity) -> [f64; 4] {
     // Approximate without full block expansion (preview/compare only).
     let blank = Drawing::new_metric();
     let b = entity_bounds(&blank, e, 0);
-    if b.is_empty() {
-        [0.0, 0.0, 0.0, 0.0]
-    } else {
-        [b.min.x, b.min.y, b.max.x, b.max.y]
-    }
+    if b.is_empty() { [0.0, 0.0, 0.0, 0.0] } else { [b.min.x, b.min.y, b.max.x, b.max.y] }
 }
 
 fn rows_from_store_out(store: &StoreOut) -> Result<BTreeMap<Handle, ObjRow>> {
@@ -1206,10 +1203,7 @@ fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn run_mirror(_s: &mut Session, _p: &Value) -> Result<Value> {
-    Err(bad(
-        "history.mirror",
-        "office shared history is not available yet; history stays in the local <drawing>.history.vdb sidecar",
-    ))
+    Err(bad("history.mirror", "office shared history is not available yet; history stays in the local <drawing>.history.vdb sidecar"))
 }
 
 /// Diff boxes for revision cloud clustering (`revision.clouds`).
@@ -1222,8 +1216,7 @@ pub(crate) fn compare_boxes(s: &mut Session, from: u32, to: Option<u32>, scope_p
                 if let Some(b) = item.get("bbox").and_then(Value::as_array)
                     && b.len() == 4
                 {
-                    let nums: Option<[f64; 4]> =
-                        (|| Some([b[0].as_f64()?, b[1].as_f64()?, b[2].as_f64()?, b[3].as_f64()?]))();
+                    let nums: Option<[f64; 4]> = (|| Some([b[0].as_f64()?, b[1].as_f64()?, b[2].as_f64()?, b[3].as_f64()?]))();
                     if let Some(bb) = nums.filter(|n| n.iter().all(|v| v.is_finite())) {
                         boxes.push(bb);
                     }

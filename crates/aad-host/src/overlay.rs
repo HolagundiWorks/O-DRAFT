@@ -169,11 +169,9 @@ pub fn mesh(
                 view_height: view.height,
                 ..Default::default()
             };
-            for (ents, color) in [
-                (hist.added.as_slice(), HISTORY_ADDED),
-                (hist.removed.as_slice(), HISTORY_REMOVED),
-                (hist.changed.as_slice(), HISTORY_CHANGED),
-            ] {
+            for (ents, color) in
+                [(hist.added.as_slice(), HISTORY_ADDED), (hist.removed.as_slice(), HISTORY_REMOVED), (hist.changed.as_slice(), HISTORY_CHANGED)]
+            {
                 if ents.is_empty() {
                     continue;
                 }
