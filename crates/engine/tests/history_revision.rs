@@ -61,7 +61,7 @@ fn save_and_restore_round_trip_model() {
     assert_eq!(s.doc().unwrap().model.len(), 0);
 
     let r = s.execute("history.restore", &json!({"id": id})).unwrap();
-    assert!(r["stores"].as_array().unwrap().len() >= 1);
+    assert!(!r["stores"].as_array().unwrap().is_empty());
     assert_eq!(s.doc().unwrap().model.len(), n0);
 
     // Undo restores the empty model.
@@ -236,10 +236,10 @@ fn revision_clouds_propose_and_accept() {
     let id = s.execute("history.save", &json!({"name": "c0", "scope": "project"})).unwrap()["id"].as_u64().unwrap();
     s.execute("line", &json!({"points": [[100.0, 100.0], [110.0, 100.0]]})).unwrap();
     let prop = s.execute("revision.clouds", &json!({"from": id, "gap": 50.0})).unwrap();
-    assert!(prop["proposals"].as_array().unwrap().len() >= 1, "{prop}");
+    assert!(!prop["proposals"].as_array().unwrap().is_empty(), "{prop}");
     let before = s.doc().unwrap().model.len();
     let placed = s.execute("revision.clouds", &json!({"from": id, "gap": 50.0, "accept": true})).unwrap();
-    assert!(placed["placed"].as_array().unwrap().len() >= 1);
+    assert!(!placed["placed"].as_array().unwrap().is_empty());
     assert!(s.doc().unwrap().model.len() > before);
 }
 
