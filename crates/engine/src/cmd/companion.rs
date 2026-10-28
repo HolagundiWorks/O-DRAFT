@@ -15,6 +15,7 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+#[cfg(windows)]
 use std::time::Duration;
 
 use aad_doc::{DimKind, Dimension, EditTarget, EntityKind, HAlign, VAlign};
@@ -24,12 +25,14 @@ use serde_json::{Value, json};
 use super::draw::make_text;
 use super::hcw::{add_on, ensure_layer};
 use super::helpers::{arc, circle, line, v3};
+#[cfg(windows)]
 use super::project;
 use super::*;
 use crate::{Result, Session};
 
 const DEFAULT_PIPE: &str = "ODraft.Dynamo";
 const MAX_PIPE_NAME: usize = 64;
+#[cfg(windows)]
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_COMMIT_ITEMS: usize = 20_000;
 const MAX_LEVEL_NAME: usize = 64;
@@ -44,6 +47,7 @@ pub struct CompanionState {
     pub preview: Option<Value>,
     slot: Arc<Mutex<Option<Value>>>,
     stop: Arc<AtomicBool>,
+    #[cfg_attr(not(windows), allow(dead_code))]
     next_id: Arc<AtomicU64>,
 }
 
@@ -115,7 +119,7 @@ fn run_connect(s: &mut Session, p: &Value) -> Result<Value> {
     #[cfg(not(windows))]
     {
         let _ = (s, pipe);
-        return Err(bad("companion.connect", "the companion pipe is only available on Windows"));
+        Err(bad("companion.connect", "the companion pipe is only available on Windows"))
     }
     #[cfg(windows)]
     {
@@ -174,7 +178,7 @@ fn run_evaluate(s: &mut Session, p: &Value) -> Result<Value> {
     #[cfg(not(windows))]
     {
         let _ = (s, p);
-        return Err(bad("companion.evaluate", "the companion pipe is only available on Windows"));
+        Err(bad("companion.evaluate", "the companion pipe is only available on Windows"))
     }
     #[cfg(windows)]
     {
@@ -199,7 +203,7 @@ fn run_subscribe(s: &mut Session, _p: &Value) -> Result<Value> {
     #[cfg(not(windows))]
     {
         let _ = s;
-        return Err(bad("companion.subscribe", "the companion pipe is only available on Windows"));
+        Err(bad("companion.subscribe", "the companion pipe is only available on Windows"))
     }
     #[cfg(windows)]
     {
@@ -789,10 +793,12 @@ fn ensure_named_level(s: &mut Session, name: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn ensure_connected(s: &Session) -> Result<()> {
     if s.companion.connected { Ok(()) } else { Err(bad("companion", "not connected; run companion.connect first")) }
 }
 
+#[cfg(windows)]
 fn next_id(c: &CompanionState) -> u64 {
     c.next_id.fetch_add(1, Ordering::Relaxed)
 }
@@ -802,6 +808,7 @@ fn stop_subscriber(c: &mut CompanionState) {
     c.subscribed = false;
 }
 
+#[cfg(windows)]
 fn levels_payload(s: &Session) -> Result<Value> {
     let d = s.doc()?;
     let active = project::active_floor(d).map(|(_, n)| n);
@@ -825,6 +832,7 @@ fn levels_payload(s: &Session) -> Result<Value> {
     Ok(Value::Array(out))
 }
 
+#[cfg(windows)]
 fn project_payload(s: &Session) -> Result<Value> {
     let d = s.doc()?;
     let details = project::get(d, "details");

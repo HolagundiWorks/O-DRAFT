@@ -4701,7 +4701,11 @@ public sealed partial class MainWindow : Window
             }
             if (shown == 0)
             {
-                ProjectPanel.Children.Add(FieldLabel("No company details in this drawing yet. The Project Wizard can read them from the company file."));
+                ProjectPanel.Children.Add(FieldLabel("No company details in this drawing yet. Open from Studio (or use Read company file in the Project Wizard) to load them."));
+            }
+            else
+            {
+                ProjectPanel.Children.Add(FieldLabel("Company identity is owned by Studio and is refresh-only here. Change it in Studio, then refresh from the company file in the Project Wizard."));
             }
             ProjectPanel.Children.Add(Heading("Structure"));
             Row("Default slab thickness (mm)", slab);

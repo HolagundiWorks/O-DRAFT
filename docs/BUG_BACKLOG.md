@@ -27,9 +27,10 @@ significant lag or important functionality unreliable; P3 minor; P4 optimisation
   the parent. Both applications turn it on at start-up. The dependency stays unmodified.
 - **Evidence:** before: `cargo run` of a throw-away binary on the fixture printed the backtrace
   above and exited 0xc0000409. After: `apps/aad-cli/tests/dwg_isolation.rs` (4 tests) and
-  `crates/dwg` unit tests (5) pass; `aad-cli info <fixture>` exits 1 with
-  *DWG: the reader stopped on this file*; 400 corrupted DWG files were read through the worker
-  (96 read, 304 refused, 0 crashes of the test process).
+  `crates/dwg` unit tests (5) pass; 400 corrupted DWG files were read through the worker
+  (96 read, 304 refused, 0 crashes of the test process). With `acadrust` 0.6.8 the historical
+  alloc-bomb fixture opens as an empty drawing (exit 0) instead of aborting; isolation tests now
+  assert *no abort* (success or ordinary error), not a specific failure message.
 - **Regression tests:** `dwg_isolation.rs::the_file_that_aborted_the_reader_is_now_an_error_and_the_process_lives`,
   `::the_command_line_tool_reports_the_bad_file_and_exits_normally`, fixture
   `apps/aad-cli/tests/fixtures/dwg/alloc-bomb-ac18-section-size.dwg`.
@@ -37,8 +38,8 @@ significant lag or important functionality unreliable; P3 minor; P4 optimisation
   process memory cap (`crates/dwg/src/job_win.rs`, `WORKER_MEMORY_CAP`). That stops alloc bombs from
   taking the host down; it does not speed parse. Library users that do not call
   `isolated::enable()` still read DWG in-process and are exposed. Non-Windows builds still rely on
-  the timeout and soft byte caps only. Upstream `acadrust` AC18 unchecked allocs are not reported
-  yet. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+  the timeout and soft byte caps only. Upstream `acadrust` may still have unchecked AC18 allocs on
+  other shapes; the Job Object remains the safety net. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ### BUG-002 (P2, fixed): panning or zooming inside an MSPACE viewport left it stale
 

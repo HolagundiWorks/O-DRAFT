@@ -75,14 +75,53 @@ internal static class ProjectWizardWindow
         var architect = Density.DialogField("", "Architect");
         var engineer = Density.DialogField("", "Engineer");
         var company = Density.Secondary("No company details read yet.", TextWrapping.Wrap);
+        var suiteHint = Density.Secondary(
+            "Company identity (name, address, contacts, registration, architect) is owned by Studio. When this drawing is linked, those fields are refresh-only — change them in Studio, then Read company file.",
+            TextWrapping.Wrap);
         var readCompany = Density.DialogAction("Read company file");
         var page2 = new StackPanel { Spacing = Density.SpaceSm };
         page2.Children.Add(DialogLayout.Heading("Team and company"));
         page2.Children.Add(DialogLayout.Labeled("Architect", architect));
         page2.Children.Add(DialogLayout.Labeled("Engineer", engineer));
-        page2.Children.Add(Density.Secondary("The company's own details (name, address, contacts, registration) come from the OSAS company file and are read only.", TextWrapping.Wrap));
+        page2.Children.Add(suiteHint);
         page2.Children.Add(readCompany);
         page2.Children.Add(company);
+
+        var lockedDetails = new HashSet<string>(StringComparer.Ordinal);
+        void ApplySuiteLocks(JsonElement root)
+        {
+            lockedDetails.Clear();
+            if (root.TryGetProperty("suite", out var suite) && suite.ValueKind == JsonValueKind.Object
+                && suite.TryGetProperty("locked_details", out var locked) && locked.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in locked.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String)
+                    {
+                        var name = item.GetString();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            lockedDetails.Add(name);
+                        }
+                    }
+                }
+            }
+            foreach (var (key, box) in projectBoxes)
+            {
+                box.IsReadOnly = lockedDetails.Contains(key);
+            }
+            architect.IsReadOnly = lockedDetails.Contains("architect");
+            var refreshOnly = root.TryGetProperty("suite", out var suite2)
+                && suite2.ValueKind == JsonValueKind.Object
+                && suite2.TryGetProperty("refresh_only", out var ro)
+                && ro.ValueKind == JsonValueKind.True;
+            suiteHint.Text = refreshOnly
+                ? "This drawing holds company details from Studio. Locked fields above are refresh-only — edit them in Studio, then Read company file. Engineer and other local fields stay editable."
+                : "Company identity (name, address, contacts, registration, architect) is owned by Studio. When this drawing is linked, those fields are refresh-only — change them in Studio, then Read company file.";
+            ToolTipService.SetToolTip(readCompany, refreshOnly
+                ? "Refresh company and linked project details from Studio (company file)"
+                : "Read company details from the Studio company file (needs OSAS_COMPANY and a ticket)");
+        }
 
         // ---- page 3: the building
         var units = new ComboBox { MinHeight = Density.ControlHeight };
@@ -277,6 +316,7 @@ internal static class ProjectWizardWindow
                         company.Text = joined;
                     }
                 }
+                ApplySuiteLocks(doc.RootElement);
             }
             catch (JsonException)
             {
@@ -462,6 +502,7 @@ internal static class ProjectWizardWindow
                     }
                 }
                 company.Text = lines.Count == 0 ? "The company file gave no company details." : string.Join("\n", lines);
+                ApplySuiteLocks(doc.RootElement);
             }
             catch (JsonException)
             {

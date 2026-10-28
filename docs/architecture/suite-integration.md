@@ -15,8 +15,8 @@ missing and what the first milestone needs.
 | Data | System of record | O-Draft's part |
 |---|---|---|
 | Drawing geometry, layers, blocks, layouts, undo, DXF/DWG | O-Draft (`aad-doc`, `aad-engine`) | Owns it. Other applications read it through commands, never through the document model |
-| Company details (name, address, registrations) | OSAS company file | Reads them (`companyfile`), prints them in the title block; never writes |
-| Project name, site, client | O-Studio, in the company file | Reads them (`companyfile`); never writes |
+| Company details (name, address, registrations) | Studio (OSAS company file) | Reads them (`companyfile`), prints them in the title block; never writes; when linked, refuses free typing of firm identity via `project` / wizard |
+| Project name, site, client | Studio / O-Studio, in the company file | Reads them (`companyfile`); when `project_ref` is set, those detail keys are refresh-only in Draft |
 | Quantities and costs | O-CoreOp | Produces measured quantities (`takeoff.*`) and a hand-off file (`bridge.export`); does not price |
 | Reusable details and spatial records | ShilpiDB | Exports a drawing's entities to `.vdb`, queries it, imports it, and can push to or pull from a running `shilpid` (`vdb.*`); `takeoff.record` writes take-off rows |
 | AI conversation, tool permissions, audit | Shared AI runtime (not built) | O-Draft has its own tool registry and audit log (`aad-agent`) for its own tools |
@@ -34,7 +34,7 @@ OSS suite apps do **not** ship an AORMS / portal connector. Company file is SoR.
 | Control channel (loopback JSON lines) | `aad-host`, [control-protocol.md](../control-protocol.md) | Implemented: `engine.execute`, `cmdline.*`, `drawing.inspect`, `app.open`, `app.save` |
 | MCP server over the same commands | `crates/mcp`, [mcp.md](../mcp.md) | Implemented |
 | Typed agent tools with schema validation, risk classes, confirmation and an audit log | `crates/agent` | Implemented for O-Draft's own tools. Quantity take-off tools are reserved but not registered (`agent::PLANNED`) |
-| Company / project details from the OSAS company file | `crates/office`, `companyfile` | Implemented (read-only; needs `OSAS_COMPANY` / `OSAS_TICKET` or a direct `context`). Interactive project-picker UI still open |
+| Company / project details from the Studio company file | `crates/office`, `companyfile`, `project` suite lock | Implemented (read-only + refresh-only lock on linked detail keys; ticket / `context` only, no admin password UI; local `CompanyProfile` write gated when `OSAS_COMPANY` is set). Interactive project-picker UI still open |
 | Quantity take-off from drawn geometry, rates, bill, opening schedule | `takeoff.*`, `schedule`, `openings.*` ([hcw-kit-port.md](../hcw-kit-port.md)) | Implemented; reads `MEASURE-*` layers |
 | Parametric wall graph → measured facts | `aad-param`, `param.*` ([parametric.md](../parametric.md)) | Implemented (Rust evaluate/commit/undo; no node editor UI). Committed walls feed `bridge.export` / `takeoff.record` |
 | Hand-off to and from O-CoreOp | `bridge.export`, `bridge.import`; file `hcw-aqc-bridge` version 1, millimetres, beside the drawing as `name.aqc.json` | Implemented. Import previews first and never changes geometry. Wall rows may come from brick take-off and/or parametric commit. CoreOp parses `source.project_ref` when present |
