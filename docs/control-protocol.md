@@ -4,6 +4,16 @@ On Windows the default `aad` binary starts the WinUI shell (no eframe). Pass `--
 (or set `AAD_CONTROL_PORT`) so WinUI listens on `127.0.0.1:PORT` for JSON lines: one request
 per line, one reply per line. The port is shown in the status bar.
 
+## Trust boundary
+
+The listener is **loopback only** (`127.0.0.1`). There is no TLS, token, or per-user AuthZ on this
+socket. Any local process that can connect to the port can run `engine.execute`, drive the command
+line, and open or save files. That is the intended single-user desktop model; it is not remote
+enterprise automation. Full threat model and must-not rules: [threat-model.md](threat-model.md).
+
+Each request line is capped at **1 048 576 bytes**. Longer lines get
+`{"ok": false, "error": "request is too long"}` and are not dispatched.
+
 That listener answers `engine.execute`, `engine.commands`, `cmdline.input`, `cmdline.script`,
 `cmdline.key`, `cmdline.state`, `drawing.inspect`, `ui.menu.list`, `ui.menu.invoke`,
 `ui.inspect`, `ui.pointer`, `ui.render`, `ui.screenshot` (drawing PNG, not window chrome), and

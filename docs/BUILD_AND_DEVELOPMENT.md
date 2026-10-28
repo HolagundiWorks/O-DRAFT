@@ -72,6 +72,7 @@ The control channel is described in [control-protocol.md](control-protocol.md).
 
 ```text
 cargo xtask ci                                           # fmt, clippy -D warnings (with aad/egui), tests, assets, layers, licences, ui, wasm
+cargo xtask sbom                                         # CycloneDX SBOM to dist/release/o-draft-<version>.cdx.json (no secrets)
 cargo fmt --all -- --check                               # verified
 cargo clippy --workspace --all-targets --features aad/egui -- -D warnings
 cargo test --workspace --features aad/egui               # keeps the optional egui shell in the graph

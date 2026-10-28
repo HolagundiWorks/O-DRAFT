@@ -134,6 +134,7 @@ An offline assistant can call a fixed set of validated tools (summary, flatten, 
 | [docs/HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md](docs/HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md) | Hand-off to O-CoreOp: parametric wall take-off rows |
 | [docs/projects.md](docs/projects.md), [docs/sheets.md](docs/sheets.md), [docs/widgets.md](docs/widgets.md), [docs/input-forms.md](docs/input-forms.md) | Floor projects and Xrefs, layouts and plotting, calculator and Pomodoro, input forms |
 | [docs/control-protocol.md](docs/control-protocol.md) | JSON control channel |
+| [docs/threat-model.md](docs/threat-model.md) | Loopback trust boundary, signing secrets, supply-chain must-nots |
 | [docs/mcp.md](docs/mcp.md) | MCP server |
 | [docs/plot-styles.md](docs/plot-styles.md) | Plot styles and plotting |
 | [docs/releasing.md](docs/releasing.md) | Versioning, release workflow, signing |

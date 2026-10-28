@@ -9,6 +9,7 @@ mod layers;
 mod licenses;
 mod logo;
 mod parity;
+mod sbom;
 mod stats;
 mod ui;
 mod version;
@@ -24,6 +25,8 @@ commands:
   layers          enforce the crate dependency layering (docs/ARCHITECTURE.md)
   licenses [--check]
                   list every dependency licence in THIRD_PARTY_LICENSES.md; fails on a licence not on the allow list (--check: also fails when the file is out of date)
+  sbom [--out PATH]
+                  write a CycloneDX 1.5 JSON SBOM from cargo metadata (default dist/release/o-draft-<version>.cdx.json)
   ui [--counts]   WinUI shell design-system rules: window templates, no new hard-coded dimensions
                   (--counts: print each file's hard-coded dimension count, to lower the ratchet)
   wasm            cargo check --target wasm32-unknown-unknown for the wasm-safe crates
@@ -44,6 +47,7 @@ fn main() -> ExitCode {
         Some("assets") => assets::run(&root()),
         Some("layers") => cmd_layers(),
         Some("licenses") => licenses::run(&root(), rest.contains(&"--check")),
+        Some("sbom") => sbom::run(&root(), &rest),
         Some("ui") => ui::run(&root(), rest.contains(&"--counts")),
         Some("wasm") => cmd_wasm(),
         Some("ci") => cmd_ci(),

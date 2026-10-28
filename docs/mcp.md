@@ -17,6 +17,9 @@ aad-cli mcp --connect 127.0.0.1:7979
 exits with an error instead of falling back to a headless session, so a client meant for the app
 never edits a separate drawing by mistake. If the app can't be reached, startup fails too.
 
+The app's control port is loopback-only and unauthenticated; bridging MCP to it trusts every local
+process that can open that port. Prefer stdio MCP when possible. See [threat-model.md](threat-model.md).
+
 Example client configuration (Claude Code / Claude Desktop):
 
 ```json

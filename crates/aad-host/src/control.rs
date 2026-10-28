@@ -4,7 +4,7 @@
 //! accepts connections and queues one request per line. Engine methods run there. Methods that
 //! drive the egui window are refused.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -16,7 +16,9 @@ use serde_json::{Value, json};
 const QUEUED: u8 = 0;
 const STARTED: u8 = 1;
 const CANCELLED: u8 = 2;
-const LINE_CAP: usize = 1_048_576;
+
+/// Maximum JSON-line request size in bytes (including the trailing newline).
+pub const LINE_CAP: usize = 1_048_576;
 
 pub struct Job {
     pub method: String,
@@ -68,18 +70,15 @@ fn serve(stream: std::net::TcpStream, tx: Sender<Job>) {
     let Ok(read) = stream.try_clone() else { return };
     let mut out = stream;
     let mut lines = BufReader::new(read);
-    let mut line = String::new();
     loop {
-        line.clear();
-        match lines.read_line(&mut line) {
-            Ok(0) => break,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {}
-            Err(_) => break,
-            Ok(_) if line.len() > LINE_CAP => {
+        match read_capped_line(&mut lines) {
+            LineRead::Eof => break,
+            LineRead::IoErr => break,
+            LineRead::TooLong => {
                 let _ = writeln!(out, "{}", json!({"ok": false, "error": "request is too long"}));
             }
-            Ok(_) if line.trim().is_empty() => {}
-            Ok(_) => {
+            LineRead::Ok(line) if line.trim().is_empty() => {}
+            LineRead::Ok(line) => {
                 let reply = match serde_json::from_str::<Value>(line.trim()) {
                     Ok(msg) => dispatch(&tx, msg),
                     Err(e) => json!({"ok": false, "error": format!("bad JSON: {e}")}),
@@ -89,6 +88,43 @@ fn serve(stream: std::net::TcpStream, tx: Sender<Job>) {
                 }
             }
         }
+    }
+}
+
+enum LineRead {
+    Ok(String),
+    TooLong,
+    Eof,
+    IoErr,
+}
+
+/// Read one line without allocating more than [`LINE_CAP`] + 1 bytes for the line buffer.
+fn read_capped_line(reader: &mut impl BufRead) -> LineRead {
+    let mut buf = Vec::new();
+    let limit = (LINE_CAP as u64).saturating_add(1);
+    let n = {
+        let mut limited = reader.take(limit);
+        match limited.read_until(b'\n', &mut buf) {
+            Ok(n) => n,
+            Err(_) => return LineRead::IoErr,
+        }
+    };
+    if n == 0 {
+        return LineRead::Eof;
+    }
+    if buf.len() > LINE_CAP {
+        if buf.last() != Some(&b'\n') {
+            let mut discard = Vec::new();
+            let _ = reader.read_until(b'\n', &mut discard);
+        }
+        return LineRead::TooLong;
+    }
+    while matches!(buf.last(), Some(b'\n' | b'\r')) {
+        buf.pop();
+    }
+    match String::from_utf8(buf) {
+        Ok(s) => LineRead::Ok(s),
+        Err(_) => LineRead::IoErr,
     }
 }
 
@@ -116,5 +152,50 @@ fn dispatch(tx: &Sender<Job>, msg: Value) -> Value {
                 reply_rx.try_recv().unwrap_or_else(|_| json!({"id": id, "ok": false, "error": "timeout", "state": "may-have-run"}))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LINE_CAP, LineRead, read_capped_line, start};
+    use std::io::{BufReader, Cursor, Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    #[test]
+    fn read_capped_line_accepts_short_lines() {
+        let mut r = BufReader::new(Cursor::new(b"{\"id\":1}\n"));
+        match read_capped_line(&mut r) {
+            LineRead::Ok(s) => assert_eq!(s, "{\"id\":1}"),
+            LineRead::TooLong | LineRead::Eof | LineRead::IoErr => panic!("expected Ok"),
+        }
+        assert!(matches!(read_capped_line(&mut r), LineRead::Eof));
+    }
+
+    #[test]
+    fn read_capped_line_rejects_oversize_without_unbounded_alloc() {
+        let mut huge = vec![b'A'; LINE_CAP + 32];
+        huge.push(b'\n');
+        let mut r = BufReader::new(Cursor::new(huge));
+        assert!(matches!(read_capped_line(&mut r), LineRead::TooLong));
+        // After a too-long line the reader is resynchronised on the next newline.
+        assert!(matches!(read_capped_line(&mut r), LineRead::Eof));
+    }
+
+    #[test]
+    fn loopback_control_rejects_oversized_request_line() {
+        let (port, _rx, stop) = start(0).expect("bind control");
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        stream.set_read_timeout(Some(Duration::from_secs(5))).expect("timeout");
+        stream.set_write_timeout(Some(Duration::from_secs(5))).expect("timeout");
+        let mut payload = vec![b'x'; LINE_CAP + 8];
+        payload.push(b'\n');
+        stream.write_all(&payload).expect("write");
+        let mut buf = Vec::new();
+        let mut limited = stream.take(4096);
+        let _ = limited.read_to_end(&mut buf);
+        let text = String::from_utf8_lossy(&buf);
+        assert!(text.contains("request is too long"), "reply was: {text}");
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
