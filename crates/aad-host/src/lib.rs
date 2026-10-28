@@ -23,15 +23,20 @@ mod surface;
 #[cfg(windows)]
 mod window;
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use std::sync::Arc;
+#[cfg(windows)]
+use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+#[cfg(windows)]
+use std::sync::atomic::Ordering;
 
 use aad_color::Rgb;
 use aad_engine::Session;
 use aad_engine::doc::{Drawing, Space};
 use aad_geom::Vec2;
 use aad_render::DisplayList;
-use aad_render::mesh::{self, MeshData};
+use aad_render::mesh::{self, MeshData, TileId};
 use serde_json::Value;
 
 /// uid, revision, tessellation band, lwdisplay, space, packed LOD bits, packed model pan cell.
@@ -86,14 +91,32 @@ fn ease_out_cubic(t: f64) -> f64 {
     1.0 - u * u * u
 }
 
+/// One retained mesh tile (Phase B): remeshed only when its content fingerprint changes.
+struct TileMesh {
+    /// `tile_content_fingerprint` xor'd with the mesh basis (origin / tint / band / lw).
+    key: u64,
+    mesh: MeshData,
+}
+
 /// Cached display list / GPU mesh so pans and small edits do not rebuild everything every frame.
 struct FrameCache {
     list_key: ListKey,
     list: Option<DisplayList>,
     list_doc: Option<std::sync::Arc<Drawing>>,
     mesh_key: Option<u64>,
+    /// Composed mesh (monolithic or merged tiles) for inspect / present fallback.
     mesh: Option<MeshData>,
     mesh_origin: Vec2,
+    /// Per-tile meshes when tiling is active; empty on the monolithic path.
+    tiles: HashMap<TileId, TileMesh>,
+    /// Mesh basis last used for tile vertices (origin + tint + band + true-scale). Cleared tiles when this changes.
+    mesh_basis: Option<u64>,
+    /// Tiles remeshed on the last mesh rebuild (0 on fine pan; tests assert dirty edits).
+    tiles_remeshed: usize,
+    /// Non-empty tiles retained after the last tiled rebuild (0 when monolithic).
+    tiles_total: usize,
+    /// True when the last mesh rebuild used the spatial tile path.
+    mesh_tiled: bool,
     pending: Option<PendingList>,
     /// Last synchronous display-list build time (ms). Worker rebuilds do not update this.
     list_build_ms: f64,
@@ -120,10 +143,34 @@ impl Default for FrameCache {
             mesh_key: None,
             mesh: None,
             mesh_origin: Vec2::ZERO,
+            tiles: HashMap::new(),
+            mesh_basis: None,
+            tiles_remeshed: 0,
+            tiles_total: 0,
+            mesh_tiled: false,
             pending: None,
             list_build_ms: 0.0,
             mesh_ms: 0.0,
         }
+    }
+}
+
+impl FrameCache {
+    /// Drop the composed mesh so the next [`Host::mesh`] rebuilds it. Retains per-tile meshes so
+    /// an edit can remesh only dirty tiles (Phase B).
+    fn invalidate_composed_mesh(&mut self) {
+        self.mesh_key = None;
+        self.mesh = None;
+    }
+
+    /// Drop composed and tiled meshes (origin / LOD basis change, or tiling abandoned).
+    fn clear_mesh(&mut self) {
+        self.invalidate_composed_mesh();
+        self.tiles.clear();
+        self.mesh_basis = None;
+        self.tiles_remeshed = 0;
+        self.tiles_total = 0;
+        self.mesh_tiled = false;
     }
 }
 
@@ -1459,6 +1506,7 @@ impl Host {
     }
 
     /// Advance an in-flight wheel zoom; keep presenting while it runs.
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn tick_zoom(&mut self) -> Result<bool, String> {
         if self.zoom_anim.is_none() {
             return Ok(false);
@@ -1987,8 +2035,8 @@ impl Host {
                         self.frame.list = Some(list);
                         self.frame.list_key = p.key;
                         self.frame.list_doc = Some(state.doc.clone());
-                        self.frame.mesh_key = None;
-                        self.frame.mesh = None;
+                        // Band rebuild changes tessellation: drop tiles so the next mesh is fresh.
+                        self.frame.clear_mesh();
                     }
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
@@ -2035,8 +2083,8 @@ impl Host {
                 self.frame.list_build_ms = t0.elapsed().as_secs_f64() * 1000.0;
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
-                self.frame.mesh_key = None;
-                self.frame.mesh = None;
+                // Keep tile meshes: dirty tiles remesh via content fingerprint on the next pack.
+                self.frame.invalidate_composed_mesh();
             }
             // same_drawing with pending still building: keep showing the previous list.
             if self.frame.list.is_none() {
@@ -2046,8 +2094,7 @@ impl Host {
                 self.frame.list_build_ms = t0.elapsed().as_secs_f64() * 1000.0;
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
-                self.frame.mesh_key = None;
-                self.frame.mesh = None;
+                self.frame.invalidate_composed_mesh();
             }
         }
         let list = self.frame.list.as_ref().ok_or_else(|| "display list missing".to_string())?;
@@ -2058,22 +2105,62 @@ impl Host {
         let true_scale = matches!(lw_mode, Some(mesh::LineweightMode::TrueScale));
         // Origin is snapped to a coarse grid while panning, so the mesh key stays stable across
         // fine pans and the GPU keeps the last upload (uniform carries the view offset).
-        let mesh_key = state.revision
-            ^ origin.x.to_bits()
+        let mesh_basis = origin.x.to_bits()
             ^ origin.y.to_bits().rotate_left(1)
             ^ tint.rotate_left(21)
             ^ (band as u64).rotate_left(40)
             ^ u64::from(true_scale).rotate_left(48);
+        let mesh_key = state.revision ^ mesh_basis;
         if self.frame.mesh_key != Some(mesh_key) || self.frame.mesh.is_none() {
             let t0 = std::time::Instant::now();
-            let mut built = mesh::build_mesh_mode(list, origin, paper, lw_mode);
             let world_width = view.height * f64::from(self.width.max(1)) / f64::from(self.height.max(1));
-            mesh::append_infinite(&mut built, list, origin, view.center, world_width, view.height, paper);
-            if true_scale {
-                mesh::expand_hairlines_true_scale(&mut built);
+            let edge = mesh::mesh_tile_edge(view.height);
+            let tiled = mesh::mesh_tiling_viable(list, edge);
+            let (built, remeshed, tiles_total, mesh_tiled) = if tiled {
+                if self.frame.mesh_basis != Some(mesh_basis) {
+                    self.frame.tiles.clear();
+                }
+                let parts = mesh::partition_prims(list, edge);
+                let keep: std::collections::HashSet<TileId> = parts.iter().map(|(id, _)| *id).collect();
+                self.frame.tiles.retain(|id, _| keep.contains(id));
+                let mut remeshed = 0usize;
+                for (id, indices) in &parts {
+                    let content = mesh::tile_content_fingerprint(list, indices);
+                    let tile_key = content ^ mesh_basis;
+                    let needs = self.frame.tiles.get(id).is_none_or(|t| t.key != tile_key);
+                    if needs {
+                        let mesh = mesh::build_mesh_prims(list, indices, origin, paper, lw_mode);
+                        self.frame.tiles.insert(*id, TileMesh { key: tile_key, mesh });
+                        remeshed = remeshed.saturating_add(1);
+                    }
+                }
+                let tiles_total = parts.len();
+                let mut merged = {
+                    let refs: Vec<&MeshData> = parts.iter().filter_map(|(id, _)| self.frame.tiles.get(id).map(|t| &t.mesh)).collect();
+                    mesh::merge_meshes(&refs)
+                };
+                mesh::append_infinite(&mut merged, list, origin, view.center, world_width, view.height, paper);
+                if true_scale {
+                    mesh::expand_hairlines_true_scale(&mut merged);
+                } else {
+                    mesh::expand_hairlines(&mut merged);
+                }
+                (merged, remeshed, tiles_total, true)
             } else {
-                mesh::expand_hairlines(&mut built);
-            }
+                self.frame.tiles.clear();
+                let mut mono = mesh::build_mesh_mode(list, origin, paper, lw_mode);
+                mesh::append_infinite(&mut mono, list, origin, view.center, world_width, view.height, paper);
+                if true_scale {
+                    mesh::expand_hairlines_true_scale(&mut mono);
+                } else {
+                    mesh::expand_hairlines(&mut mono);
+                }
+                (mono, 1usize, 0usize, false)
+            };
+            self.frame.tiles_remeshed = remeshed;
+            self.frame.tiles_total = tiles_total;
+            self.frame.mesh_tiled = mesh_tiled;
+            self.frame.mesh_basis = Some(mesh_basis);
             self.frame.mesh_ms = t0.elapsed().as_secs_f64() * 1000.0;
             self.frame.mesh = Some(built);
             self.frame.mesh_key = Some(mesh_key);
@@ -2103,6 +2190,28 @@ impl Host {
         let _ = self.mesh()?;
         let built = self.frame.mesh.as_ref().ok_or_else(|| "mesh missing".to_string())?;
         Ok(built.line_vertices() + built.tri_vertices() + built.quad_instances() + built.ring_instances())
+    }
+
+    /// Zoom to the extents and remember the view that gave, so a later change of the drawing area
+    /// (the window settling, a panel resized) refits it while nobody has navigated.
+    fn fit_view(&mut self) {
+        let _ = self.session.zoom_extents();
+        self.fitted = self.session.state().ok().map(|s| {
+            let v = s.view();
+            (v.center.x, v.center.y, v.height)
+        });
+    }
+
+    fn apply_size(&mut self, width: u32, height: u32) {
+        let before = (self.width, self.height);
+        self.width = width.clamp(1, 8192);
+        self.height = height.clamp(1, 8192);
+        self.session.viewport_px = (f64::from(self.width), f64::from(self.height));
+        // Nobody has navigated since the drawing was fitted: fit it to the new drawing area.
+        let untouched = self.session.state().ok().map(|s| s.view()).zip(self.fitted).is_some_and(|(v, f)| (v.center.x, v.center.y, v.height) == f);
+        if untouched && (self.width, self.height) != before {
+            self.fit_view();
+        }
     }
 }
 
@@ -2230,35 +2339,46 @@ impl Host {
         if self.paint.as_ref() == Some(&stamp) {
             return Ok(());
         }
-        let built = self.frame.mesh.as_ref().ok_or("mesh missing")?;
+        let tiled = self.frame.mesh_tiled && !self.frame.tiles.is_empty();
         let gpu = self.gpu.as_mut().ok_or("no drawing surface")?;
         gpu.set_clear(paper);
         gpu.set_overlay(&overlay);
-        gpu.present(key, built, &uniform)?;
+        if tiled {
+            let mut items: Vec<(u64, u64, &MeshData)> = self.frame.tiles.iter().map(|(id, t)| (id.to_bits(), t.key, &t.mesh)).collect();
+            items.sort_by_key(|(id, _, _)| *id);
+            // Infinite lines are view-clipped and not stored in tiles; rebuild that small mesh each present.
+            let mut extra = MeshData::default();
+            if let (Some(list), Ok(state)) = (self.frame.list.as_ref(), self.session.state()) {
+                let view = state.view();
+                let world_width = view.height * f64::from(self.width.max(1)) / f64::from(self.height.max(1));
+                let lw = self.session.settings.lwdisplay;
+                let on_paper = matches!(state.space, Space::Paper(_));
+                let true_scale = lw && on_paper;
+                mesh::append_infinite(&mut extra, list, origin, view.center, world_width, view.height, paper);
+                if true_scale {
+                    mesh::expand_hairlines_true_scale(&mut extra);
+                } else {
+                    mesh::expand_hairlines(&mut extra);
+                }
+            }
+            let has_extra = extra.line_vertices() + extra.tri_vertices() + extra.quad_instances() + extra.ring_instances() > 0;
+            gpu.present_tiles(key, &items, has_extra.then_some(&extra), &uniform)?;
+        } else {
+            let built = self.frame.mesh.as_ref().ok_or("mesh missing")?;
+            gpu.present(key, built, &uniform)?;
+        }
         self.paint = Some(stamp);
         Ok(())
     }
+}
 
-    /// Zoom to the extents and remember the view that gave, so a later change of the drawing area
-    /// (the window settling, a panel resized) refits it while nobody has navigated.
-    fn fit_view(&mut self) {
-        let _ = self.session.zoom_extents();
-        self.fitted = self.session.state().ok().map(|s| {
-            let v = s.view();
-            (v.center.x, v.center.y, v.height)
-        });
-    }
-
-    fn apply_size(&mut self, width: u32, height: u32) {
-        let before = (self.width, self.height);
-        self.width = width.clamp(1, 8192);
-        self.height = height.clamp(1, 8192);
-        self.session.viewport_px = (f64::from(self.width), f64::from(self.height));
-        // Nobody has navigated since the drawing was fitted: fit it to the new drawing area.
-        let untouched = self.session.state().ok().map(|s| s.view()).zip(self.fitted).is_some_and(|(v, f)| (v.center.x, v.center.y, v.height) == f);
-        if untouched && (self.width, self.height) != before {
-            self.fit_view();
-        }
+/// Headless pump: drain the control channel without a WinUI surface (Linux / CI).
+#[cfg(not(windows))]
+impl Host {
+    pub fn pump(&mut self) -> Result<(), String> {
+        self.drain_control();
+        self.assistant.poll(&mut self.session);
+        Ok(())
     }
 }
 
@@ -2657,6 +2777,44 @@ mod tests {
         assert_eq!(host.frame.list_key, list_key, "pan must not rebuild the display list");
         assert_eq!(key_b, key_a, "fine pan must keep the mesh upload key");
         assert_ne!(uniform_a[0], uniform_b[0], "the view offset uniform must change");
+    }
+
+    #[test]
+    fn edit_only_remeshes_dirty_tiles() {
+        let mut host = Host::create(false);
+        // Fixed anchors keep list bounds (and mesh origin) stable when the middle cluster moves.
+        // view_height 100 → tile edge 400; all geometry stays inside the model cull window.
+        host.execute("line", &json!({ "points": [[-100.0, 0.0], [-90.0, 0.0]] })).unwrap();
+        host.execute("line", &json!({ "points": [[0.0, 0.0], [10.0, 0.0]] })).unwrap();
+        let mid = host.execute("line", &json!({ "points": [[800.0, 0.0], [810.0, 0.0]] })).unwrap();
+        host.execute("line", &json!({ "points": [[900.0, 0.0], [910.0, 0.0]] })).unwrap();
+        let mid_handles = mid.get("handles").cloned().unwrap_or(Value::Null);
+        host.execute("zoom", &json!({ "mode": "center", "center": [5.0, 0.0], "height": 100.0 })).unwrap();
+        let (key_a, _, _) = host.mesh().unwrap();
+        assert!(host.frame.mesh_tiled, "separated clusters must use the tiled mesh path");
+        assert!(host.frame.tiles_total >= 2, "expected ≥2 tiles, got {}", host.frame.tiles_total);
+        let total = host.frame.tiles_total;
+        assert_eq!(host.frame.tiles_remeshed, total, "cold build remeshes every tile");
+        let mesh_bytes_a = host.frame.mesh.as_ref().map(|m| m.lines.len() + m.tris.len() + m.quads.len() + m.rings.len()).unwrap_or(0);
+
+        host.execute("move", &json!({ "handles": mid_handles, "delta": [20.0, 0.0] })).unwrap();
+        let (key_b, _, _) = host.mesh().unwrap();
+        assert_ne!(key_b, key_a, "an edit changes the mesh scene key");
+        assert!(host.frame.mesh_tiled);
+        assert_eq!(host.frame.tiles_total, total, "tile count stays stable for an in-tile edit");
+        assert_eq!(host.frame.tiles_remeshed, 1, "only the dirty tile remeshes, got {}", host.frame.tiles_remeshed);
+        let mesh_bytes_b = host.frame.mesh.as_ref().map(|m| m.lines.len() + m.tris.len() + m.quads.len() + m.rings.len()).unwrap_or(0);
+        assert_eq!(mesh_bytes_a, mesh_bytes_b, "byte size stays stable when moving a stroke within a tile");
+
+        // Fine pan after a tiled edit still keeps the composed upload key.
+        let list_key = host.frame.list_key;
+        host.pointer(Pointer { x: 200.0, y: 200.0, action: POINTER_MIDDLE_DOWN, wheel: 0.0, mods: 0 }).unwrap();
+        host.pointer(Pointer { x: 208.0, y: 200.0, action: POINTER_MOVE, wheel: 0.0, mods: 0 }).unwrap();
+        host.pointer(Pointer { x: 208.0, y: 200.0, action: POINTER_MIDDLE_UP, wheel: 0.0, mods: 0 }).unwrap();
+        let (key_c, _, _) = host.mesh().unwrap();
+        assert_eq!(host.frame.list_key, list_key);
+        assert_eq!(key_c, key_b);
+        assert_eq!(host.frame.tiles_remeshed, 1, "fine pan must not remesh tiles again");
     }
 
     #[test]

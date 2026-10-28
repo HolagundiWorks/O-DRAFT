@@ -5,6 +5,7 @@
 //! with the lowest compositor latency; overlay uploads are skipped when the mesh fingerprint is
 //! unchanged.
 
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use aad_render::mesh::{CANVAS_SHADER, INSTANCE_SIZE, MeshData, RING_INSTANCE_SIZE, VERTEX_SIZE};
@@ -20,6 +21,16 @@ const SAMPLE_COUNT: u32 = 4;
 struct Batch {
     buffer: wgpu::Buffer,
     count: u32,
+}
+
+/// GPU buffers for one spatial mesh tile (Phase B dirty upload).
+struct TileGpu {
+    content_key: u64,
+    lines: Vec<Batch>,
+    tris: Vec<Batch>,
+    quads: Vec<Batch>,
+    rings: Vec<Batch>,
+    breaks: Vec<[usize; 4]>,
 }
 
 pub struct Gpu {
@@ -40,6 +51,8 @@ pub struct Gpu {
     rings: Vec<Batch>,
     breaks: Vec<[usize; 4]>,
     key: Option<u64>,
+    /// Per-tile GPU buffers when presenting the tiled path; empty on the monolithic path.
+    tiles: HashMap<u64, TileGpu>,
     clear: wgpu::Color,
     over_lines: Vec<Batch>,
     over_tris: Vec<Batch>,
@@ -88,6 +101,7 @@ impl Gpu {
             rings: Vec::new(),
             breaks: Vec::new(),
             key: None,
+            tiles: HashMap::new(),
             clear: wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
             over_lines: Vec::new(),
             over_tris: Vec::new(),
@@ -136,6 +150,8 @@ impl Gpu {
     }
 
     pub fn present(&mut self, key: u64, mesh: &MeshData, uniform: &[f32; 12]) -> Result<(), String> {
+        // Monolithic path: drop any retained tile buffers.
+        self.tiles.clear();
         if self.key != Some(key) {
             self.lines = upload(&self.device, "cad_lines", &mesh.lines, VERTEX_SIZE);
             self.tris = upload(&self.device, "cad_fills", &mesh.tris, VERTEX_SIZE);
@@ -144,6 +160,75 @@ impl Gpu {
             self.breaks = mesh.breaks.clone();
             self.key = Some(key);
         }
+        self.present_frame(uniform, |this, pass| {
+            this.draw_parts(pass, &this.tris, &this.lines, &this.quads, &this.rings, &this.breaks);
+            this.draw_parts(pass, &this.over_tris, &this.over_lines, &this.over_quads, &this.over_rings, &this.over_breaks);
+        })
+    }
+
+    /// Present spatial mesh tiles, uploading only tiles whose `content_key` changed.
+    ///
+    /// `tiles` is `(tile_id_bits, content_key, mesh)` in draw order. `scene_key` identifies the
+    /// composed scene for paint-stamp skipping; infinite-line hairlines should be folded into
+    /// `extra` when needed (appended after tiles).
+    pub fn present_tiles(
+        &mut self,
+        scene_key: u64,
+        tiles: &[(u64, u64, &MeshData)],
+        extra: Option<&MeshData>,
+        uniform: &[f32; 12],
+    ) -> Result<(), String> {
+        self.key = None;
+        self.lines.clear();
+        self.tris.clear();
+        self.quads.clear();
+        self.rings.clear();
+        self.breaks.clear();
+        if tiles.len() > aad_render::mesh::MAX_MESH_TILES {
+            return Err("too many mesh tiles".into());
+        }
+        let keep: std::collections::HashSet<u64> = tiles.iter().map(|(id, _, _)| *id).collect();
+        self.tiles.retain(|id, _| keep.contains(id));
+        for &(id, content_key, mesh) in tiles {
+            let dirty = self.tiles.get(&id).is_none_or(|t| t.content_key != content_key);
+            if dirty {
+                self.tiles.insert(
+                    id,
+                    TileGpu {
+                        content_key,
+                        lines: upload(&self.device, "cad_tile_lines", &mesh.lines, VERTEX_SIZE),
+                        tris: upload(&self.device, "cad_tile_fills", &mesh.tris, VERTEX_SIZE),
+                        quads: upload(&self.device, "cad_tile_quads", &mesh.quads, INSTANCE_SIZE),
+                        rings: upload(&self.device, "cad_tile_rings", &mesh.rings, RING_INSTANCE_SIZE),
+                        breaks: mesh.breaks.clone(),
+                    },
+                );
+            }
+        }
+        let extra_batches = extra.map(|mesh| {
+            (
+                upload(&self.device, "cad_extra_lines", &mesh.lines, VERTEX_SIZE),
+                upload(&self.device, "cad_extra_fills", &mesh.tris, VERTEX_SIZE),
+                upload(&self.device, "cad_extra_quads", &mesh.quads, INSTANCE_SIZE),
+                upload(&self.device, "cad_extra_rings", &mesh.rings, RING_INSTANCE_SIZE),
+                mesh.breaks.clone(),
+            )
+        });
+        let _ = scene_key;
+        let order: Vec<u64> = tiles.iter().map(|(id, _, _)| *id).collect();
+        self.present_frame(uniform, |this, pass| {
+            for id in &order {
+                let Some(tile) = this.tiles.get(id) else { continue };
+                this.draw_parts(pass, &tile.tris, &tile.lines, &tile.quads, &tile.rings, &tile.breaks);
+            }
+            if let Some((lines, tris, quads, rings, breaks)) = extra_batches.as_ref() {
+                this.draw_parts(pass, tris, lines, quads, rings, breaks);
+            }
+            this.draw_parts(pass, &this.over_tris, &this.over_lines, &this.over_quads, &this.over_rings, &this.over_breaks);
+        })
+    }
+
+    fn present_frame(&mut self, uniform: &[f32; 12], draw: impl FnOnce(&Self, &mut wgpu::RenderPass<'_>)) -> Result<(), String> {
         let mut words = *uniform;
         words[3] = if self.linear_out { 1.0 } else { 0.0 };
         let bytes: Vec<u8> = words.iter().flat_map(|v| v.to_le_bytes()).collect();
@@ -180,8 +265,7 @@ impl Gpu {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            self.draw_parts(&mut pass, &self.tris, &self.lines, &self.quads, &self.rings, &self.breaks);
-            self.draw_parts(&mut pass, &self.over_tris, &self.over_lines, &self.over_quads, &self.over_rings, &self.over_breaks);
+            draw(self, &mut pass);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(frame);

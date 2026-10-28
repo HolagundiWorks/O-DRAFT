@@ -1,11 +1,14 @@
 //! The drawing area: grid, entities, selection highlighting, grips, rubber bands, object-snap
 //! markers, crosshair cursor, UCS icon and mouse handling.
 
+use std::collections::HashMap;
+
 use aad_color::Rgb;
 use aad_doc::Handle;
 use aad_engine::Input;
 use aad_engine::snap::{self, SnapHit};
 use aad_geom::{Bounds2, Vec2};
+use aad_render::mesh::{MeshData, TileId};
 use aad_render::{DisplayList, Kind};
 use egui::{Color32, Pos2, Rect, Sense, Shape, Stroke, pos2, vec2};
 
@@ -92,6 +95,9 @@ pub struct CanvasState {
     mesh_key: Option<u64>,
     mesh_slot: crate::gpu::MeshSlot,
     mesh_origin: Vec2,
+    /// Retained per-tile meshes (Phase B); remeshed only when content fingerprints change.
+    mesh_tiles: HashMap<TileId, (u64, MeshData)>,
+    mesh_basis: Option<u64>,
     /// Indices of infinite-line primitives in `list` (drawn on the CPU in GPU mode).
     infinite: Vec<usize>,
     /// Milliseconds spent converting the display list to vertex data (last rebuild).
@@ -412,23 +418,61 @@ fn draw_list(p: &egui::Painter, xf: &Xf, list: &DisplayList, bg: Rgb, lwdisplay:
 /// the infinite lines, which are clipped to the view on the CPU every frame.
 fn draw_list_gpu(c: &mut CanvasState, p: &egui::Painter, xf: &Xf, bg: Rgb, lwdisplay: bool, true_scale: bool) {
     let Some(list) = &c.list else { return };
-    let origin = crate::gpu::choose_origin(&list.bounds, xf.center, f64::from(xf.rect.height()) / xf.scale.max(1e-300));
+    let view_height = f64::from(xf.rect.height()) / xf.scale.max(1e-300);
+    let origin = crate::gpu::choose_origin(&list.bounds, xf.center, view_height);
     let lw_mode =
         lwdisplay.then_some(if true_scale { aad_render::mesh::LineweightMode::TrueScale } else { aad_render::mesh::LineweightMode::Screen });
+    let tint = u64::from(bg.0) << 16 | u64::from(bg.1) << 8 | u64::from(bg.2);
+    let mesh_basis = origin.x.to_bits()
+        ^ origin.y.to_bits().rotate_left(1)
+        ^ tint.rotate_left(21)
+        ^ u64::from(lwdisplay).rotate_left(40)
+        ^ u64::from(true_scale).rotate_left(48);
     let key = {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        (c.key, origin.x.to_bits(), origin.y.to_bits(), bg.0, bg.1, bg.2, lwdisplay, true_scale).hash(&mut h);
+        (c.key, mesh_basis).hash(&mut h);
         h.finish()
     };
     if c.mesh_key != Some(key) {
         let t0 = crate::now_ms();
-        let mut mesh = aad_render::mesh::build_mesh_mode(list, origin, bg, lw_mode);
-        if true_scale {
-            aad_render::mesh::expand_hairlines_true_scale(&mut mesh);
+        let edge = aad_render::mesh::mesh_tile_edge(view_height);
+        let mesh = if aad_render::mesh::mesh_tiling_viable(list, edge) {
+            if c.mesh_basis != Some(mesh_basis) {
+                c.mesh_tiles.clear();
+            }
+            let parts = aad_render::mesh::partition_prims(list, edge);
+            let keep: std::collections::HashSet<TileId> = parts.iter().map(|(id, _)| *id).collect();
+            c.mesh_tiles.retain(|id, _| keep.contains(id));
+            for (id, indices) in &parts {
+                let content = aad_render::mesh::tile_content_fingerprint(list, indices);
+                let tile_key = content ^ mesh_basis;
+                let needs = c.mesh_tiles.get(id).is_none_or(|(k, _)| *k != tile_key);
+                if needs {
+                    let tile_mesh = aad_render::mesh::build_mesh_prims(list, indices, origin, bg, lw_mode);
+                    c.mesh_tiles.insert(*id, (tile_key, tile_mesh));
+                }
+            }
+            let refs: Vec<&MeshData> = parts.iter().filter_map(|(id, _)| c.mesh_tiles.get(id).map(|(_, m)| m)).collect();
+            let mut merged = aad_render::mesh::merge_meshes(&refs);
+            if true_scale {
+                aad_render::mesh::expand_hairlines_true_scale(&mut merged);
+            } else {
+                crate::gpu::expand_hairlines(&mut merged);
+            }
+            c.mesh_basis = Some(mesh_basis);
+            merged
         } else {
-            crate::gpu::expand_hairlines(&mut mesh);
-        }
+            c.mesh_tiles.clear();
+            c.mesh_basis = Some(mesh_basis);
+            let mut mono = aad_render::mesh::build_mesh_mode(list, origin, bg, lw_mode);
+            if true_scale {
+                aad_render::mesh::expand_hairlines_true_scale(&mut mono);
+            } else {
+                crate::gpu::expand_hairlines(&mut mono);
+            }
+            mono
+        };
         c.mesh_rings = mesh.ring_instances();
         c.mesh_bytes = mesh.lines.len() + mesh.tris.len() + mesh.quads.len() + mesh.rings.len();
         if let Ok(mut slot) = c.mesh_slot.lock() {

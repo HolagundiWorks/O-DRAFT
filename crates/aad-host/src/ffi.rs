@@ -337,6 +337,7 @@ pub unsafe extern "C" fn aad_host_stats(host: *mut Host, out: *mut Stats) -> i32
 
 /// # Safety
 /// `host` is live. `parent` is a Win32 window handle. The child is positioned in physical pixels.
+#[cfg(windows)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aad_host_embed(host: *mut Host, parent: isize, x: i32, y: i32, width: u32, height: u32) -> i32 {
     call(host, |host| host.embed(parent, x, y, width, height))
@@ -344,6 +345,7 @@ pub unsafe extern "C" fn aad_host_embed(host: *mut Host, parent: isize, x: i32, 
 
 /// # Safety
 /// `host` is live and already embedded.
+#[cfg(windows)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aad_host_move(host: *mut Host, x: i32, y: i32, width: u32, height: u32) -> i32 {
     call(host, |host| host.move_child(x, y, width, height))
@@ -351,6 +353,7 @@ pub unsafe extern "C" fn aad_host_move(host: *mut Host, x: i32, y: i32, width: u
 
 /// # Safety
 /// `host` is live. Applies queued pointer events and presents one frame.
+#[cfg(windows)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aad_host_pump(host: *mut Host) -> i32 {
     call(host, |host| host.pump())
@@ -360,6 +363,7 @@ pub unsafe extern "C" fn aad_host_pump(host: *mut Host) -> i32 {
 ///
 /// # Safety
 /// `host` is null or live.
+#[cfg(windows)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn aad_host_embedded(host: *mut Host) -> i32 {
     let Some(host) = (unsafe { host.as_ref() }) else {
