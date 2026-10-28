@@ -15,8 +15,6 @@ namespace Aad.WinUi;
 /// </summary>
 public sealed partial class MainWindow
 {
-    private const double SideRailWidth = 28;
-
     private SideTab _sideTab = SideTab.Properties;
     private readonly Dictionary<SideTab, Button> _railButtons = new();
     private readonly Dictionary<SideTab, string> _sideTitles = new();
@@ -62,7 +60,7 @@ public sealed partial class MainWindow
             RenderTransform = new RotateTransform { Angle = 90 },
         };
         // 24 wide: the tab touches the open panel on its left and leaves 4 of the rail on its right.
-        const double tabWidth = SideRailWidth - 4;
+        const double tabWidth = Density.SideRailWidth - 4;
         Canvas.SetLeft(text, (tabWidth + lineHeight) / 2);
         Canvas.SetTop(text, 0);
         var button = SeamlessTab.Create(new Canvas { Width = tabWidth, Height = length, Children = { text } }, false, TabEdge.Right, new Thickness(0));

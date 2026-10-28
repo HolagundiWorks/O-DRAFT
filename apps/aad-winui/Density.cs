@@ -65,6 +65,8 @@ internal static class Density
     public const double DividerThickness = 1;
     /// <summary>Default docked side-panel width (matches <c>SidePanelWidth</c>).</summary>
     public const double SidePanelWidth = 240;
+    /// <summary>Collapsed side-panel title rail width (matches <c>SideRailWidth</c>).</summary>
+    public const double SideRailWidth = 28;
     /// <summary>Left list column in style / manager dialogs.</summary>
     public const double ManagerListWidth = 180;
     /// <summary>Smallest useful height of a list in a dialog.</summary>
@@ -96,12 +98,23 @@ internal static class Density
     public const double HistoryPanelMinWidth = 360;
     public const double HistoryPanelMinHeight = 420;
     public const double HistoryListMinHeight = 200;
+    /// <summary>Command-history popup max height in the Ask bar.</summary>
+    public const double HistoryListMaxHeight = 200;
     /// <summary>Short initials / code fields on the revision register.</summary>
     public const double InitialsFieldMinWidth = 64;
+    /// <summary>Status-bar page-orientation combo minimum width.</summary>
+    public const double OrientComboMinWidth = 96;
+    /// <summary>Layer combo upper bound on the tool strip.</summary>
+    public const double LayerComboMaxWidth = 200;
+    /// <summary>Ask-bar avatar chip and send button.</summary>
+    public const double AskAvatarSize = 28;
+    public const double AskSendButtonSize = 32;
     /// <summary>Welcome / busy overlay card.</summary>
     public const double WelcomeMaxWidth = 520;
     public const double BusyCardMinWidth = 280;
     public const double BusyRingSize = 40;
+    /// <summary>Ask-bar pill inner padding (slightly tighter than SpaceMd×SpaceSm).</summary>
+    public static Thickness AskPillPadding { get; } = new Thickness(SpaceSm + SpaceXs, Space1, SpaceSm + SpaceXs, Space1);
     /// <summary>Upper bound for a status / validation line beside footer actions.</summary>
     public const double StatusMaxWidth = 420;
     public const double CornerChrome = 2;
@@ -118,6 +131,8 @@ internal static class Density
     public const double FontCaption = 11;
     public const double FontBody = 12;
     public const double FontCommand = 12;
+    /// <summary>Fluent glyph size inside compact icon buttons (Ask send).</summary>
+    public const double FontIcon = 14;
     public const double FontSection = 13;
     public const double FontHeading = 13;
     public const double FontPageTitle = 18;

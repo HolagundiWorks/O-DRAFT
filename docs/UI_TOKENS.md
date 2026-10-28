@@ -33,7 +33,7 @@ Code-built UI uses `Density`. At launch, `ShellFonts.Resolve()` upgrades to **Se
 | Drawing canvas | `#000000` | `#FFFFFF` (CAD preference; not shell chrome) |
 | Splash text | `#FFFFFF` on splash background (`SplashForegroundBrush`) | same |
 | Selection zebra | Accent at 25% alpha (`Density.SelectionFill`) | Accent at 25% alpha |
-| Side panel | `SidePanelWidth` / `Density.SidePanelWidth` = **240** DIP | same |
+| Side panel | `SidePanelWidth` / `Density.SidePanelWidth` = **240** DIP; title rail `SideRailWidth` = **28** | same |
 | AI channel edge | Accent blue | Accent blue |
 | CAD channel edge | Success green | Success green |
 
