@@ -159,8 +159,11 @@ msTimestampUrl: $($ts | ConvertTo-Json)
 
 $Files = $Files | ForEach-Object { (Resolve-Path $_).Path }
 $haveCert = [bool]$env:WINDOWS_CERTIFICATE
-$azureVars = 'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_SIGNING_ENDPOINT', 'AZURE_SIGNING_ACCOUNT', 'AZURE_CERT_PROFILE'
-$haveAzure = -not ($azureVars | Where-Object { -not [Environment]::GetEnvironmentVariable($_) })
+# Same core Azure names as suite sign.ps1; endpoint OR region is enough.
+$azureCore = 'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_SIGNING_ACCOUNT', 'AZURE_CERT_PROFILE'
+$haveAzureCore = -not ($azureCore | Where-Object { -not [Environment]::GetEnvironmentVariable($_) })
+$haveAzureEndpoint = [bool]$env:AZURE_SIGNING_ENDPOINT -or [bool]$env:AZURE_SIGNING_REGION
+$haveAzure = $haveAzureCore -and $haveAzureEndpoint
 $selfFlag = "$env:SIGN_SELF_SIGNED".Trim().ToLowerInvariant()
 $haveSelf = $selfFlag -in @('1', 'true', 'yes')
 
@@ -205,8 +208,13 @@ try {
         Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
       if (-not $dlib) { throw 'Azure.CodeSigning.Dlib.dll not found in Microsoft.Trusted.Signing.Client' }
       $metadata = Join-Path $script:Tmp 'metadata.json'
+      $endpoint = $env:AZURE_SIGNING_ENDPOINT
+      if (-not $endpoint) {
+        $region = Get-AzureSigningRegion
+        $endpoint = "https://$region.codesigning.azure.net"
+      }
       @{
-        Endpoint               = $env:AZURE_SIGNING_ENDPOINT
+        Endpoint               = $endpoint
         CodeSigningAccountName = $env:AZURE_SIGNING_ACCOUNT
         CertificateProfileName = $env:AZURE_CERT_PROFILE
       } | ConvertTo-Json | Set-Content -Path $metadata -Encoding utf8
