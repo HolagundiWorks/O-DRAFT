@@ -142,7 +142,7 @@ field, so an older reader is unaffected).
 
 - `takeoff.phases {estimation?, billing?, current?: {estimation?, billing?}}` reads or edits the two lists and the
   *current* phases. Lists are trimmed, case-insensitive-unique, at most 50 names of 60 characters; the current phase
-  must be in its list. The WinUI take-off bar has a picker for each (`apps/aad-winui/TakeoffPhases.cs`).
+  must be in its list. The WinUI take-off bar has a picker for each (`apps/aad-winui/TakeoffPhases.cs`). The bar is text only (flat text buttons in the groups Draw, Compute and Sync, with dividers); O-CoreOp's Take-off page bar is drawn the same way.
 - `takeoff.draw`, `takeoff.tag` and `takeoff.maplayers` stamp the current phases on what they mark, or the `phase` /
   `billPhase` of the call (a name outside the list is refused; null clears).
 - `takeoff.phase {estimation?, billing?, handles?}` changes the phases of dimensions already marked; unmarked objects

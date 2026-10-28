@@ -5777,7 +5777,7 @@ public sealed partial class MainWindow : Window
             first = false;
             foreach (var (icon, label, kind, command) in group)
             {
-                var button = MakeToolTile(ToolIcons.Architecture(icon, _dark), label);
+                var button = MakeTextTool(label);
                 var k = kind;
                 var cmd = command;
                 button.Click += (_, _) =>

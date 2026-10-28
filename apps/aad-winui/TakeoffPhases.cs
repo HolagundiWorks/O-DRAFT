@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Aad.WinUi;
 
@@ -54,6 +55,31 @@ public sealed partial class MainWindow
             }
         };
         return box;
+    }
+
+    /// <summary>
+    /// A text-only tool for the take-off bar: the label on a flat button, no icon. O-CoreOp's take-off bar is drawn the
+    /// same way (flat text buttons in groups with dividers), so the two read alike.
+    /// </summary>
+    private static Button MakeTextTool(string label)
+    {
+        var button = new Button
+        {
+            Content = new TextBlock { Text = label, FontSize = Density.FontBody, TextTrimming = TextTrimming.CharacterEllipsis },
+            MinHeight = Density.ControlHeight,
+            Padding = new Thickness(Density.SpaceLg, 0, Density.SpaceLg, 0),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(Density.CornerControl),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        if (Application.Current.Resources.TryGetValue("CompactButtonStyle", out var style) && style is Style s)
+        {
+            button.Style = s;
+        }
+        AutomationProperties.SetName(button, label);
+        ToolTipService.SetToolTip(button, label);
+        return button;
     }
 
     /// <summary>Fill the pickers from the panel snapshot when the lists or the choice changed.</summary>
