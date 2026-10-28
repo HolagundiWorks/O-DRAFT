@@ -10,6 +10,7 @@ cargo xtask ci                                   # the gate: fmt, clippy -D warn
                                                  # asset attribution, layering, licences, UI rules, wasm compile
 powershell -File tools/quality/baseline.ps1      # the same commands with timings, as a report
 cargo bench -p aad-geom --bench geometry    # benchmarks (see PERFORMANCE.md)
+./scripts/takeoff-e2e-harness.sh            # take-off → .vdb quantity-trust (Linux/cloud; see takeoff-shilpidb.md)
 ```
 
 `cargo xtask ci` is what the pull-request workflow (`.github/workflows/cad-ci.yml`) runs, so a green
