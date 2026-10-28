@@ -140,8 +140,11 @@ An offline assistant can call a fixed set of validated tools (summary, flatten, 
 | [docs/BUG_BACKLOG.md](docs/BUG_BACKLOG.md), [docs/UI_BASELINE.md](docs/UI_BASELINE.md), [docs/UI_BUG_BACKLOG.md](docs/UI_BUG_BACKLOG.md) | Quality programme records |
 | [docs/UI_TESTING_STRATEGY.md](docs/UI_TESTING_STRATEGY.md), [docs/UI_TEST_MATRIX.md](docs/UI_TEST_MATRIX.md) | UI test tooling, coverage |
 | [docs/WCAG_UI_AUDIT.md](docs/WCAG_UI_AUDIT.md) | Accessibility and interface audit of the WinUI shell: method, findings, fixes |
-| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Measured interactive and I/O performance; residual costs |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Open bugs and verified limits |
+| [docs/levels-and-sheet-sets.md](docs/levels-and-sheet-sets.md), [docs/smart-blocks.md](docs/smart-blocks.md), [docs/project-and-presentation.md](docs/project-and-presentation.md), [docs/PROJECT_WIZARD.md](docs/PROJECT_WIZARD.md) | Levels and drawing tabs, smart blocks, project details and presentation import, the Project Wizard |
+| [docs/pdf-underlay.md](docs/pdf-underlay.md), [docs/revision-history.md](docs/revision-history.md), [docs/aorms.md](docs/aorms.md) | PDF underlay and `pdf.import`, revision history, AORMS sign-in |
+| [docs/UI_STANDARDS.md](docs/UI_STANDARDS.md), [docs/UI_TOKENS.md](docs/UI_TOKENS.md), [docs/WINDOW_SIZING.md](docs/WINDOW_SIZING.md), [docs/TYPOGRAPHY.md](docs/TYPOGRAPHY.md), [docs/COMPACT_CAD_UI.md](docs/COMPACT_CAD_UI.md), [docs/canvas-smoothness.md](docs/canvas-smoothness.md) | WinUI shell standards, tokens, window sizes, type, compact layout, canvas rendering plan |
+| [docs/qa/README.md](docs/qa/README.md) | Quality records: test matrix, defect ledger, regression and release readiness |
+| [docs/licensing/DEPENDENCY_INVENTORY.md](docs/licensing/DEPENDENCY_INVENTORY.md), [docs/licensing/PROPRIETARY_COMPONENT_REMOVAL.md](docs/licensing/PROPRIETARY_COMPONENT_REMOVAL.md) | Dependency licences, proprietary components not shipped |
 | [docs/architecture/suite-integration.md](docs/architecture/suite-integration.md) | How O-Draft connects to O-Studio, O-CoreOp, ShilpiDB and AORMS |
 | [docs/parity-checklist.md](docs/parity-checklist.md) | Generated menu-name comparison (`cargo xtask parity`) |
 | [CLAUDE.md](CLAUDE.md) | Rules for developers and coding agents |

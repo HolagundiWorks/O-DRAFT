@@ -1,3 +1,0 @@
-// Scratch notes for engine smoke (run via walls unit tests / aad-cli — not a crate).
-// Covered by: cmd::walls::tests::door_jamb_grip_widens_the_symbol_and_the_wall
-//              cmd::walls::tests::window_properties_edit_type_sill_and_lintel_lock

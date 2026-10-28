@@ -6,7 +6,7 @@ use std::panic::AssertUnwindSafe;
 
 use serde_json::Value;
 
-use crate::{Host, Pointer, Stats};
+use crate::{Host, Stats};
 
 const TEXT_CAP: usize = 1_048_576;
 
@@ -320,18 +320,6 @@ pub unsafe extern "C" fn aad_host_text(host: *mut Host, slot: i32, buf: *mut u8,
     }));
     let text = text.unwrap_or_default();
     copy_bytes(text.as_bytes(), buf, len)
-}
-
-/// # Safety
-/// `host` is live and `ev` points at a [`Pointer`] for this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn aad_host_pointer(host: *mut Host, ev: *const Pointer) -> i32 {
-    call(host, |host| {
-        if ev.is_null() {
-            return Err("missing pointer event".into());
-        }
-        host.pointer(unsafe { *ev })
-    })
 }
 
 /// # Safety

@@ -37,7 +37,6 @@ name = "aad-aorms"
 version = "0.6.0"
 dependencies = [
  "keyring",
- "serde",
  "serde_json",
  "thiserror 2.0.21",
  "ureq",

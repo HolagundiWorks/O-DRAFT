@@ -111,7 +111,7 @@ take-off.
 
 ## Not done
 
-- WinUI (or egui) node-graph editor for `param.*` walls (companion Graph rail is separate; see
+- WinUI (or egui) node-graph editor for `param.*` walls (companion Graph window is separate; see
   [architecture/DYNAMO_INTEGRATION.md](architecture/DYNAMO_INTEGRATION.md)).
 - Async C ABI for long evaluations.
 - ShilpiDB-hosted component library (schemas are in code).

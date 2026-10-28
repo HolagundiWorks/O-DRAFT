@@ -141,6 +141,16 @@ public sealed partial class MainWindow
         menu.Items.Add(settings);
         if (!level.Active)
         {
+            if (design)
+            {
+                var send = new MenuFlyoutItem { Text = "Send selection here…" };
+                send.Click += (_, _) => StartLevelSend("level.moveto", level.Id);
+                menu.Items.Add(send);
+                var copy = new MenuFlyoutItem { Text = "Copy selection here…" };
+                copy.Click += (_, _) => StartLevelSend("level.copyto", level.Id);
+                menu.Items.Add(copy);
+                menu.Items.Add(new MenuFlyoutSeparator());
+            }
             var trace = new ToggleMenuFlyoutItem { Text = "Trace over the current level", IsChecked = level.Traced };
             trace.Click += (_, _) => RunShellCommand(
                 "level.trace",
@@ -391,6 +401,26 @@ public sealed partial class MainWindow
         if (Native.Execute(_host, id, JsonSerializer.Serialize(parameters)) != 0)
         {
             History.Text = Native.LastError(_host);
+        }
+        AfterCommand();
+    }
+
+    /// <summary>
+    /// Start send/copy-to-level with the target preset; the host then asks for an origin point
+    /// (and matching point) on the drawing so floors drawn offset can be aligned.
+    /// </summary>
+    private void StartLevelSend(string command, long levelId)
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        var preset = JsonSerializer.Serialize(new Dictionary<string, object> { ["level"] = levelId });
+        if (Native.StartForm(_host, command, preset) != 0)
+        {
+            History.Text = Native.LastError(_host);
+            AfterCommand();
+            return;
         }
         AfterCommand();
     }

@@ -3122,7 +3122,7 @@ mod tests {
         let y = f64::from(host.stats().height) - 40.0;
         host.pointer(Pointer { x: 40.0, y, action: POINTER_LEFT_DOWN, wheel: 0.0, mods: 0 }).unwrap();
         let popup = host.take_popup();
-        assert!(popup.contains("Hide UCS Icon"), "{popup}");
+        assert!(popup.contains("Hide UCS / site mark"), "{popup}");
         host.set_ucs(false).unwrap();
         host.pointer(Pointer { x: 40.0, y, action: POINTER_LEFT_DOWN, wheel: 0.0, mods: 0 }).unwrap();
         assert!(host.take_popup().is_empty());

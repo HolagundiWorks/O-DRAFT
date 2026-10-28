@@ -252,11 +252,11 @@ the separate process and the pipe.
 **O-Dynamo remains buildable** as a standalone tool for users who prefer the separate window
 or use it without O-Draft.
 
-**Done when:** A wall + door graph can be built entirely in the side panel, committed to the
+**Done when:** A wall + door graph can be built entirely in the Graph window, committed to the
 drawing, and undone. The WPF host still works independently.
 
-**Verified:** WinUI builds with `ODraft.Graph.dll` when O-Dynamo is a sibling; Graph rail ships
-Nodes + JSON modes.
+**Verified:** WinUI builds with `ODraft.Graph.dll` when O-Dynamo is a sibling; **Window > Graph**
+ships Nodes + JSON modes as a separate manager window (not on the side rail).
 
 ---
 

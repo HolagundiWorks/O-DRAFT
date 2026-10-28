@@ -1,5 +1,6 @@
 //! Levels: named model spaces in one drawing. Phase 1 core (types, switching, commands).
 
+use aad_doc::EntityKind;
 use aad_engine::Session;
 use serde_json::{Value, json};
 
@@ -228,6 +229,38 @@ fn objects_move_and_copy_between_levels_at_the_same_coordinates() {
 
     s.execute("undo", &json!({})).unwrap();
     assert_eq!((xs(&s, "Ground"), xs(&s, "Roof")), (3, 2), "undo restores the move");
+}
+
+#[test]
+fn send_to_level_shifts_by_origin_match_defaulting_to_site() {
+    let mut s = Session::new();
+    line(&mut s, 100.0);
+    s.execute("level.new", &json!({"name": "First", "first": "Ground"})).unwrap();
+    s.execute("site.origin", &json!({ "point": [0.0, 0.0] })).unwrap();
+    let h = s.doc().unwrap().model.iter().next().unwrap().handle.hex();
+    // Line sits at y=100; pick origin (0,100) → site (0,0) so it lands on Ground's base.
+    let r = s
+        .execute("level.moveto", &json!({ "level": "First", "handles": [h], "from": [0.0, 100.0] }))
+        .unwrap();
+    assert_eq!(r["moved"], 1);
+    assert_eq!(r["shifted"], json!([0.0, -100.0]));
+    let d = s.doc().unwrap();
+    let first = d.level_store(d.level_by_name("First").unwrap().id).unwrap();
+    let EntityKind::Line(geom) = &first.iter().next().unwrap().kind else { panic!("expected a line") };
+    assert!((geom.a.y - 0.0).abs() < 1e-9 && (geom.b.y - 0.0).abs() < 1e-9, "shifted onto site origin");
+
+    s.execute("level.activate", &json!({ "level": "Ground" })).unwrap();
+    line(&mut s, 50.0);
+    let h2 = s.doc().unwrap().model.iter().next().unwrap().handle.hex();
+    let r = s
+        .execute(
+            "level.copyto",
+            &json!({ "level": "First", "handles": [h2], "from": [0.0, 50.0], "to": [10.0, 20.0] }),
+        )
+        .unwrap();
+    assert_eq!(r["copied"], 1);
+    assert_eq!(r["shifted"], json!([10.0, -30.0]));
+    assert_eq!(xs(&s, "Ground"), 1, "source stays");
 }
 
 #[test]

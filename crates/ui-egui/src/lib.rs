@@ -36,7 +36,6 @@ pub mod palettes;
 pub mod plotstyles;
 pub mod plotwindow;
 pub mod quick;
-pub mod spaceeditor;
 pub mod theme;
 pub mod toolbars;
 pub mod topbar;
@@ -225,7 +224,7 @@ pub struct CadApp {
     pub canvas: canvas::CanvasState,
     /// Pin and auto-collapse state of the side panels.
     pub collapse: autocollapse::CollapseState,
-    /// The context bar and the drawing space editor ([`contextbar`], [`spaceeditor`]).
+    /// The context bar ([`contextbar`]).
     pub ctx_bar: contextbar::State,
     /// What the command bar remembers about the assistant ([`assistant`]).
     pub assistant: assistant::Ui,

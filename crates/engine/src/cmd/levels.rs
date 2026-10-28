@@ -32,10 +32,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{level? (default the active one), add? (level or list), remove? (level or list), set? (an existing traced level to edit), fade? 0..90, colour? grey|true, order? below|above, snap? bool, layers? [names] | \"A, B\" | null or \"*\" (all)} → {level, traces}. A trace shows another level read-only and faded under (or over) this one; settings apply to each added trace and to `set`."),
         CommandSpec::new("level.moveto", "Move to Level", run_moveto)
             .menu(&["Architecture", "Levels", "Move to Level"])
-            .params("{level, handles? (default the selection)} → {moved}. Moves objects of the active level to another level at the same coordinates."),
+            .params("{level, handles? (default the selection), from?: [x,y] (origin on the selection), to?: [x,y] (matching point; default site origin when `from` is set)} → {moved, shifted?}. Moves objects of the active level to another level; with `from`/`to` they are shifted so the origin matches."),
         CommandSpec::new("level.copyto", "Copy to Levels", run_copyto)
             .menu(&["Architecture", "Levels", "Copy to Levels"])
-            .params("{levels: [level..], handles? (default the selection)} → {copied}. Copies objects of the active level to other levels at the same coordinates (column grids, stair cores)."),
+            .params("{levels?: [level..] | level?: one level, handles?, from?: [x,y], to?: [x,y]} → {copied, shifted?}. Copies objects to other levels; with `from`/`to` copies are shifted so the origin matches (source stays put)."),
         CommandSpec::new("level.fromfloors", "Levels from Floors", run_fromfloors)
             .menu(&["Architecture", "Levels", "Levels from Floors"])
             .params("{} → {created: [names], levels}. Adds an empty level for each floor of the project data that has none; elevation is the sum of the floor heights below it."),
@@ -300,6 +300,29 @@ fn objects_of_active(s: &Session, cmd: &str, p: &Value) -> Result<Vec<aad_doc::H
     Ok(hs)
 }
 
+/// Optional world shift so a picked origin lands on a matching point (default: site origin).
+fn origin_shift(s: &Session, cmd: &str, p: &Value) -> Result<Option<aad_geom::Vec2>> {
+    let Some(from) = point_param(p, "from") else {
+        return Ok(None);
+    };
+    if !from.is_finite() {
+        return Err(bad(cmd, "`from` must be a finite point"));
+    }
+    let to = match point_param(p, "to") {
+        Some(t) if t.is_finite() => t,
+        Some(_) => return Err(bad(cmd, "`to` must be a finite point")),
+        None => s.doc()?.site_origin(),
+    };
+    let delta = to - from;
+    if !delta.is_finite() {
+        return Err(bad(cmd, "origin shift is not finite"));
+    }
+    if delta.len() < 1e-12 {
+        return Ok(None);
+    }
+    Ok(Some(delta))
+}
+
 fn run_moveto(s: &mut Session, p: &Value) -> Result<Value> {
     let to = find(s, "level.moveto", p, "level")?;
     if s.doc()?.active_level == Some(to) {
@@ -309,10 +332,14 @@ fn run_moveto(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad("level.moveto", "close the block editor first"));
     }
     let hs = objects_of_active(s, "level.moveto", p)?;
+    let shift = origin_shift(s, "level.moveto", p)?;
+    if let Some(delta) = shift {
+        super::modify::transform_entities(s, &hs, &aad_geom::Mat3::translate(delta), false)?;
+    }
     let d = s.doc_mut()?;
     let mut moved = Vec::with_capacity(hs.len());
-    for h in hs {
-        if let Some(e) = d.model.remove(h) {
+    for h in &hs {
+        if let Some(e) = d.model.remove(*h) {
             moved.push(e);
         }
     }
@@ -323,19 +350,38 @@ fn run_moveto(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     s.set_selection(Vec::new());
-    Ok(json!({ "moved": n }))
+    let mut out = json!({ "moved": n });
+    if let Some(delta) = shift {
+        out["shifted"] = json!([delta.x, delta.y]);
+    }
+    Ok(out)
 }
 
 /// Most objects one `level.copyto` may create.
 const MAX_COPIES: usize = 2_000_000;
 
-fn run_copyto(s: &mut Session, p: &Value) -> Result<Value> {
-    let list = p.get("levels").and_then(Value::as_array).ok_or_else(|| bad("level.copyto", "`levels` (a list of level ids or names) is required"))?;
-    if list.is_empty() || list.len() > MAX_LEVELS {
-        return Err(bad("level.copyto", format!("`levels` needs 1 to {MAX_LEVELS} entries")));
+fn copyto_targets(s: &Session, p: &Value) -> Result<Vec<LevelId>> {
+    let raw: Vec<Value> = if let Some(arr) = p.get("levels").and_then(Value::as_array) {
+        arr.clone()
+    } else if let Some(v) = p.get("level") {
+        // One target (form / shortcut menu) or a comma-separated name list.
+        match v {
+            Value::String(text) if text.contains(',') => text
+                .split(',')
+                .map(str::trim)
+                .filter(|n| !n.is_empty())
+                .map(|n| Value::String(n.to_string()))
+                .collect(),
+            other => vec![other.clone()],
+        }
+    } else {
+        return Err(bad("level.copyto", "`levels` (a list) or `level` (one id/name) is required"));
+    };
+    if raw.is_empty() || raw.len() > MAX_LEVELS {
+        return Err(bad("level.copyto", format!("need 1 to {MAX_LEVELS} target levels")));
     }
     let mut to = Vec::new();
-    for v in list {
+    for v in raw {
         let id = find(s, "level.copyto", &json!({ "level": v }), "level")?;
         if s.doc()?.active_level == Some(id) {
             return Err(bad("level.copyto", "the active level is the source; pick other levels"));
@@ -344,10 +390,16 @@ fn run_copyto(s: &mut Session, p: &Value) -> Result<Value> {
             to.push(id);
         }
     }
+    Ok(to)
+}
+
+fn run_copyto(s: &mut Session, p: &Value) -> Result<Value> {
+    let to = copyto_targets(s, p)?;
     let hs = objects_of_active(s, "level.copyto", p)?;
     if hs.len().saturating_mul(to.len()) > MAX_COPIES {
         return Err(bad("level.copyto", "too many objects to copy at once"));
     }
+    let shift = origin_shift(s, "level.copyto", p)?;
     let d = s.doc_mut()?;
     let source: Vec<_> = hs.iter().filter_map(|h| d.model.get(*h).cloned()).collect();
     let mut copied = 0usize;
@@ -356,6 +408,9 @@ fn run_copyto(s: &mut Session, p: &Value) -> Result<Value> {
         for e in &source {
             let mut c = (**e).clone();
             c.handle = d.new_handle();
+            if let Some(delta) = shift {
+                c.kind.transform(&aad_geom::Mat3::translate(delta));
+            }
             fresh.push(c);
         }
         copied += fresh.len();
@@ -365,7 +420,11 @@ fn run_copyto(s: &mut Session, p: &Value) -> Result<Value> {
             }
         }
     }
-    Ok(json!({ "copied": copied }))
+    let mut out = json!({ "copied": copied });
+    if let Some(delta) = shift {
+        out["shifted"] = json!([delta.x, delta.y]);
+    }
+    Ok(out)
 }
 
 /// Add an empty level for each floor of `floors` that has none; the existing objects become the

@@ -21,29 +21,6 @@ pub struct SpaceRow {
     pub layers: usize,
 }
 
-/// A name being asked for: saving the current layers as a new space, renaming, duplicating.
-#[derive(Clone, Debug)]
-pub enum NameFor {
-    New,
-    Rename(String),
-    Duplicate(String),
-}
-
-#[derive(Clone, Debug)]
-struct NameDialog {
-    what: NameFor,
-    text: String,
-    focus: bool,
-}
-
-/// A big change waiting for the user's yes (activating a space that changes many layers).
-#[derive(Clone, Debug)]
-struct Confirm {
-    id: String,
-    name: String,
-    count: usize,
-}
-
 #[derive(Default)]
 pub struct State {
     /// (document uid, revision) the cached lists below were read for.
@@ -55,23 +32,11 @@ pub struct State {
     pub floor: Option<String>,
     pub search: String,
     pub all_floors: bool,
-    name_dialog: Option<NameDialog>,
-    confirm: Option<Confirm>,
-    pub editor: Option<crate::spaceeditor::Editor>,
 }
 
 enum Action {
     SetLayer(String),
     SetFloor(String),
-    Activate(String),
-    ConfirmedActivate(String),
-    Edit(String),
-    NewSpace,
-    Capture(String),
-    Duplicate(String),
-    Rename(String),
-    Delete(String),
-    Recover,
     TogglePin,
 }
 
@@ -167,7 +132,6 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     for a in actions {
         run(app, a);
     }
-    windows(app, ui.ctx());
 }
 
 fn layer_selector(app: &mut CadApp, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -251,100 +215,6 @@ fn floor_selector(app: &mut CadApp, ui: &mut egui::Ui, actions: &mut Vec<Action>
     });
 }
 
-#[allow(dead_code)]
-fn space_selector(app: &mut CadApp, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-    ui.label(RichText::new(crate::tl!("Drawing space")).weak().small());
-    let s = &app.ctx_bar;
-    let active = s.active.as_ref().and_then(|a| s.spaces.iter().find(|x| &x.id == a)).cloned();
-    let mut label = active.as_ref().map_or_else(|| crate::tl!("Current layers").to_string(), |a| a.name.clone());
-    if active.is_some() && s.dirty {
-        label.push_str(" ●");
-    }
-    let resp = ui.add(egui::Button::new(label).min_size(vec2(170.0, 0.0))).on_hover_text(if active.is_some() && s.dirty {
-        crate::tl!("The layers differ from the saved drawing space")
-    } else {
-        crate::tl!("Drawing space: a saved set of visible, frozen and locked layers")
-    });
-    crate::control::record_widget(ui, &resp, "Drawing space selector", "button", None);
-    if resp.clicked() {
-        refresh(app, true);
-    }
-    egui::Popup::from_toggle_button_response(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-        ui.set_min_width(260.0);
-        let floor = app.ctx_bar.floor.clone();
-        let all = app.ctx_bar.all_floors;
-        let spaces = app.ctx_bar.spaces.clone();
-        let active_id = app.ctx_bar.active.clone();
-        let dirty = app.ctx_bar.dirty;
-        if spaces.is_empty() {
-            ui.label(RichText::new(crate::tl!("No saved drawing spaces")).weak());
-        }
-        for sp in spaces.iter().filter(|sp| all || sp.floor.is_none() || sp.floor.as_deref() == floor.as_deref()) {
-            ui.horizontal(|ui| {
-                let on = active_id.as_deref() == Some(sp.id.as_str());
-                let mut text = sp.name.clone();
-                if on && dirty {
-                    text.push_str(" ●");
-                }
-                let r = ui.selectable_label(on, text).on_hover_text(match &sp.floor {
-                    Some(f) => format!("{} · {}", f, sp.layers),
-                    None => format!("{}", sp.layers),
-                });
-                if r.clicked() {
-                    actions.push(Action::Activate(sp.id.clone()));
-                    ui.close();
-                }
-                if ui.small_button("…").on_hover_text(crate::tl!("Edit this drawing space")).clicked() {
-                    actions.push(Action::Edit(sp.id.clone()));
-                    ui.close();
-                }
-            });
-        }
-        let mut all_floors = all;
-        if ui.checkbox(&mut all_floors, crate::tl!("Show spaces of every floor")).changed() {
-            app.ctx_bar.all_floors = all_floors;
-        }
-        ui.separator();
-        if ui.button(crate::tl!("Save current layers as a new space…")).clicked() {
-            actions.push(Action::NewSpace);
-            ui.close();
-        }
-        if let Some(id) = active_id.filter(|a| spaces.iter().any(|s| &s.id == a)) {
-            ui.add_enabled_ui(dirty, |ui| {
-                if ui.button(crate::tl!("Update the space from the current layers")).clicked() {
-                    actions.push(Action::Capture(id.clone()));
-                    ui.close();
-                }
-            });
-            if ui.button(crate::tl!("Edit…")).clicked() {
-                actions.push(Action::Edit(id.clone()));
-                ui.close();
-            }
-            if ui.button(crate::tl!("Duplicate…")).clicked() {
-                actions.push(Action::Duplicate(id.clone()));
-                ui.close();
-            }
-            if ui.button(crate::tl!("Rename…")).clicked() {
-                actions.push(Action::Rename(id.clone()));
-                ui.close();
-            }
-            if ui.button(crate::tl!("Delete")).clicked() {
-                actions.push(Action::Delete(id));
-                ui.close();
-            }
-        }
-        ui.separator();
-        if ui
-            .button(crate::tl!("Show, thaw and unlock all layers"))
-            .on_hover_text(crate::tl!("The way out of a configuration that hides or locks too much"))
-            .clicked()
-        {
-            actions.push(Action::Recover);
-            ui.close();
-        }
-    });
-}
-
 fn say(app: &mut CadApp, r: Result<Value, String>) -> Option<Value> {
     match r {
         Ok(v) => {
@@ -378,125 +248,10 @@ fn run(app: &mut CadApp, a: Action) {
             say(app, r);
             refresh(app, true);
         }
-        Action::Activate(id) => {
-            // A change to many layers is shown to the user first; a small one is just applied.
-            match app.run("space.preview", json!({"id": id})) {
-                Ok(p) if p["many"].as_bool() == Some(true) => {
-                    let n = p["changed"].as_array().map_or(0, Vec::len);
-                    let name = p["space"]["name"].as_str().unwrap_or("").to_string();
-                    app.ctx_bar.confirm = Some(Confirm { id, name, count: n });
-                }
-                Ok(_) => run(app, Action::ConfirmedActivate(id)),
-                Err(e) => app.set_status(e),
-            }
-        }
-        Action::ConfirmedActivate(id) => {
-            let r = app.run("space.activate", json!({"id": id}));
-            say(app, r);
-            refresh(app, true);
-        }
-        Action::Edit(id) => {
-            let e = crate::spaceeditor::Editor::open(app, &id);
-            app.ctx_bar.editor = e;
-        }
-        Action::NewSpace => app.ctx_bar.name_dialog = Some(NameDialog { what: NameFor::New, text: String::new(), focus: true }),
-        Action::Capture(id) => {
-            let r = app.run("space.capture", json!({"id": id}));
-            say(app, r);
-            refresh(app, true);
-        }
-        Action::Duplicate(id) => {
-            let base = app.ctx_bar.spaces.iter().find(|s| s.id == id).map(|s| format!("{} copy", s.name)).unwrap_or_default();
-            app.ctx_bar.name_dialog = Some(NameDialog { what: NameFor::Duplicate(id), text: base, focus: true });
-        }
-        Action::Rename(id) => {
-            let base = app.ctx_bar.spaces.iter().find(|s| s.id == id).map(|s| s.name.clone()).unwrap_or_default();
-            app.ctx_bar.name_dialog = Some(NameDialog { what: NameFor::Rename(id), text: base, focus: true });
-        }
-        Action::Delete(id) => {
-            let r = app.run("space.delete", json!({"id": id}));
-            say(app, r);
-            refresh(app, true);
-        }
         Action::TogglePin => {
             let _ = app.run("ui.toggle.pinpanels", json!({}));
         }
-        Action::Recover => {
-            let r = app.run("space.recover", json!({}));
-            say(app, r);
-            refresh(app, true);
-        }
     }
-}
-
-/// The small windows: a name prompt, the "this changes many layers" question, and the editor.
-fn windows(app: &mut CadApp, ctx: &egui::Context) {
-    if let Some(mut dlg) = app.ctx_bar.name_dialog.take() {
-        let mut done: Option<bool> = None;
-        let title = match &dlg.what {
-            NameFor::New => crate::tl!("Save drawing space"),
-            NameFor::Rename(_) => crate::tl!("Rename drawing space"),
-            NameFor::Duplicate(_) => crate::tl!("Duplicate drawing space"),
-        };
-        egui::Window::new(title).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_TOP, vec2(0.0, 80.0)).show(ctx, |ui| {
-            ui.label(crate::tl!("Name"));
-            let r = ui.add(egui::TextEdit::singleline(&mut dlg.text).desired_width(260.0));
-            if dlg.focus {
-                r.request_focus();
-                dlg.focus = false;
-            }
-            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            ui.horizontal(|ui| {
-                if (ui.button(crate::tl!("OK")).clicked() || enter) && !dlg.text.trim().is_empty() {
-                    done = Some(true);
-                }
-                if ui.button(crate::tl!("Cancel")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                    done = Some(false);
-                }
-            });
-        });
-        match done {
-            None => app.ctx_bar.name_dialog = Some(dlg),
-            Some(false) => {}
-            Some(true) => {
-                let name = dlg.text.trim().to_string();
-                let r = match &dlg.what {
-                    NameFor::New => app.run("space.save", json!({"name": name, "current": true})),
-                    NameFor::Rename(id) => app.run("space.update", json!({"id": id, "newName": name})),
-                    NameFor::Duplicate(id) => app.run("space.duplicate", json!({"id": id, "newName": name})),
-                };
-                if say(app, r).is_none() {
-                    // Keep the dialog open so the name can be corrected.
-                    app.ctx_bar.name_dialog = Some(dlg);
-                }
-                refresh(app, true);
-            }
-        }
-    }
-    if let Some(c) = app.ctx_bar.confirm.take() {
-        let mut answer: Option<bool> = None;
-        egui::Window::new(crate::tl!("Apply drawing space"))
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_TOP, vec2(0.0, 80.0))
-            .show(ctx, |ui| {
-                ui.label(format!("{}: {} {}", c.name, c.count, crate::tl!("layer settings will change. Objects are not changed.")));
-                ui.horizontal(|ui| {
-                    if ui.button(crate::tl!("Apply")).clicked() {
-                        answer = Some(true);
-                    }
-                    if ui.button(crate::tl!("Cancel")).clicked() {
-                        answer = Some(false);
-                    }
-                });
-            });
-        match answer {
-            None => app.ctx_bar.confirm = Some(c),
-            Some(true) => run(app, Action::ConfirmedActivate(c.id)),
-            Some(false) => {}
-        }
-    }
-    crate::spaceeditor::show(app, ctx);
 }
 
 #[cfg(test)]

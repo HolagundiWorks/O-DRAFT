@@ -28,6 +28,7 @@ levels read-only). Every phase is useful and testable alone, starting with level
 | Term | Meaning |
 |---|---|
 | Level | Named model space with its own objects. All levels share one world origin and one layer table. Walls, doors, rooms, columns, stairs, take-off and the parametric graph act on the active level only. Elevation and height come from the existing `levels` / `floors` data |
+| Site origin | Shared world XY base (`Drawing::site_origin`, project key `siteOrigin`, command `site.origin`). Default `(0, 0)`. Not a per-level offset. The WinUI host draws a world-space SITE mark (with the UCS Icon toggle); egui axes pass through the same point |
 | Trace | Read-only faded display of another level under the active one. Per trace: fade (0-90 %), colour (grey or true), order (below or above), object-snap switch, optional layer list. Never selectable or editable. At most 8 per level; a level may not trace itself |
 | Sheet set | Named discipline with one annotation store **per level** (text, dimensions, leaders, tags, symbols, hatches). While active, the level is shown locked and only annotation is drawn |
 | Sheet view | (sheet set, level): that level's geometry (locked, filtered by the set's layer visibility) plus the set's annotation for it |
@@ -84,7 +85,7 @@ as traces). Guides are never saved; they are recomputed on open. What the user d
 | Sill and head lines | opening attributes `OSILL`, `OHEIGHT`, `OHEAD` | yes | yes |
 | Columns, stair start and end | column and stair objects crossing or seen | yes | seen only |
 
-Guide maths lives in `crates/engine/src/sectionguide.rs`: plain 2D line/segment intersection and
+Guide maths is planned for `crates/engine/src/sectionguide.rs` (the file does not exist yet): plain 2D line/segment intersection and
 projection onto the marker line. Hostile-input rules apply: zero-length line, depth 0 or negative,
 NaN or infinite heights, more than 100 000 guide lines (capped, with a note), nested blocks bounded by
 `MAX_BLOCK_DEPTH`. Guides know only O-Draft walls, openings, columns and stairs (or objects carrying
@@ -153,7 +154,7 @@ undo restores them, including the active tab. `Viewport` gains `level?` (none = 
 |---|---|
 | `level.list`, `level.new {name, elevation?, height?, after?, copyFrom?}`, `level.set`, `level.delete` (refused for the last level or one in use, unless `force`), `level.activate` | Manage levels; each is one undo step |
 | `level.trace {level?, add?, remove?, fade?, colour?, order?, snap?, layers?}` | Edit a level's traces |
-| `level.copyto {levels, selection?}`, `level.moveto {level}` | Copy or move the selection between levels at the same coordinates |
+| `level.copyto {levels\|level, selection?, from?, to?}`, `level.moveto {level, from?, to?}` | Copy or move the selection between levels. Optional `from` / `to` shift geometry so a picked origin matches a point (default `to`: site origin) |
 | `sheetset.list / .new / .set / .delete`, `sheetset.activate {set\|null}` | Manage sheet sets; `new` with `preset` creates the five standard ones |
 | `viewport.set` (extended) `{handle, level?, sheetSet?, traces?}` | What a layout viewport shows |
 | `level.import / level.export {path, level}`; `level.fromfloors`; `project.merge` | Migration (below) |
@@ -482,7 +483,7 @@ carried `levels`, `sheetSets` and `designMode`):
 - **Right-hand panels and the layer selector**: the top tool bar starts with the current-layer
   selector (Color and Linetype stay removed). While a sheet-set tab is active its list holds only the
   layers that tab maps (`layer.scope all` lists every layer). The right edge has a rail of four
-  vertical titles (Properties, Layers, Blocks, Project, Graph, History, Revisions) that is always visible, open or
+  vertical titles (Properties, Layers, Blocks, Project, History, Revisions) that is always visible, open or
   collapsed. Clicking a title opens that panel and only that panel (the tab strip inside the panel is
   gone; the panel's own title, such as `Layer . Outline`, sits above it with the Pin and Float
   buttons); clicking the title of the open panel collapses the dock to the rail. Hovering no longer
@@ -496,13 +497,14 @@ carried `levels`, `sheetSets` and `designMode`):
   a thin accent line on the outer edge. The bars lost their divider lines. Checked by hand in the light
   theme only; the colours come from the theme brushes and the tabs are rebuilt on a theme switch, which
   was not tried.
-- **Move selection to a level**: select objects, right-click the canvas (no command running), and
-  the shortcut menu has *Move to Level* with every other level listed; a click runs `level.moveto`
-  with that level, so the objects keep their coordinates and leave the active level (one undo
-  step; the selection is cleared). The entry is offered only in the design view of a drawing with
-  two or more levels, because `level.moveto` refuses a sheet view and a one-level drawing. The menu
-  window is taller than before (up to 640 px of items) so the whole menu shows. There is no
-  matching *Copy to Level* entry yet (`level.copyto` exists).
+- **Send selection to a level**: select objects, then either right-click the canvas → *Send to
+  Level* → *Move to Level* / *Copy to Level* and pick a level, or right-click a level tab →
+  *Send selection here…* / *Copy selection here…*. The shell starts the command form with that
+  level preset and prompts on the drawing for an **origin point** on the selection, then a
+  **matching point** (Enter = site origin). Geometry is shifted by `to − from` before the move
+  or copy so floors drawn offset in one plan can share the site base. Enter on the origin prompt
+  keeps world coordinates (previous behaviour). Architecture → Levels → Move / Copy to Level
+  opens the same form. Offered only in design view with two or more levels.
 - **Sheet-set rail** on the left edge as vertical tabs (the name rotated 90 degrees, reading
   upward): Design, then one tab per sheet set, the active one
   selected; a click runs `sheetset.activate`. Without sheet sets the rail shows Design and a

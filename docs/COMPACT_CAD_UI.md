@@ -39,7 +39,7 @@ Implemented values live in `Density.cs` and `Themes/*Tokens.xaml` (keep in sync)
 | Side rail (collapsed) | Side-rail label transform in `MainWindow.xaml.cs` |
 | Command / Ask bar | `CommandBar`, `AiInput`; cursor CAD in `CommandChrome.cs` |
 | Status bar | `StatusRow`, chips, units, theme |
-| Start / splash | `StartPage`, splash overlay |
+| Start / splash | `WelcomeOverlay` (New / Open / Project Wizard / recent), `BusyOverlay` (open/save progress), splash overlay |
 
 ### Dialogs and managers
 

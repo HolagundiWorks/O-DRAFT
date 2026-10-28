@@ -214,6 +214,26 @@ pub static FORMS: &[Form] = &[
         fields: &[field("level", "Level (name)", Kind::Text).req(), field("force", "Delete although objects or traces are on it", Kind::Bool)],
     },
     Form {
+        id: "level.moveto",
+        title: "Send Selection to Level",
+        wrap: None,
+        fields: &[
+            field("level", "Target level (name)", Kind::Text).req(),
+            field("from", "Origin point on the selection (Enter: keep world coordinates)", Kind::Point).ask(),
+            field("to", "Matching point for that origin (Enter: site origin)", Kind::Point).ask(),
+        ],
+    },
+    Form {
+        id: "level.copyto",
+        title: "Copy Selection to Level",
+        wrap: None,
+        fields: &[
+            field("level", "Target level (name)", Kind::Text).req(),
+            field("from", "Origin point on the selection (Enter: keep world coordinates)", Kind::Point).ask(),
+            field("to", "Matching point for that origin (Enter: site origin)", Kind::Point).ask(),
+        ],
+    },
+    Form {
         id: "beams",
         title: "Beam Depth List",
         wrap: None,

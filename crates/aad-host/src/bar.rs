@@ -75,13 +75,6 @@ pub fn is_reference_marker(word: &str) -> bool {
     PROVIDERS.iter().any(|provider| provider.name.eq_ignore_ascii_case(word.trim_end_matches([',', '.', ':', ';'])))
 }
 
-/// Space with no command waiting: run the line unless it is an assistant `/` request or an open quote.
-#[allow(dead_code)] // contract helper; WinUI uses [`space_is_literal`] over FFI; unit tests cover this
-pub fn space_executes(buffer: &str) -> bool {
-    let text = buffer.trim();
-    !text.is_empty() && !text.starts_with('/') && !inside_quoted(buffer)
-}
-
 /// Whether Space should type a space rather than submit.
 ///
 /// Literal when: assistant `/` request; pure text prompt; open quote; otherwise CAD (Space runs)
@@ -172,23 +165,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn space_executes_without_a_leading_slash() {
-        assert!(space_executes("line"));
-        assert!(space_executes("l"), "an alias");
-        assert!(space_executes("lin"), "Space still submits; the shell may complete the name");
-        assert!(space_executes("audit this"), "without / Space runs the line as a command");
-        assert!(!space_executes("/"));
-        assert!(!space_executes("/ what is here"));
-        assert!(!space_executes(""));
-    }
-
-    #[test]
     fn space_stays_literal_inside_unbalanced_quotes() {
         assert!(inside_quoted(r#"open "C:\My"#));
-        assert!(!space_executes(r#"open "C:\My Files"#));
         assert!(space_is_literal(&Session::new(), r#"open "C:\My Files"#));
         assert!(!inside_quoted(r#"open "C:\My Files\x.dxf""#));
-        assert!(space_executes(r#"open "C:\My Files\x.dxf""#));
     }
 
     #[test]

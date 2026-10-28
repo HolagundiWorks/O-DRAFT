@@ -79,6 +79,7 @@ public sealed partial class MainWindow : Window
     private Window? _dimStyleWindow;
     private Window? _linetypeWindow;
     private Window? _parametersWindow;
+    private Window? _graphWindow;
     private Window? _revisionsWindow;
     private Window? _historyWindow;
     private HistoryWindow.HistoryPanelController? _historyPanel;
@@ -177,21 +178,10 @@ public sealed partial class MainWindow : Window
         _ = HideSplashSoon();
     }
 
-    private async Task HideSplashSoon()
-    {
-        try
-        {
-            await Task.Delay(900);
-        }
-        catch (TaskCanceledException)
-        {
-        }
-        SplashOverlay.Visibility = Visibility.Collapsed;
-    }
-
     /// <summary>Open the files given on the command line, one after the other, without blocking the window.</summary>
     private async Task OpenLaunchFiles()
     {
+        var any = false;
         foreach (var path in _launch.Files)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -203,6 +193,8 @@ public sealed partial class MainWindow : Window
                 History.Text = Native.LastError(_host);
                 continue;
             }
+            ShellPrefs.RememberRecent(path);
+            any = true;
             _docKey = "";
         }
         if (_launch.Project is { } project && _launch.Files.Count > 0)
@@ -210,8 +202,9 @@ public sealed partial class MainWindow : Window
             // Says on the command line when the drawing belongs to a different project (or none).
             Native.Execute(_host, "aorms.expect", JsonSerializer.Serialize(new Dictionary<string, string> { ["projectOfficeId"] = project }));
         }
-        if (_launch.Files.Count > 0)
+        if (any)
         {
+            HideWelcome();
             AfterCommand();
         }
     }
@@ -1742,6 +1735,7 @@ public sealed partial class MainWindow : Window
 
     private void OnNewDrawing(object sender, RoutedEventArgs e)
     {
+        HideWelcome();
         StartCommand("new");
         EnsureModelSpace();
         _docKey = "";
@@ -1870,30 +1864,50 @@ public sealed partial class MainWindow : Window
 
     private async Task<bool> OpenFileAsync(string path)
     {
-        if (!Native.OpenStart(_host, path))
+        var name = System.IO.Path.GetFileName(path);
+        ShowBusy("Opening?", string.IsNullOrEmpty(name) ? path : name);
+        try
         {
-            return false;
+            if (!Native.OpenStart(_host, path))
+            {
+                return false;
+            }
+            int state;
+            while ((state = Native.OpenPoll(_host)) == 1)
+            {
+                await Task.Delay(30);
+            }
+            return state == 2;
         }
-        int state;
-        while ((state = Native.OpenPoll(_host)) == 1)
+        finally
         {
-            await Task.Delay(30);
+            HideBusy();
         }
-        return state == 2;
     }
 
     private async Task<bool> SaveFileAsync(string? path)
     {
-        if (!Native.SaveStart(_host, path))
+        var detail = string.IsNullOrEmpty(path)
+            ? "Current drawing"
+            : (System.IO.Path.GetFileName(path) ?? path);
+        ShowBusy("Saving?", detail);
+        try
         {
-            return false;
+            if (!Native.SaveStart(_host, path))
+            {
+                return false;
+            }
+            int state;
+            while ((state = Native.SavePoll(_host)) == 1)
+            {
+                await Task.Delay(30);
+            }
+            return state == 2;
         }
-        int state;
-        while ((state = Native.SavePoll(_host)) == 1)
+        finally
         {
-            await Task.Delay(30);
+            HideBusy();
         }
-        return state == 2;
     }
 
     private async Task<bool> PickFileCore(string id)
@@ -1914,17 +1928,27 @@ public sealed partial class MainWindow : Window
             if (file.Path.EndsWith(".vdb", StringComparison.OrdinalIgnoreCase))
             {
                 // Open replaces model space so a .vdb is not merged onto the current drawing.
-                var import = "{\"path\":" + JsonSerializer.Serialize(file.Path) + ",\"replace\":true}";
-                if (Native.Execute(_host, "vdb.import", import) != 0)
+                ShowBusy("Opening?", file.Name);
+                try
                 {
-                    History.Text = Native.LastError(_host);
+                    var import = "{\"path\":" + JsonSerializer.Serialize(file.Path) + ",\"replace\":true}";
+                    if (Native.Execute(_host, "vdb.import", import) != 0)
+                    {
+                        History.Text = Native.LastError(_host);
+                        AfterCommand();
+                        return false;
+                    }
+                    Native.Execute(_host, "zoom.extents", "{}");
+                    ShellPrefs.RememberRecent(file.Path);
+                    HideWelcome();
+                    _docKey = "";
                     AfterCommand();
-                    return false;
+                    return true;
                 }
-                Native.Execute(_host, "zoom.extents", "{}");
-                _docKey = "";
-                AfterCommand();
-                return true;
+                finally
+                {
+                    HideBusy();
+                }
             }
             // The file is read on a worker thread so the window keeps responding; the host fits the view.
             History.Text = "Opening " + file.Name + "...";
@@ -1935,6 +1959,8 @@ public sealed partial class MainWindow : Window
                 AfterCommand();
                 return false;
             }
+            ShellPrefs.RememberRecent(file.Path);
+            HideWelcome();
             _docKey = "";
             AfterCommand();
             return true;
@@ -1974,6 +2000,8 @@ public sealed partial class MainWindow : Window
             AfterCommand();
             return false;
         }
+        ShellPrefs.RememberRecent(chosen.Path);
+        HideWelcome();
         _docKey = "";
         AfterCommand();
         return true;
@@ -2399,6 +2427,7 @@ public sealed partial class MainWindow : Window
         _dimStyleWindow = null;
         _linetypeWindow = null;
         _parametersWindow = null;
+        _graphWindow = null;
         _revisionsWindow = null;
         _historyWindow = null;
         _smartBlockWindow = null;
@@ -2423,7 +2452,7 @@ public sealed partial class MainWindow : Window
         {
             _calc, _pomodoro, _toolsWindow, _leftFloat, _pdfWindow, _formWindow,
             _unitsWindow, _textStyleWindow, _pageSetupWindow, _plotStyleWindow, _batchPlotWindow,
-            _dimStyleWindow, _linetypeWindow, _parametersWindow, _revisionsWindow, _historyWindow, _smartBlockWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
+            _dimStyleWindow, _linetypeWindow, _parametersWindow, _graphWindow, _revisionsWindow, _historyWindow, _smartBlockWindow, _hatchWindow, _pointStyleWindow, _mleaderStyleWindow,
             _roomSettingsWindow, _draftingWindow, _quickWindow, _quickSelectWindow,
         })
         {
@@ -3569,6 +3598,20 @@ public sealed partial class MainWindow : Window
             _parametersWindow.Closed += (_, _) => _parametersWindow = null;
         }
         PresentToolWindow(_parametersWindow);
+    }
+
+    private void OpenGraph()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        if (_graphWindow == null)
+        {
+            _graphWindow = GraphWindow.Open(this, _host, AfterCommand);
+            _graphWindow.Closed += (_, _) => _graphWindow = null;
+        }
+        PresentToolWindow(_graphWindow);
     }
 
     private void OpenRevisions()
@@ -5479,12 +5522,12 @@ public sealed partial class MainWindow : Window
             Native.SetUcs(_host, _ucs);
             return;
         }
-        if (run == "levelmove")
+        if (run is "levelmove" or "levelcopy")
         {
-            // "Move to Level": the entry's id is the target level's id.
+            // Start the form with the target level so the canvas asks for origin / matching points.
             if (long.TryParse(id, out var level))
             {
-                RunShellCommand("level.moveto", new Dictionary<string, object> { ["level"] = level });
+                StartLevelSend(run == "levelcopy" ? "level.copyto" : "level.moveto", level);
             }
             return;
         }
@@ -6041,10 +6084,10 @@ public sealed partial class MainWindow : Window
         CommandItem(window, "Layers palette", () => ShowSidePanel(SideTab.Layers));
         CommandItem(window, "Blocks", () => ShowSidePanel(SideTab.Blocks));
         CommandItem(window, "Project settings", () => ShowSidePanel(SideTab.Project));
-        CommandItem(window, "Graph", () => ShowSidePanel(SideTab.Graph));
         CommandItem(window, "History", () => ShowSidePanel(SideTab.History));
         CommandItem(window, "Revisions", () => ShowSidePanel(SideTab.Revisions));
         CommandItem(window, "Parameters Manager", OpenParameters);
+        CommandItem(window, "Graph", OpenGraph);
         CommandItem(window, "Revision register", OpenRevisions);
         CommandItem(window, "Version history", OpenHistory);
         CommandItem(window, "Classic workspace", () => SwitchWorkspace(classic: true));
@@ -6069,7 +6112,6 @@ public sealed partial class MainWindow : Window
         Layers,
         Blocks,
         Project,
-        Graph,
         History,
         Revisions,
     }
@@ -6093,7 +6135,6 @@ public sealed partial class MainWindow : Window
             SideTab.Layers => LayersTab,
             SideTab.Blocks => BlocksTab,
             SideTab.Project => ProjectTab,
-            SideTab.Graph => GraphTab,
             SideTab.History => HistoryTab,
             SideTab.Revisions => RevisionsTab,
             _ => PropertiesTab,
@@ -6104,13 +6145,8 @@ public sealed partial class MainWindow : Window
         LayersTab.Visibility = item == LayersTab ? Visibility.Visible : Visibility.Collapsed;
         BlocksTab.Visibility = item == BlocksTab ? Visibility.Visible : Visibility.Collapsed;
         ProjectTab.Visibility = item == ProjectTab ? Visibility.Visible : Visibility.Collapsed;
-        GraphTab.Visibility = item == GraphTab ? Visibility.Visible : Visibility.Collapsed;
         HistoryTab.Visibility = item == HistoryTab ? Visibility.Visible : Visibility.Collapsed;
         RevisionsTab.Visibility = item == RevisionsTab ? Visibility.Visible : Visibility.Collapsed;
-        if (tab == SideTab.Graph)
-        {
-            EnsureGraphEditorSeeded();
-        }
         if (tab == SideTab.History)
         {
             EnsureHistoryPanel();

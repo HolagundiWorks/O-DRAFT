@@ -6,10 +6,18 @@
 //!
 //! A drawing with no `Level` records is a single implicit level (every older file): nothing changes
 //! for it until the first level is added with `Drawing::materialize_levels`.
+//!
+//! The **site origin** (`SITE_ORIGIN_KEY` in `Drawing::project`) is the shared world XY base for
+//! every level — not a per-level offset. Default is `(0, 0)`.
 
 use aad_geom::Vec2;
 
 use crate::{DocError, Drawing, EntityStore, Result};
+
+/// Project-data key for the shared site / world base point (`[x, y]` JSON).
+pub const SITE_ORIGIN_KEY: &str = "siteOrigin";
+/// Absolute coordinate magnitude allowed for the site origin (hostile input).
+const SITE_ORIGIN_MAX: f64 = 1.0e9;
 
 /// Most levels in one drawing.
 pub const MAX_LEVELS: usize = 64;
@@ -269,5 +277,74 @@ impl Drawing {
     /// Whether any other level traces `id`.
     pub fn level_is_traced(&self, id: LevelId) -> bool {
         self.levels.iter().any(|l| l.id != id && l.traces.iter().any(|t| t.level == id))
+    }
+
+    /// Shared world XY site base for every level. Missing or bad JSON means `(0, 0)`.
+    pub fn site_origin(&self) -> Vec2 {
+        let Some(text) = self.project.get(SITE_ORIGIN_KEY) else {
+            return Vec2::ZERO;
+        };
+        parse_site_origin(text).unwrap_or(Vec2::ZERO)
+    }
+
+    /// Set the shared site base. Rejects non-finite or out-of-range values. Same for all levels.
+    pub fn set_site_origin(&mut self, at: Vec2) -> Result<()> {
+        if !at.is_finite() || at.x.abs() > SITE_ORIGIN_MAX || at.y.abs() > SITE_ORIGIN_MAX {
+            return Err(invalid("site origin must be a finite XY within ±1e9"));
+        }
+        let text = serde_json::to_string(&[at.x, at.y]).map_err(|_| invalid("could not store site origin"))?;
+        self.project.insert(SITE_ORIGIN_KEY.into(), text);
+        Ok(())
+    }
+}
+
+fn parse_site_origin(text: &str) -> Option<Vec2> {
+    let v: serde_json::Value = serde_json::from_str(text).ok()?;
+    let (x, y) = match &v {
+        serde_json::Value::Array(a) if a.len() >= 2 => (a[0].as_f64()?, a[1].as_f64()?),
+        serde_json::Value::Object(o) => (o.get("x")?.as_f64()?, o.get("y")?.as_f64()?),
+        _ => return None,
+    };
+    if !x.is_finite() || !y.is_finite() || x.abs() > SITE_ORIGIN_MAX || y.abs() > SITE_ORIGIN_MAX {
+        return None;
+    }
+    Some(Vec2::new(x, y))
+}
+
+#[cfg(test)]
+mod site_origin_tests {
+    use super::*;
+
+    #[test]
+    fn site_origin_defaults_to_zero_and_survives_set() {
+        let mut d = Drawing::new_metric();
+        assert_eq!(d.site_origin(), Vec2::ZERO);
+        d.set_site_origin(Vec2::new(12.5, -3.0)).expect("set");
+        assert_eq!(d.site_origin(), Vec2::new(12.5, -3.0));
+        assert!(d.project.contains_key(SITE_ORIGIN_KEY));
+    }
+
+    #[test]
+    fn site_origin_rejects_hostile_and_bad_json_reads_as_zero() {
+        let mut d = Drawing::new_metric();
+        assert!(d.set_site_origin(Vec2::new(f64::NAN, 0.0)).is_err());
+        assert!(d.set_site_origin(Vec2::new(SITE_ORIGIN_MAX + 1.0, 0.0)).is_err());
+        d.project.insert(SITE_ORIGIN_KEY.into(), "not-json".into());
+        assert_eq!(d.site_origin(), Vec2::ZERO);
+        d.project.insert(SITE_ORIGIN_KEY.into(), "[1e20, 0]".into());
+        assert_eq!(d.site_origin(), Vec2::ZERO);
+    }
+
+    #[test]
+    fn site_origin_unchanged_when_switching_levels() {
+        let mut d = Drawing::new_metric();
+        d.materialize_levels("Ground", 0.0, 3.0).expect("levels");
+        let ground = d.active_level.expect("active");
+        let upper = d.add_level("First", 3.0, 3.0, Some(ground)).expect("add");
+        d.set_site_origin(Vec2::new(100.0, 200.0)).expect("set");
+        d.switch_level(upper).expect("switch");
+        assert_eq!(d.site_origin(), Vec2::new(100.0, 200.0));
+        d.switch_level(ground).expect("back");
+        assert_eq!(d.site_origin(), Vec2::new(100.0, 200.0));
     }
 }

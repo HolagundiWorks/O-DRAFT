@@ -61,10 +61,10 @@ Non-Windows / wasm: pipe methods return a clear error (`status.available` is fal
 
 `companion.preview` / evaluate / subscribe store a result on the session. The WinUI host overlay
 draws lines/circles/arcs from that result in faded cyan (`_COMPANION`, Handle 0, not selectable).
-Evaluate from the Graph panel stashes the preview so the ghost appears before Commit.
+Evaluate from the Graph window stashes the preview so the ghost appears before Commit.
 
-## WinUI Graph panel (Phase 6)
+## WinUI Graph window (Phase 6)
 
-Side rail **Graph** tab: node canvas (drag, add wall/door/number, double-click edit) and JSON
-mode. Evaluate uses in-process `GraphEngine` when built with sibling O-Dynamo (`ODRAFT_GRAPH`),
-else `companion.evaluate`. Commit via `companion.commit`.
+**Window > Graph** manager (not on the side rail): node canvas (drag, add wall/door/number,
+double-click edit) and JSON mode. Evaluate uses in-process `GraphEngine` when built with sibling
+O-Dynamo (`ODRAFT_GRAPH`), else `companion.evaluate`. Commit via `companion.commit`.

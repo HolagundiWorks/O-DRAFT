@@ -285,11 +285,10 @@ fn ensure_list(app: &mut CadApp, ctx: &egui::Context, px: f64) {
     app.canvas.build_ms = crate::now_ms() - t0;
 }
 
-/// The axes through the origin.
-fn draw_axes(p: &egui::Painter, xf: &Xf) {
+/// Full-viewport axes through the shared site / world base (default `(0, 0)`).
+fn draw_axes(p: &egui::Painter, xf: &Xf, site: Vec2) {
     let t = Tokens::get();
-    // Axes through the origin.
-    let o = xf.to_screen(Vec2::ZERO);
+    let o = xf.to_screen(site);
     if xf.rect.y_range().contains(o.y) {
         p.line_segment([pos2(xf.rect.left(), o.y), pos2(xf.rect.right(), o.y)], Stroke::new(1.0, t.axis_x));
     }
@@ -947,7 +946,8 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             Rgb(255, 255, 255)
         }
         None => {
-            draw_axes(&painter, &xf);
+            let site = app.session.doc().map(|d| d.site_origin()).unwrap_or(Vec2::ZERO);
+            draw_axes(&painter, &xf, site);
             Rgb(t.canvas.r(), t.canvas.g(), t.canvas.b())
         }
     };

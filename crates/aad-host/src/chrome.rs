@@ -70,8 +70,8 @@ pub fn ucs_popup(x: i32, y: i32) -> String {
         "x": x,
         "y": y,
         "groups": [[
-            {"label": "World (WCS)", "id": "show", "enabled": true, "run": "ucs"},
-            {"label": "Hide UCS Icon", "id": "hide", "enabled": true, "run": "ucs"},
+            {"label": "World + site origin", "id": "show", "enabled": true, "run": "ucs"},
+            {"label": "Hide UCS / site mark", "id": "hide", "enabled": true, "run": "ucs"},
         ]],
     })
     .to_string()
@@ -110,22 +110,34 @@ fn command_groups(session: &Session) -> Vec<Vec<serde_json::Value>> {
     groups
 }
 
-/// "Move to Level" for the selected objects: one entry per other level, each running `level.moveto`
-/// (the shell reads `run: "levelmove"` and the level id in `id`). Offered only where the command can
-/// work: the design view of a drawing with two or more levels.
+/// Send / copy the selection to another level. The shell reads `run: "levelmove"` /
+/// `"levelcopy"` and the level id in `id`, then starts the form so the user can pick an
+/// origin point (and matching point) before the objects move. Design view, two or more levels.
 fn level_move_menu(session: &Session) -> Option<serde_json::Value> {
     let d = session.doc().ok()?;
     if d.active_sheet.is_some() || !d.has_levels() || session.selection().is_empty() {
         return None;
     }
-    let items: Vec<_> = d
-        .levels
+    let others: Vec<_> = d.levels.iter().filter(|l| Some(l.id) != d.active_level).take(aad_engine::doc::MAX_LEVELS).collect();
+    if others.is_empty() {
+        return None;
+    }
+    let move_items: Vec<_> = others
         .iter()
-        .filter(|l| Some(l.id) != d.active_level)
-        .take(aad_engine::doc::MAX_LEVELS)
         .map(|l| serde_json::json!({ "label": l.name, "id": l.id.0.to_string(), "enabled": true, "run": "levelmove" }))
         .collect();
-    if items.is_empty() { None } else { Some(serde_json::json!({ "label": "Move to Level", "enabled": true, "items": items })) }
+    let copy_items: Vec<_> = others
+        .iter()
+        .map(|l| serde_json::json!({ "label": l.name, "id": l.id.0.to_string(), "enabled": true, "run": "levelcopy" }))
+        .collect();
+    Some(serde_json::json!({
+        "label": "Send to Level",
+        "enabled": true,
+        "items": [
+            { "label": "Move to Level", "enabled": true, "items": move_items },
+            { "label": "Copy to Level", "enabled": true, "items": copy_items },
+        ]
+    }))
 }
 
 fn snap_groups(session: &Session) -> Vec<Vec<serde_json::Value>> {

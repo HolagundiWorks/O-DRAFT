@@ -76,6 +76,25 @@ internal static class ShellPrefs
         public Dictionary<string, ModeSlot> ModeSlots { get; set; } = new();
         /// <summary>User-resized tool window sizes (pixels), keyed by stable window id.</summary>
         public Dictionary<string, WindowSize> WindowSizes { get; set; } = new();
+        /// <summary>Recently opened drawing paths (newest first), at most 12.</summary>
+        public List<string> Recent { get; set; } = new();
+    }
+
+    /// <summary>Remember <paramref name="path"/> at the front of the recent list (deduped, capped).</summary>
+    public static void RememberRecent(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+        var prefs = Load();
+        prefs.Recent.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        prefs.Recent.Insert(0, path);
+        if (prefs.Recent.Count > 12)
+        {
+            prefs.Recent.RemoveRange(12, prefs.Recent.Count - 12);
+        }
+        Save(prefs);
     }
 
     internal sealed class ModeSlot

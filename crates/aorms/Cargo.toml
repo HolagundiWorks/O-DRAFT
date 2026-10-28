@@ -14,7 +14,6 @@ workspace = true
 keyring-store = ["dep:keyring"]
 
 [dependencies]
-serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 

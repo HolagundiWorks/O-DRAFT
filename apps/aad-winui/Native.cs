@@ -685,9 +685,6 @@ internal static class Native
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
-    [DllImport("user32.dll")]
-    public static extern bool IsWindowVisible(IntPtr hWnd);
-
     /// <summary>Enable or disable input to a window (modal dialogs disable their owner).</summary>
     [DllImport("user32.dll")]
     public static extern bool EnableWindow(IntPtr hWnd, bool enable);

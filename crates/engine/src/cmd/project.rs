@@ -30,6 +30,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["hcwlevels"])
             .params("{} → {levels: [{name, level, floorToFloor, ceiling, lintel, slab, beam}]} (finished floor levels in metres, from the plinth)")
             .noundo(),
+        CommandSpec::new("site.origin", "Site Origin", run_site_origin)
+            .menu(&["Architecture", "Project", "Site Origin"])
+            .alias(&["siteorigin", "basepoint"])
+            .params("{x?: number, y?: number, point?: [x, y]} → {origin: [x, y]}. Shared world XY for every level; omit fields to read. Canvas mark follows the UCS Icon visibility."),
     ]
 }
 
@@ -280,6 +284,32 @@ fn run_levels(s: &mut Session, _p: &Value) -> Result<Value> {
     Ok(json!({ "levels": out }))
 }
 
+fn run_site_origin(s: &mut Session, p: &Value) -> Result<Value> {
+    let mut at = s.doc()?.site_origin();
+    let mut set = false;
+    if let Some(arr) = p.get("point").and_then(Value::as_array) {
+        let x = arr.first().and_then(Value::as_f64).filter(|n| n.is_finite()).ok_or_else(|| bad("site.origin", "`point` needs finite [x, y]"))?;
+        let y = arr.get(1).and_then(Value::as_f64).filter(|n| n.is_finite()).ok_or_else(|| bad("site.origin", "`point` needs finite [x, y]"))?;
+        at = aad_geom::Vec2::new(x, y);
+        set = true;
+    }
+    if p.get("x").is_some() {
+        let x = p.get("x").and_then(Value::as_f64).filter(|n| n.is_finite()).ok_or_else(|| bad("site.origin", "`x` must be a finite number"))?;
+        at.x = x;
+        set = true;
+    }
+    if p.get("y").is_some() {
+        let y = p.get("y").and_then(Value::as_f64).filter(|n| n.is_finite()).ok_or_else(|| bad("site.origin", "`y` must be a finite number"))?;
+        at.y = y;
+        set = true;
+    }
+    if set {
+        s.doc_mut()?.set_site_origin(at).map_err(|e| bad("site.origin", e.to_string()))?;
+    }
+    let origin = s.doc()?.site_origin();
+    Ok(json!({ "origin": [origin.x, origin.y] }))
+}
+
 /// The two-letter code of a floor, as used in room names (`GF`, `FF`, `SF`, `TF`, then `F4`...).
 pub(crate) fn floor_code(name: &str, index: usize) -> String {
     match name.trim().to_ascii_lowercase().as_str() {
@@ -305,4 +335,23 @@ pub(crate) fn active_floor(d: &Drawing) -> Option<(usize, String)> {
 /// Room-name prefix for the active floor, or empty when floors are not defined for this drawing.
 pub(crate) fn active_floor_prefix(d: &Drawing) -> String {
     active_floor(d).map(|(i, n)| floor_code(&n, i)).unwrap_or_default()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod site_origin_cmd {
+    use super::*;
+    use crate::Session;
+
+    #[test]
+    fn site_origin_reads_and_sets() {
+        let mut s = Session::new();
+        let got = s.execute("site.origin", &json!({})).unwrap();
+        assert_eq!(got["origin"], json!([0.0, 0.0]));
+        let set = s.execute("site.origin", &json!({ "point": [10.0, 20.0] })).unwrap();
+        assert_eq!(set["origin"], json!([10.0, 20.0]));
+        assert_eq!(s.doc().unwrap().site_origin(), aad_geom::Vec2::new(10.0, 20.0));
+        assert!(s.execute("site.origin", &json!({ "x": null })).is_err());
+        assert!(s.execute("site.origin", &json!({ "point": [1e20, 0.0] })).is_err());
+    }
 }

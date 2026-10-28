@@ -27,6 +27,10 @@ const HISTORY_REMOVED: Rgb = Rgb(0xe0, 0x55, 0x55);
 const HISTORY_CHANGED: Rgb = Rgb(0xe0, 0xa8, 0x30);
 /// Object-snap and tracking ink (matches egui `Tokens::snap`).
 const SNAP_INK: Rgb = Rgb(0x2f, 0xd0, 0x62);
+/// Site / world base mark: X axis (shared across levels).
+const SITE_X_INK: Rgb = Rgb(0xe0, 0x55, 0x55);
+/// Site / world base mark: Y axis.
+const SITE_Y_INK: Rgb = Rgb(0x2f, 0xd0, 0x62);
 /// Overlay hairline width in points: near one device pixel on typical DPI (AutoCAD-thin).
 const OVERLAY_HAIRLINE: f32 = 0.5;
 
@@ -90,6 +94,7 @@ pub fn mesh(
     let Ok(state) = session.state() else { return MeshData::default() };
     let view = state.view();
     let scale = f64::from(height.max(1)) / view.height.max(1e-12);
+    let site = state.doc.site_origin();
     let mut list = DisplayList::default();
     let mut window_fill: Option<([Vec2; 4], [u8; 4])> = None;
     if let Some(cursor) = cursor {
@@ -229,7 +234,9 @@ pub fn mesh(
         }
     }
     if show_ucs {
+        // Screen-corner orientation chrome, plus the shared world site base (same for every level).
         add_ucs(&mut list, view.center, width, height, scale, icon_px, paper);
+        add_site_origin(&mut list, site, scale, icon_px, paper);
     }
     let mut built = mesh::build_mesh(&list, origin, paper, false);
     if let Some((corners, rgba)) = window_fill {
@@ -526,6 +533,30 @@ fn add_ucs(list: &mut DisplayList, center: Vec2, width: u32, height: u32, scale:
     add_label(list, to_world(px(36.0), f64::from(height) - px(34.0) - px(70.0)), scale, icon_px, "Y", paper);
 }
 
+/// World-space site base shared by every level (not screen chrome). Arms stay ~48 DIP long.
+fn add_site_origin(list: &mut DisplayList, at: Vec2, scale: f64, icon_px: f64, paper: Rgb) {
+    if !at.is_finite() || !scale.is_finite() || scale <= 0.0 || !icon_px.is_finite() || icon_px <= 0.0 {
+        return;
+    }
+    let arm = 48.0 * icon_px / scale;
+    let half = 4.5 * icon_px / scale;
+    if !arm.is_finite() || arm <= 0.0 || !half.is_finite() {
+        return;
+    }
+    let x_end = Vec2::new(at.x + arm, at.y);
+    let y_end = Vec2::new(at.x, at.y + arm);
+    if !x_end.is_finite() || !y_end.is_finite() {
+        return;
+    }
+    add_poly(list, &[at, x_end], SITE_X_INK, true);
+    add_poly(list, &[at, y_end], SITE_Y_INK, true);
+    add_poly(list, &square(at, half), overlay_ink(paper), true);
+    let label_at = Vec2::new(at.x + 10.0 * icon_px / scale, at.y - 14.0 * icon_px / scale);
+    if label_at.is_finite() {
+        add_label(list, label_at, scale, icon_px, "SITE", paper);
+    }
+}
+
 fn add_label(list: &mut DisplayList, at: Vec2, scale: f64, icon_px: f64, text: &str, paper: Rgb) {
     if !at.is_finite() || !scale.is_finite() || scale <= 0.0 {
         return;
@@ -664,6 +695,17 @@ fn add_poly(list: &mut DisplayList, pts: &[Vec2], color: Rgb, aci7: bool) {
 mod tests {
     use super::*;
     use aad_engine::snap::SnapHit;
+
+    #[test]
+    fn site_origin_mark_adds_overlay_geometry_at_world_point() {
+        let mut session = Session::new();
+        session.execute("site.origin", &serde_json::json!({ "point": [50.0, -20.0] })).unwrap();
+        session.execute("zoom.extents", &serde_json::json!({})).unwrap();
+        let with = mesh(&session, None, Rgb(0x20, 0x20, 0x20), 480, Vec2::ZERO, None, 640, true, 1.0);
+        let without = mesh(&session, None, Rgb(0x20, 0x20, 0x20), 480, Vec2::ZERO, None, 640, false, 1.0);
+        assert!(with.quad_instances() > without.quad_instances(), "UCS + site mark stroke when show_ucs");
+        assert!(with.quad_instances() > 0);
+    }
 
     #[test]
     fn cursor_tip_prefers_grip_then_snap_name() {

@@ -122,59 +122,6 @@
                             <StackPanel x:Name="ProjectPanel" Margin="{StaticResource PaddingPanel}" Spacing="{StaticResource SpaceXs}" />
                         </ScrollViewer>
                     </Grid>
-                    <Grid x:Name="GraphTab" Visibility="Collapsed" AutomationProperties.Name="Graph">
-                        <Grid x:Name="GraphHost" Margin="{StaticResource PaddingPanel}" RowSpacing="{StaticResource SpaceXs}">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
-                                <Button x:Name="GraphModeNodes" Content="Nodes" Click="OnGraphModeNodes" Style="{StaticResource CompactButtonStyle}" />
-                                <Button x:Name="GraphModeJson" Content="JSON" Click="OnGraphModeJson" Style="{StaticResource CompactButtonStyle}" />
-                            </StackPanel>
-                            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
-                                    <Button Content="+ Wall" Click="OnGraphAddWall" Style="{StaticResource CompactButtonStyle}" />
-                                    <Button Content="+ Door" Click="OnGraphAddDoor" Style="{StaticResource CompactButtonStyle}" />
-                                    <Button Content="+ Number" Click="OnGraphAddNumber" Style="{StaticResource CompactButtonStyle}" />
-                                </StackPanel>
-                            </ScrollViewer>
-                            <Grid Grid.Row="2">
-                                <ScrollViewer x:Name="GraphCanvasScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                                    <Canvas
-                                        x:Name="GraphCanvas"
-                                        Width="720"
-                                        Height="520"
-                                        Background="{ThemeResource SurfaceSecondaryBrush}"
-                                        AutomationProperties.Name="Graph nodes" />
-                                </ScrollViewer>
-                                <TextBox
-                                    x:Name="GraphEditor"
-                                    Visibility="Collapsed"
-                                    AcceptsReturn="True"
-                                    TextWrapping="Wrap"
-                                    FontFamily="{StaticResource FontFamilyMono}"
-                                    FontSize="{StaticResource FontSizeCaption}"
-                                    ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                    LostFocus="OnGraphJsonLostFocus"
-                                    AutomationProperties.Name="Graph JSON" />
-                            </Grid>
-                            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
-                                <Button x:Name="GraphEvaluateButton" Content="Evaluate" Click="OnGraphEvaluate" Style="{StaticResource CompactButtonStyle}" />
-                                <Button x:Name="GraphCommitButton" Content="Commit" Click="OnGraphCommit" Style="{StaticResource CompactButtonStyle}" />
-                            </StackPanel>
-                            <TextBlock
-                                x:Name="GraphStatus"
-                                Grid.Row="4"
-                                TextWrapping="Wrap"
-                                FontSize="{StaticResource FontSizeCaption}"
-                                Foreground="{ThemeResource TextSecondaryBrush}"
-                                AutomationProperties.Name="Graph status" />
-                        </Grid>
-                    </Grid>
                     <Grid x:Name="HistoryTab" Visibility="Collapsed" AutomationProperties.Name="History">
                         <Grid x:Name="HistoryHost" Margin="{StaticResource PaddingPanel}" />
                     </Grid>
@@ -437,6 +384,121 @@
             </StackPanel>
         </Grid>
         </Border>
+        <!-- Welcome: shown after splash until New / Open / Project Wizard (or a launch file opens). -->
+        <Grid
+            x:Name="WelcomeOverlay"
+            Grid.Row="2"
+            Visibility="Collapsed"
+            Background="{ThemeResource AppBackgroundBrush}"
+            Canvas.ZIndex="400"
+            AutomationProperties.Name="Welcome">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel
+                    MaxWidth="520"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Margin="24"
+                    Spacing="{StaticResource SpaceLg}">
+                    <Image x:Name="WelcomeLogo" Width="72" Height="72" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
+                    <TextBlock
+                        Text="O-Draft"
+                        FontSize="{StaticResource FontSizeSplashTitle}"
+                        FontWeight="SemiBold"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.HeadingLevel="Level1" />
+                    <TextBlock
+                        Text="Architectural drafting for OSAS"
+                        FontSize="{StaticResource FontSizeSection}"
+                        Foreground="{ThemeResource TextSecondaryBrush}"
+                        HorizontalAlignment="Center"
+                        TextWrapping="Wrap"
+                        TextAlignment="Center" />
+                    <StackPanel Spacing="{StaticResource SpaceSm}" HorizontalAlignment="Stretch">
+                        <Button
+                            Content="New drawing"
+                            Style="{StaticResource PrimaryActionStyle}"
+                            HorizontalAlignment="Stretch"
+                            MinHeight="{StaticResource DialogButtonHeight}"
+                            Click="OnWelcomeNew"
+                            AutomationProperties.Name="New drawing"
+                            AutomationProperties.AutomationId="welcome.new" />
+                        <Button
+                            Content="Open drawing…"
+                            HorizontalAlignment="Stretch"
+                            MinHeight="{StaticResource DialogButtonHeight}"
+                            Click="OnWelcomeOpen"
+                            AutomationProperties.Name="Open drawing"
+                            AutomationProperties.AutomationId="welcome.open" />
+                        <Button
+                            Content="Project Wizard…"
+                            HorizontalAlignment="Stretch"
+                            MinHeight="{StaticResource DialogButtonHeight}"
+                            Click="OnWelcomeWizard"
+                            AutomationProperties.Name="Project Wizard"
+                            AutomationProperties.AutomationId="welcome.wizard" />
+                    </StackPanel>
+                    <StackPanel Spacing="{StaticResource SpaceXs}">
+                        <TextBlock
+                            Text="Recent"
+                            FontSize="{StaticResource FontSizeCaption}"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextSecondaryBrush}"
+                            AutomationProperties.HeadingLevel="Level2" />
+                        <StackPanel x:Name="WelcomeRecent" Spacing="{StaticResource SpaceXs}" AutomationProperties.Name="Recent drawings" />
+                        <TextBlock
+                            x:Name="WelcomeRecentEmpty"
+                            Text="No recent drawings yet."
+                            FontSize="{StaticResource FontSizeCaption}"
+                            Foreground="{ThemeResource TextSecondaryBrush}"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+        <!-- Open / save progress over the canvas (worker-thread file IO). -->
+        <Grid
+            x:Name="BusyOverlay"
+            Grid.Row="2"
+            Visibility="Collapsed"
+            Background="#99000000"
+            Canvas.ZIndex="500"
+            AutomationProperties.Name="File progress">
+            <Border
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{ThemeResource SurfaceElevatedBrush}"
+                BorderBrush="{ThemeResource BorderDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource CornerRadiusAskCard}"
+                Padding="28,24"
+                MinWidth="280"
+                MaxWidth="420">
+                <StackPanel Spacing="{StaticResource SpaceMd}" HorizontalAlignment="Center">
+                    <ProgressRing
+                        x:Name="BusyRing"
+                        Width="40"
+                        Height="40"
+                        IsActive="False"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        x:Name="BusyTitle"
+                        Text="Working…"
+                        FontSize="{StaticResource FontSizeSection}"
+                        FontWeight="SemiBold"
+                        HorizontalAlignment="Center"
+                        TextWrapping="Wrap"
+                        TextAlignment="Center" />
+                    <TextBlock
+                        x:Name="BusyDetail"
+                        FontSize="{StaticResource FontSizeCaption}"
+                        Foreground="{ThemeResource TextSecondaryBrush}"
+                        HorizontalAlignment="Center"
+                        TextWrapping="Wrap"
+                        TextAlignment="Center"
+                        />
+                </StackPanel>
+            </Border>
+        </Grid>
         <!-- In-window splash (avoids a second top-level window fighting the command chrome). -->
         <Grid x:Name="SplashOverlay" Grid.RowSpan="5" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">

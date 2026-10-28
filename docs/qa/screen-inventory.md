@@ -7,7 +7,9 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | ID | Surface | Type | Source file | How opened | Testing status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | main.window | O-Draft main shell | main | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml | Application launch (`Program.cs` → `MainWindow`) | pass | screenshots/03-main-clean-drawing1.webp |
-| main.splash | Startup splash overlay | overlay | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (SplashOverlay) | Shown at load until host/canvas ready | pass | visual 2026-10-26 (dismisses ~900ms) |
+| main.splash | Startup splash overlay | overlay | apps/aad-winui/MainWindow.xaml (SplashOverlay) | Shown at load until host/canvas ready | pass | visual 2026-10-26 (dismisses ~900ms) |
+| main.welcome | Welcome after splash | overlay | apps/aad-winui/MainWindow.xaml (WelcomeOverlay) + WelcomeBusy.cs | Empty launch (no path / not --sample): New, Open, Project Wizard, recent | unverified | code 2026-10-28 |
+| main.busy | Open/save progress | overlay | apps/aad-winui/MainWindow.xaml (BusyOverlay) + WelcomeBusy.cs | While OpenFileAsync / SaveFileAsync (and .vdb import) run | unverified | code 2026-10-28 |
 | main.menu | Menu bar (engine-driven + shell) | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (Bar); MainWindow.xaml.cs BuildMenus() | Always visible when Window ▸ Menu bar checked; populated from host TextMenu | pass | screenshots/03-main-clean-drawing1.webp |
 | main.arch-bar | Tool bar: drawing tools, divider, architecture tools (one line; Layer / Color / Linetype / Floor boxes removed) | toolbar | apps/aad-winui/MainWindow.xaml (ToolStripHost) | Visible under the menu in Classic; tool buttons call StartCommand | not_tested | screenshot removed (no attribution entry) |
 | main.selector.layer | Current layer combo | toolbar | — | Removed from the top bar; the current layer is set in the Layers panel | removed | 2026-10-27 |
@@ -569,7 +571,6 @@ Windows default desktop build uses WinUI (`apps/aad-winui`). The optional egui s
 | egui.mtext-editor | Text Editor (MText) | dialog | crates/ui-egui/src/dialogs.rs | MText edit flow in egui | not_tested | — |
 | egui.import-aqc | Import from AQC | dialog | crates/ui-egui/src/widgets.rs | egui widget window | not_tested | — |
 | egui.customize-topbar | Customize Top Bar | dialog | crates/ui-egui/src/topbar.rs | View menu in egui | not_tested | — |
-| egui.space-editor | Drawing space editor windows | dialog | crates/ui-egui/src/spaceeditor.rs | Space commands in egui | not_tested | — |
 | egui.context-apply-space | Apply drawing space | dialog | crates/ui-egui/src/contextbar.rs | Context bar in egui | not_tested | — |
 | egui.plot-style-alt | Plot style dialogs (egui layout) | manager | crates/ui-egui/src/plotstyles.rs | Parallel to WinUI `PlotStyleWindow` | not_tested | — |
 | egui.layer-window | Layer manager (egui window) | manager | crates/ui-egui/src/layers.rs | Parallel to WinUI `LayerManagerWindow` | not_tested | — |

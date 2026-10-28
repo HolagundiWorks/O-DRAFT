@@ -87,8 +87,7 @@ them, and none opens a dialog.
 
 | File | What |
 |---|---|
-| `src/contextbar.rs` | The **context bar**, a row above the drawing in **both** modes: current-layer selector (search box, colour swatch, locked/frozen/hidden badges, locked and frozen layers shown but not selectable, with the reason), floor selector, drawing space selector (a `●` marks that the layers differ from the saved space; menu: save as new, update from layers, edit, duplicate, rename, delete, show/thaw/unlock all), and the panels pin toggle. A change of more than 25 layer settings asks first |
-| `src/spaceeditor.rs` | The editor window: a table of layers (In space, Visible, Frozen, Locked, derived Editable, and the drawing's state now with differences highlighted), search, state filters, bulk Show/Hide/Freeze/Thaw/Lock/Unlock on the selection (or on the shown rows), name, description, floor, current layer and policy for layers not in the space. "Save changes" edits the saved space; "Apply" changes the drawing; the two are separate buttons and the page says so. The engine's validation message is shown as it is |
+| `src/contextbar.rs` | The **context bar**, a row above the drawing in **both** modes: current-layer selector (search box, colour swatch, locked/frozen/hidden badges, locked and frozen layers shown but not selectable, with the reason), floor selector and the panels pin toggle. The egui window has no drawing-space selector or editor any more (removed 2026-10-28 as unreachable code); spaces are used through the `space.*` commands |
 | `src/docking.rs` | Default layout: the drawing, and **one tabbed stack on the right: Layers, Properties, Blocks** |
 | `src/toolbars.rs` | Draw and Modify (with Dimension and Leader tools) as two vertical bars on the **left** |
 | `src/menus.rs` | Per-mode state: `set_workspace` swaps the panel arrangement, pin state and toolbar switch of the mode being left with its own saved slot; `ui.workspace.reset` |
@@ -115,7 +114,7 @@ them, and none opens a dialog.
 | Both modes have the top toolbar with drawing-context controls | Done | `context_bar.rs` |
 | Layer selector changes the current layer; unsuitable layers refused | Done | `context_bar.rs::the_layer_selector...`, `layer_protection.rs`, `drawing_space.rs` |
 | Floor selector changes the floor, moves nothing | Done | `context_bar.rs::choosing_a_floor...`, `drawing_space.rs::choosing_a_floor...` |
-| Create, edit, save, switch spaces | Done | `drawing_space.rs` (13 tests), `context_bar.rs` |
+| Create, edit, save, switch spaces | Done through the `space.*` commands (no egui control) | `drawing_space.rs` (13 tests) |
 | Saved layer states persist after closing and reopening | Done | `apps/aad-cli/tests/drawing_space_file.rs` (real DXF round trip) |
 | Locked objects cannot be modified through any supported pathway | Done for model space and layouts, 22 commands, by handle and by selection, programmatic and interactive | `layer_protection.rs`. **Not covered:** objects inside block definitions (see below) |
 | Frozen layers follow the engine's rules | Done: not editable, not offered as current, never thawed as a side effect | `layer_protection.rs`, `drawing_space.rs` |
@@ -142,8 +141,7 @@ them, and none opens a dialog.
 - **Per-floor layer state beyond the optional `floor` scope** of a space: not implemented. A space
   can be scoped to a floor and the list filters by it; activating a floor does not activate a space
   (deliberately: the active space is never overwritten by a floor change).
-- **Discipline and floor filters in the editor** use layer names only (search and state filters);
-  layers carry no discipline or floor metadata.
+- **Discipline and floor metadata on layers**: layers carry none; spaces filter by layer name.
 - **Pro-mode panels as temporary overlays** are the existing auto-collapse behaviour (panels dock in
   the side and collapse again); they do not float over the drawing.
 - A change in the **docked/floating panel layout of the old default** (Properties on the left) is
