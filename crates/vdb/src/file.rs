@@ -19,11 +19,17 @@ use crate::{MAX_PAYLOAD, MAX_RECORDS};
 
 /// Host format version written after [`MAGIC`]. Bump when the record layout changes.
 ///
-/// - **1** — tab-separated `handle\ttype\tlayer` payloads (legacy).
-/// - **2** — binary [`crate::payload`] entity payloads (current write format).
+/// - **1** — record layout only (id, bbox, payload). Same layout `shilpid` writes and
+///   reads; take-off `.vdb` files use this so a shared server can open them with `--data`.
+///   Older entity stores also used tab-separated text payloads under this version.
+/// - **2** — binary [`crate::payload`] entity payloads (current entity write format).
+///   Record layout is unchanged; a spatial-grid trailer may follow the records.
 pub const FORMAT_VERSION: u32 = 2;
 /// Oldest readable host format.
 pub const MIN_FORMAT_VERSION: u32 = 1;
+/// Format version for take-off / `shilpid`-compatible record files (layout matches
+/// [`FORMAT_VERSION`] 1 writers; payloads are opaque JSON, not entity binaries).
+pub const SHILPID_COMPAT_VERSION: u32 = 1;
 
 /// One spatial record: opaque id, bbox, and host payload.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,7 +55,17 @@ impl VdbStore {
     }
 
     /// Build from records (reindexes). Rejects oversized collections or payloads.
+    /// Writes as [`FORMAT_VERSION`] (entity host format) unless changed with
+    /// [`Self::with_format_version`].
     pub fn from_records(records: Vec<VdbRecord>) -> Result<Self, Error> {
+        Self::from_records_version(records, FORMAT_VERSION)
+    }
+
+    /// Build from records and set the on-disk format version that [`save_bytes`] will write.
+    pub fn from_records_version(records: Vec<VdbRecord>, format_version: u32) -> Result<Self, Error> {
+        if !(MIN_FORMAT_VERSION..=FORMAT_VERSION).contains(&format_version) {
+            return Err(Error::UnsupportedVersion(format_version));
+        }
         if records.len() > MAX_RECORDS {
             return Err(Error::TooManyRecords { count: records.len(), limit: MAX_RECORDS });
         }
@@ -62,7 +78,17 @@ impl VdbStore {
             }
         }
         let boxes: Vec<(u64, Bbox)> = records.iter().map(|r| (r.id, r.bbox)).collect();
-        Ok(Self { grid: SpatialGrid::build(boxes), records, format_version: FORMAT_VERSION })
+        Ok(Self { grid: SpatialGrid::build(boxes), records, format_version })
+    }
+
+    /// Change the format version written on the next save. Record layout is the same for
+    /// versions 1 and 2; use [`SHILPID_COMPAT_VERSION`] for take-off files `shilpid` can open.
+    pub fn with_format_version(mut self, format_version: u32) -> Result<Self, Error> {
+        if !(MIN_FORMAT_VERSION..=FORMAT_VERSION).contains(&format_version) {
+            return Err(Error::UnsupportedVersion(format_version));
+        }
+        self.format_version = format_version;
+        Ok(self)
     }
 
     pub fn len(&self) -> usize {
@@ -103,12 +129,12 @@ impl Default for VdbStore {
     }
 }
 
-/// Encode the store to bytes.
+/// Encode the store to bytes using the store's [`VdbStore::format_version`].
 pub fn save_bytes(store: &VdbStore) -> Result<Vec<u8>, Error> {
     let count = u32::try_from(store.records.len()).map_err(|_| Error::TooManyRecords { count: store.records.len(), limit: MAX_RECORDS })?;
     let mut w = Writer::new();
     w.raw(MAGIC);
-    w.u32(FORMAT_VERSION);
+    w.u32(store.format_version);
     w.u32(count);
     for record in &store.records {
         write_record(&mut w, record)?;
@@ -307,5 +333,18 @@ mod tests {
         let bytes = save_bytes(&VdbStore::new()).expect("save");
         let back = load_bytes(&bytes).expect("load");
         assert!(back.is_empty());
+    }
+
+    #[test]
+    fn takeoff_compatible_save_writes_version_1() {
+        let store = VdbStore::from_records_version(vec![rec(1, 0.0, 0.0, 1.0, 1.0, br#"{"ref":"W1"}"#)], SHILPID_COMPAT_VERSION).expect("build");
+        let bytes = save_bytes(&store).expect("save");
+        assert_eq!(store.format_version(), SHILPID_COMPAT_VERSION);
+        let mut r = Reader::new(&bytes);
+        assert_eq!(r.raw(MAGIC.len()).unwrap(), MAGIC);
+        assert_eq!(r.u32().unwrap(), SHILPID_COMPAT_VERSION);
+        let back = load_bytes(&bytes).expect("load");
+        assert_eq!(back.format_version(), SHILPID_COMPAT_VERSION);
+        assert_eq!(back.records()[0].payload, br#"{"ref":"W1"}"#);
     }
 }

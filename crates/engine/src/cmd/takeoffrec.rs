@@ -338,7 +338,10 @@ impl Sink for FileSink {
         Ok(self.records.remove(&id).is_some())
     }
     fn save(&mut self) -> Result<()> {
-        let store = aad_vdb::VdbStore::from_records(self.records.values().cloned().collect()).map_err(|e| bad("takeoff.record", e.to_string()))?;
+        // Version 1 matches `shilpid`'s on-disk format so a take-off file can be
+        // opened with `--data` or served; entity stores stay on host version 2.
+        let store = aad_vdb::VdbStore::from_records_version(self.records.values().cloned().collect(), aad_vdb::SHILPID_COMPAT_VERSION)
+            .map_err(|e| bad("takeoff.record", e.to_string()))?;
         aad_vdb::save_path(&self.path, &store).map_err(|e| bad("takeoff.record", format!("{}: {e}", self.path.display())))
     }
 }

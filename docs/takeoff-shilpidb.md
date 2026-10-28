@@ -16,8 +16,11 @@ also reachable from scripts, the control channel and MCP).
   nothing answers; the programs are found through `SHILPIDB_BIN` (a folder), `%LocalAppData%\ShilpiDB\bin`,
   then `PATH`, and the data file is `%LocalAppData%\OSAS\takeoff\takeoff.vdb`. `server: "host:port"` names
   another server and never starts one. `path` writes a `.vdb` file instead; `file: true` puts it beside the
-  saved drawing (`<drawing>.takeoff.vdb`). A file that has records but no header is refused, so an entity
-  store written by `vdb.export` is never overwritten.
+  saved drawing (`<drawing>.takeoff.vdb`).   A file that has records but no header is refused, so an entity
+  store written by `vdb.export` is never overwritten. File mode writes
+  host format **version 1** (same record layout `shilpid` uses) so the
+  `.takeoff.vdb` can be opened with `shilpid --data`; entity `.vdb`
+  exports stay on host version 2.
 - **Protocol** (the contract has no transactions, so the header is the completion marker): claim the slot by
   writing the header with `"state": "recording"` and reading it back; write every row; delete this slot's rows
   that are no longer measured; delete the old annotated-PDF chunks and write the new ones; write the header
@@ -79,9 +82,15 @@ rates or costs.
 
 Walls committed with `param.commit` are collected by the same `bridge.collect` step. Linked, current
 instances become wall rows with `thickness_mm`, `layer` `A-WALL` and `ref` `PW-<instanceId>`; stale
-and detached instances are left out with a warning. Brick take-off walls still omit thickness (they
-measure centre lines). Details: [parametric.md](parametric.md). Hand-off for the O-CoreOp team:
-[HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md](HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md).
+and detached instances are left out with a warning. Brick take-off walls carry the nominal layer
+thickness (230 / 115 mm) and a row `_note` that it is not measured. Details: [parametric.md](parametric.md).
+Hand-off for the O-CoreOp team: [HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md](HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md).
+
+### Floor named on every row
+
+When `level` is omitted, rows are stamped with the **active drawing level**, else the first floor
+name, else `Ground`. A drawing with more than one floor that omits `level` gets a warning that the
+export covers one floor only — pass `level` explicitly for First / Second / ….
 
 ## Tests
 
@@ -118,7 +127,8 @@ Checked: `rows_carry_what_o_coreop_needs_to_use_them_without_guessing`; the fail
 - No menu entry yet in the WinUI shell other than the engine registry's (the commands appear under
   Architecture > Take-off from the registry).
 - Selecting a measured item from its ShilpiDB box (highlight / zoom to the recorded bounds) is not built yet.
-- A check for two drawings that measure the same floor (the double-count risk) is not built on either side.
+- A check for two drawings that measure the same floor (the double-count risk) is built on the
+  O-CoreOp import preview (warns, does not block). O-Draft does not warn at record time yet.
 
 ## Floor regions (single drawing)
 

@@ -449,9 +449,10 @@ fn rows_carry_what_o_coreop_needs_to_use_them_without_guessing() {
     let db = read(&path);
     let rows = |k: u64| -> Vec<Value> { db.iter().filter(|(id, _)| kind(**id) == k).map(|(_, (p, _))| p.clone()).collect() };
 
-    // Walls: the thickness the layer implies.
+    // Walls: the thickness the layer implies, flagged as nominal on the row for O-CoreOp.
     for w in rows(3) {
         assert_eq!(w["thickness_mm"], json!(230.0), "{w}");
+        assert!(w["_note"].as_str().is_some_and(|n| n.contains("nominal")), "{w}");
     }
     assert!(
         r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|w| w.contains("nominal"))),
@@ -507,4 +508,54 @@ fn the_header_names_the_company_file_project_so_o_coreop_can_match_the_take_off(
 fn path_after(s: &mut Session, path: &std::path::Path) -> std::path::PathBuf {
     record(s, path);
     path.to_path_buf()
+}
+
+#[test]
+fn takeoff_file_is_shilpid_format_version_1() {
+    let mut s = session("mm");
+    scene(&mut s);
+    let path = temp("v1");
+    record(&mut s, &path);
+    let store = aad_vdb::load_path(&path).unwrap();
+    assert_eq!(store.format_version(), aad_vdb::SHILPID_COMPAT_VERSION);
+    // On-disk u32 after MAGIC must be 1 so an older `shilpid` can open the file.
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(&bytes[..8], b"SHILPIDB");
+    let ver = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
+    assert_eq!(ver, 1);
+    cleanup(&path);
+}
+
+#[test]
+fn multi_floor_drawing_warns_when_level_is_not_passed() {
+    let mut s = session("mm");
+    scene(&mut s);
+    s.execute(
+        "floors",
+        &json!({"floors": [
+            {"name": "Ground", "floorToFloor": 3.15, "ceiling": 3.0, "lintel": 2.1, "slab": 150, "beam": 450},
+            {"name": "First", "floorToFloor": 3.0, "ceiling": 2.85, "lintel": 2.1, "slab": 150, "beam": 450}
+        ]}),
+    )
+    .unwrap();
+    let path = temp("multilevel");
+    let r = record(&mut s, &path);
+    assert!(
+        r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("2 floors") && t.contains("Pass `level`"))),
+        "{r}"
+    );
+    let explicit = s
+        .execute("takeoff.record", &json!({"path": path.to_string_lossy(), "annotate": false, "level": "First"}))
+        .unwrap();
+    assert!(
+        !explicit["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("Pass `level`"))),
+        "{explicit}"
+    );
+    let db = read(&path);
+    let walls: Vec<_> = db.iter().filter(|(id, _)| kind(**id) == 3).map(|(_, (p, _))| p.clone()).collect();
+    assert!(!walls.is_empty());
+    for w in walls {
+        assert_eq!(w["level"], "First", "{w}");
+    }
+    cleanup(&path);
 }

@@ -6,9 +6,10 @@
 //! opening schedule and the door and window blocks placed in the drawing, and the saved take-off
 //! results for walls, columns, lintels and slabs, and the rooms. Rows carry a `ref` made from the
 //! entity handle they were measured from, so it is the same on every run. Take-off sections that
-//! were never run are reported, not guessed. Brick take-off walls carry no thickness (the take-off
-//! measures centre lines); walls committed from the parametric graph (`param.commit`) carry
-//! `thickness_mm` and a `ref` made from their instance id.
+//! were never run are reported, not guessed. Brick take-off walls carry the nominal
+//! `thickness_mm` the measure layer implies (230 / 115) with a row note; walls committed from the
+//! parametric graph (`param.commit`) carry the graph's measured `thickness_mm` and a `ref` made
+//! from their instance id.
 //!
 //! `bridge.import` reads AQC's file. It never changes geometry. Without `apply` it only reports what
 //! would change; with `apply` it updates the project data. A project field already filled in is
@@ -281,8 +282,11 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     let unit_mm = super::hcw::drawing_units(d, "bridge.export", &Value::Null)?.metres() * 1000.0;
     let mut items: Vec<Item> = Vec::new();
     let floors = project::floors(d);
+    let level_explicit = str_param(p, "level").is_some();
+    // Prefer an explicit `level`, then the active drawing level, then the first floor name.
     let level = str_param(p, "level")
         .map(str::to_string)
+        .or_else(|| d.active_level_ref().map(|l| l.name.clone()))
         .or_else(|| floors.first().and_then(|f| f["name"].as_str()).map(str::to_string))
         .unwrap_or_else(|| "Ground".into());
     let ceiling_mm = floors
@@ -292,6 +296,12 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
         .and_then(|f| f["ceiling"].as_f64())
         .map_or(2850.0, |c| c * 1000.0);
     let mut warnings: Vec<String> = Vec::new();
+    if floors.len() > 1 && !level_explicit {
+        warnings.push(format!(
+            "drawing has {} floors; all measured rows are stamped as `{level}` (active level / first floor). Pass `level` explicitly if that is wrong — one export covers one floor",
+            floors.len()
+        ));
+    }
     // Take-off rows saved without an entity handle: their `ref` is a position, which can change when the take-off is run again.
     let mut unstable = 0usize;
     let mut root = Map::new();
@@ -472,7 +482,11 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             let handle = stable_handle(it);
             let wall_ref = handle.map_or_else(|| mark.to_string(), |h| format!("W{}", h.hex()));
             let thickness = if layer == "MEASURE-HALFBRICK" { HALF_BRICK_MM } else { FULL_BRICK_MM };
-            let row = json!({ "ref": wall_ref, "level": level, "length_mm": mm(len * lf), "height_mm": mm(ceiling_mm), "thickness_mm": thickness, "layer": layer });
+            let row = json!({
+                "ref": wall_ref, "level": level, "length_mm": mm(len * lf), "height_mm": mm(ceiling_mm),
+                "thickness_mm": thickness, "layer": layer,
+                "_note": format!("thickness {thickness} mm is the nominal value the measure layer implies, not a measured thickness; check it"),
+            });
             if let Some(h) = handle {
                 items.push(Item { kind: KIND_WALL, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
             } else {
