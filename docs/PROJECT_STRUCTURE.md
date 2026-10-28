@@ -44,7 +44,6 @@ Generated and ignored (see `.gitignore`): `target/` (Cargo build output), `dist/
 | `aad-host` | C ABI, registry menu, command line, pointer input, and Win32 child window for the WinUI shell. `apps/aad-winui` is the C# project and is excluded from the Cargo workspace |
 | `mcp`, `agent`, `auditor`, `llm` | MCP server, allow-listed tool layer, Auditor v0 detect-only checks, model runtime facade |
 | `office` | Loads the OSAS `office.dll` at run time (Windows) and reads the company file; the `companyfile` command uses it |
-| `aorms` | AORMS sign-in client and project calls (network; engine commands only — no shell connect UI) |
 | `vdb` (`aad-vdb`) | `.vdb` store on ShilpiDB: `file.rs` (embedded codec and `SpatialGrid`), `client.rs` (`VdbClient` for a running `shilpid`). A library, not a program; the engine commands `vdb.export`, `vdb.info` and `vdb.query` use it |
 | `param` (`aad-param`) | Parametric graph engine: `graph.rs`, `nodes.rs`, `schema.rs`, `units.rs`, `formula.rs`, `eval.rs`, `template.rs`; no drawing I/O. Engine `param.*` commands commit walls and take-off facts ([parametric.md](parametric.md)) |
 
@@ -82,7 +81,7 @@ The product is **O-Draft**, the drafting app of OSAS (the Open Source Architectu
 | Crates and libraries `aad-*`, `aad_host.dll`, the Cargo binary names `aad` and `aad-cli`, the C# namespace `Aad.WinUi` | Other crates import them. The Windows package renames the two programs it ships: `aad` becomes `o-draft.exe` and the WinUI shell is `ODraft.WinUi.exe`; the OSAS launcher looks for `o-draft.exe` first and `aad.exe` as a fallback for old installs |
 | Command ids, the command-line grammar, MCP tool names (`serverInfo.name` is `aad`), control-channel methods | Scripts and agents call them |
 | File formats: `AAD_PROJECT` extension data in DXF, `.vdb`, the `hcw-aqc-bridge` file (`source.app` is `AAD`) | Existing drawings and AQC import must keep working |
-| The AORMS session name `aad` and credential `AORMS/Connect/aad`, the application id `io.github.holagundiworks.aad` | The portal and the other apps read them |
+| The application id `io.github.holagundiworks.aad` | Other apps and installers may still key on it |
 | `%APPDATA%\AAD`, `%LOCALAPPDATA%\AAD`, `AAD_*` environment variables, the `AAD Stroke` font name, `AAD-MANUAL`, `AAD-TITLEBLOCK` | Users' settings and saved drawings |
 | The WiX UpgradeCode and the `AAD.Drawing` file association | An installed copy must still upgrade |
 | The repository name | Links and clones |

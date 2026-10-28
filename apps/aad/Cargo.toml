@@ -11,8 +11,7 @@ default-run = "aad"
 workspace = true
 
 [dependencies]
-# The AORMS sign-in is kept in the OS credential store (Windows Credential Manager, shared with AQC); in memory only if that fails.
-aad-engine = { workspace = true, features = ["aorms-keyring"] }
+aad-engine = { workspace = true }
 aad-dwg = { workspace = true }
 aad-fonts = { workspace = true }
 aad-io = { workspace = true }

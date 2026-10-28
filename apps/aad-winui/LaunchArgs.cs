@@ -9,16 +9,12 @@ public sealed class LaunchArgs
 
     public ushort? ControlPort { get; init; }
 
-    /// <summary>The AORMS project the drawings are expected to belong to (<c>--project</c>).</summary>
-    public string? Project { get; init; }
-
     public IReadOnlyList<string> Files { get; init; } = Array.Empty<string>();
 
     public static LaunchArgs Parse(IEnumerable<string> args)
     {
         var sample = false;
         ushort? control = null;
-        string? project = null;
         var files = new List<string>();
         using var it = args.GetEnumerator();
         while (it.MoveNext())
@@ -41,18 +37,6 @@ public sealed class LaunchArgs
                 }
                 continue;
             }
-            if (a is "--project")
-            {
-                if (it.MoveNext())
-                {
-                    var id = it.Current.Trim();
-                    if (id.Length is > 0 and <= 64 && id.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
-                    {
-                        project = id;
-                    }
-                }
-                continue;
-            }
             if (a.StartsWith("--", StringComparison.Ordinal))
             {
                 continue;
@@ -68,7 +52,6 @@ public sealed class LaunchArgs
         {
             Sample = sample,
             ControlPort = control,
-            Project = project,
             Files = files,
         };
     }
