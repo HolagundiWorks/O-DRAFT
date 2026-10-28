@@ -550,6 +550,35 @@ fn a_second_drawing_on_the_same_project_and_floor_is_warned_at_record_time() {
 }
 
 #[test]
+fn floor_regions_stamp_each_measured_wall_with_its_assigned_floor() {
+    let mut s = session("mm");
+    let scene = scene(&mut s);
+    s.execute(
+        "floors",
+        &json!({"floors": [
+            {"name": "Ground", "floorToFloor": 3.15, "ceiling": 3.0, "lintel": 2.1, "slab": 150, "beam": 450},
+            {"name": "First", "floorToFloor": 3.0, "ceiling": 2.85, "lintel": 2.1, "slab": 150, "beam": 450}
+        ]}),
+    )
+    .unwrap();
+    s.execute("floor.declare", &json!({"name": "Ground", "handles": [scene.wall_a.hex()]})).unwrap();
+    s.execute("floor.declare", &json!({"name": "First", "handles": [scene.wall_b.hex()]})).unwrap();
+    let path = temp("entity-floors");
+    let r = record(&mut s, &path);
+    assert!(
+        r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("floor regions") && t.contains("2 floor"))),
+        "{r}"
+    );
+    let db = read(&path);
+    let walls: Vec<_> = db.iter().filter(|(id, _)| kind(**id) == 3).map(|(_, (p, _))| p.clone()).collect();
+    let by_ref: std::collections::BTreeMap<_, _> =
+        walls.into_iter().filter_map(|w| Some((w["ref"].as_str()?.to_string(), w["level"].as_str()?.to_string()))).collect();
+    assert_eq!(by_ref.get(&format!("W{}", scene.wall_a.hex())).map(String::as_str), Some("Ground"));
+    assert_eq!(by_ref.get(&format!("W{}", scene.wall_b.hex())).map(String::as_str), Some("First"));
+    cleanup(&path);
+}
+
+#[test]
 fn the_header_names_the_company_file_project_so_o_coreop_can_match_the_take_off() {
     let mut s = session("mm");
     scene(&mut s);
