@@ -65,11 +65,7 @@ fn cleanup(path: &Path) {
 
 fn read_vdb(path: &Path) -> std::collections::BTreeMap<u64, Value> {
     let store = aad_vdb::load_path(path).unwrap();
-    store
-        .records()
-        .iter()
-        .map(|r| (r.id, serde_json::from_slice(&r.payload).unwrap_or(Value::Null)))
-        .collect()
+    store.records().iter().map(|r| (r.id, serde_json::from_slice(&r.payload).unwrap_or(Value::Null))).collect()
 }
 
 fn kind(id: u64) -> u64 {
@@ -91,11 +87,8 @@ struct TrustScene {
 
 /// Deterministic checklist drawing: closed wall box, D2 + W3 on the front edge, two measured brick lines.
 fn trust_scene(s: &mut Session) -> TrustScene {
-    s.execute(
-        "floors",
-        &json!({"floors": [{"name": "Ground", "floorToFloor": 3.15, "ceiling": 3.0, "lintel": 2.1, "slab": 150, "beam": 450}]}),
-    )
-    .unwrap();
+    s.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.15, "ceiling": 3.0, "lintel": 2.1, "slab": 150, "beam": 450}]}))
+        .unwrap();
     s.execute("openings.std", &json!({})).unwrap();
     // A-WALL faces at 230 mm so thickness is measured, not nominal.
     s.execute(
@@ -270,21 +263,14 @@ fn second_checklist_drawing_on_same_project_and_floor_warns_double_count() {
     trust_scene(&mut a);
     link_project(&mut a);
     let first = record(&mut a, &path);
-    assert!(
-        !first["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("double-count"))),
-        "{first}"
-    );
+    assert!(!first["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("double-count"))), "{first}");
 
     let mut b = session();
     trust_scene(&mut b);
     link_project(&mut b);
     let second = record(&mut b, &path);
     assert!(
-        second["warnings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|w| w.as_str().is_some_and(|t| t.contains("double-count") && t.contains("Ground"))),
+        second["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("double-count") && t.contains("Ground"))),
         "second drawing on same project+floor must warn: {second}"
     );
     // Both drawings remain in the file (warn, do not block).
@@ -314,7 +300,8 @@ fn opening_without_wall_ref_is_caught_and_thickness_regression_is_caught() {
 
     // Nominal-only wall (no A-WALL faces) must keep 230 + honesty note — thickness regression catcher.
     let mut n = session();
-    n.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.15, "ceiling": 3.0, "lintel": 2.1, "slab": 150, "beam": 450}]})).unwrap();
+    n.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.15, "ceiling": 3.0, "lintel": 2.1, "slab": 150, "beam": 450}]}))
+        .unwrap();
     n.execute("takeoff.start", &json!({})).unwrap();
     layer(&mut n, "MEASURE-FULLBRICK");
     n.execute("line", &json!({"points": [[0, 0], [WALL_LEN_MM, 0]]})).unwrap();
@@ -339,9 +326,7 @@ fn checklist_through_a_running_shilpid() {
     let mut s = session();
     let scene = trust_scene(&mut s);
     link_project(&mut s);
-    let r = s
-        .execute("takeoff.record", &json!({"server": addr, "annotate": false}))
-        .unwrap_or_else(|e| panic!("takeoff.record against {addr}: {e}"));
+    let r = s.execute("takeoff.record", &json!({"server": addr, "annotate": false})).unwrap_or_else(|e| panic!("takeoff.record against {addr}: {e}"));
     assert_eq!(r["counts"]["walls"], 2);
     assert_eq!(r["counts"]["openings"], 2);
     assert_eq!(r["state"], "complete");
