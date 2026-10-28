@@ -12,16 +12,23 @@ the drawing holds. Checked by hand in the running shell; there is no automated U
 
 ## Company details (`companyfile`)
 
-The OSAS company file (`document_context`, version 1) gives: company name, address, phone, email,
+The Studio / OSAS company file (`document_context`, version 1) gives: company name, address, phone, email,
 PAN, GSTIN, COA registration, one architect name, the preparation date, and the project's name, code,
-site address, summary and client. The panel shows these read only and has a "Read company file"
-button (`companyfile {refresh: true}`), which needs `OSAS_COMPANY` and a ticket. It was not tried
-against a real company file.
+site address, summary and client. The panel shows these read only. The Project Wizard has a "Read company
+file" button (`companyfile {refresh: true}`), which needs `OSAS_COMPANY` and a ticket. O-Draft never asks
+for the company admin password.
+
+When the drawing holds company-file identity, those fields are **refresh-only**: `project` and
+`project.wizard` refuse changes to Studio-owned keys (`suite.locked_details` in the `project` /
+`companyfile` answer). Firm-only apply locks architect and date; a linked project also locks title,
+client, site address, property id and summary. Engineer and other local fields stay editable. Change
+identity in Studio, then refresh. The local offline `CompanyProfile` store (`projectplan/company.rs`)
+refuses save/logo while `OSAS_COMPANY` is set so it cannot become a second writer of firm identity.
 
 Not available from the company file: **a logo** and **more than one architect**. `CompanyProfile`
-(`projectplan/company.rs`) has a logo path and one architect; neither reaches the panel or the title
-block. Both need either an extension of `document_context` (an OSAS/O-Studio contract, not in this
-repository) or a new profile loader.
+has a logo path and one architect; neither reaches the panel or the title block when suite-linked.
+Both need either an extension of `document_context` (a Studio contract, not in this repository) or a
+profile loader that only mirrors Studio.
 
 ## Import for presentation: not built
 

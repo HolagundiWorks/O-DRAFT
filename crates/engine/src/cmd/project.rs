@@ -16,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("project", "Project Settings", run_project)
             .menu(&["Architecture", "Project", "Project Settings"])
             .alias(&["hcwproject"])
-            .params("{details?: {title, owner, architect, engineer, pid, siteArea, plotUse, address, authority, date, location, summary}, slabMm?, beamMm?, structure?: {slabMm, beamMm}} → {details, structure, company}. `company` is what the company file gave the drawing (name, address, phone, email, pan, gstin, coa_registration, architect_name, prepared_on), read only here: set it with `companyfile`."),
+            .params("{details?: {title, owner, architect, engineer, pid, siteArea, plotUse, address, authority, date, location, summary}, slabMm?, beamMm?, structure?: {slabMm, beamMm}} → {details, structure, company, suite}. `company` is what the company file gave the drawing (name, address, phone, email, pan, gstin, coa_registration, architect_name, prepared_on), read only here: set it with `companyfile`. When `suite.refresh_only`, company-owned detail keys in `suite.locked_details` cannot be changed here — edit them in Studio and refresh."),
         CommandSpec::new("floors", "Floors", run_floors)
             .menu(&["Architecture", "Project", "Floors"])
             .alias(&["hcwfloors"])
@@ -151,6 +151,7 @@ pub(super) fn run_project(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     if !incoming.is_empty() {
+        let locked = super::companyfile::locked_detail_keys(s.doc()?);
         for (k, v) in &incoming {
             if k == "slabMm" || k == "beamMm" {
                 continue;
@@ -164,6 +165,16 @@ pub(super) fn run_project(s: &mut Session, p: &Value) -> Result<Value> {
             let text = text_detail(v).ok_or_else(|| bad("project", format!("`{k}` must be text")))?;
             if text.len() > 500 {
                 return Err(bad("project", format!("`{k}` is too long")));
+            }
+            if locked.contains(&k.as_str()) {
+                let current = cur.get(k).and_then(Value::as_str).unwrap_or("");
+                if text != current {
+                    return Err(bad(
+                        "project",
+                        format!("`{k}` comes from Studio (company file) and cannot be edited here; change it in Studio and refresh with companyfile"),
+                    ));
+                }
+                continue;
             }
             cur.insert(k.clone(), json!(text));
         }
@@ -194,7 +205,13 @@ pub(super) fn run_project(s: &mut Session, p: &Value) -> Result<Value> {
         apply_structure(s.doc_mut()?, slab, beam)?;
     }
     let (slab, beam) = structure_mm(s.doc()?);
-    Ok(json!({ "details": cur, "structure": { "slabMm": slab, "beamMm": beam }, "company": super::companyfile::company(s.doc()?) }))
+    let d = s.doc()?;
+    Ok(json!({
+        "details": cur,
+        "structure": { "slabMm": slab, "beamMm": beam },
+        "company": super::companyfile::company(d),
+        "suite": super::companyfile::suite_status(d),
+    }))
 }
 
 pub(super) fn run_floors(s: &mut Session, p: &Value) -> Result<Value> {

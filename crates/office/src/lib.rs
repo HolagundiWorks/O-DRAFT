@@ -3,6 +3,7 @@
 //! The company's own details are kept in OSAS and a project's details in O-Studio. Both live in the company file, which
 //! `office.dll` opens. This crate loads that library at run time, signs in with the one-time ticket OSAS passes, and asks for the
 //! `document_context` answer: the company profile, the date, and a project's details. It never writes to the company file.
+//! Product path signs in with a one-time ticket (`OSAS_TICKET`); password login is for tests and tools only.
 //!
 //! Where the library and the file come from (see [`Settings::from_environment`]):
 //! `OSAS_COMPANY` (the company file), `OSAS_TICKET` (one-time sign-in) and `OSAS_OFFICE_DLL` (optional, the library's path).

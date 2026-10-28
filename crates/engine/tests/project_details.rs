@@ -54,4 +54,51 @@ fn project_details_are_bounded_and_the_company_cannot_be_edited_through_them() {
     let r = s.execute("project", &json!({})).unwrap();
     assert!(r["details"]["title"].is_null(), "refused edits changed nothing");
     assert!(r["company"].is_null());
+    assert_eq!(r["suite"]["refresh_only"], false);
+}
+
+#[test]
+fn suite_linked_details_are_refresh_only_through_project() {
+    let mut s = Session::new();
+    s.execute(
+        "companyfile",
+        &json!({
+            "context": {
+                "v": 1,
+                "prepared_on": "2026-10-28",
+                "company": { "name": "Aurelia Design", "architect_name": "A. Rao" },
+                "project": {
+                    "project": { "id": 1, "code": "P-1", "name": "Site A", "site_address": "Plot 1", "summary": "House", "client_name": "Client" },
+                    "client": { "name": "Client" },
+                    "consultancy_label": "Architecture",
+                    "project_ref": { "v": 1, "company_uuid": "u", "project_id": 1 }
+                }
+            }
+        }),
+    )
+    .unwrap();
+    let r = s.execute("project", &json!({})).unwrap();
+    assert_eq!(r["suite"]["refresh_only"], true);
+    assert_eq!(r["suite"]["project_linked"], true);
+    let err = s.execute("project", &json!({"details": {"owner": "Hacker"}})).unwrap_err().to_string();
+    assert!(err.contains("Studio"), "{err}");
+    // Refresh path still replaces company-owned fields.
+    s.execute(
+        "companyfile",
+        &json!({
+            "context": {
+                "v": 1,
+                "prepared_on": "2026-10-29",
+                "company": { "name": "Aurelia Design", "architect_name": "B. Rao" },
+                "project": {
+                    "project": { "id": 1, "code": "P-1", "name": "Site A", "site_address": "Plot 1", "summary": "House", "client_name": "Client" },
+                    "client": { "name": "Client" },
+                    "consultancy_label": "Architecture",
+                    "project_ref": { "v": 1, "company_uuid": "u", "project_id": 1 }
+                }
+            }
+        }),
+    )
+    .unwrap();
+    assert_eq!(s.execute("project", &json!({})).unwrap()["details"]["architect"], "B. Rao");
 }
