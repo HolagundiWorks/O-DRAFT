@@ -68,10 +68,13 @@ saved state and one undo step. Saving keeps the first replaced file as `<name>.b
 ## Rendering
 
 `render::build` turns a space into a display list once per change; the UI uploads it to wgpu in
-batches (`gpu.rs`). Tessellation tolerance follows the view. The R-tree (`spatial.rs`) is patched per
-changed store chunk, so picking stays fast on large drawings. PNG, PDF, SVG and plot preview reuse
-the same display list through the CPU rasteriser or vector writers. The drawing-area background is
-black in the dark theme and white in the light theme; colour 7 is drawn white or black to contrast.
+batches (`gpu.rs`). Tessellation tolerance follows the view. Model space can also retain a tiled
+`Scene` (`aad_render::scene`: `Arc` per world-grid tile, dirty-tile `rebuild_scene`, flatten for
+draw order); mesh packing may remesh only dirty spatial tiles (Phase B). The R-tree (`spatial.rs`)
+is patched per changed store chunk, so picking stays fast on large drawings. PNG, PDF, SVG and plot
+preview reuse the same display list through the CPU rasteriser or vector writers. The drawing-area
+background is black in the dark theme and white in the light theme; colour 7 is drawn white or black
+to contrast.
 
 ## Files
 

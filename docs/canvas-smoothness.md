@@ -14,7 +14,7 @@ Every frame goes through one shared path (WinUI host and optional egui shell). T
 3. **Text** (`crates/fonts`) — stroke font as polylines; TrueType via `skrifa`, fixed 6/8 points per curve, ear-clip fill. No hinting, no glyph atlas.
 4. **Mesh** (`crates/render/src/mesh.rs`) — fills as triangle lists; every polyline segment an instanced screen-space quad (width in points). Positions f32 relative to a snapped origin.
 5. **GPU** (`crates/aad-host/src/gpu.rs`) — wgpu prefers DX12. WGSL expands segment quads and uses distance-to-segment coverage AA. Fills were solid with MSAA off; swapchain is sRGB (linear-light blend).
-6. **Caching** (`aad-host`) — display list keyed by revision, zoom band, LOD, space, and (Phase 1) model pan cell. Pans update a uniform. Zoom-band changes rebuild on a worker.
+6. **Caching** (`aad-host`) — display list keyed by revision, zoom band, LOD, space, and (Phase 1) model pan cell; optional tiled `Scene` (Phase C) with dirty-tile rebuild. Layout VP model LRU is process-wide (not TLS). Pans update a uniform. Zoom-band changes rebuild on a worker.
 7. **Export** (`raster.rs`) — tiny-skia with AA on (often cleaner than the live canvas).
 
 ## Problems (eight)
@@ -81,9 +81,9 @@ From `docs/PERFORMANCE.md` (Oct 2026 machine). Re-measure with `aad-cli perf` / 
 
 | Hotspot | Today | Direction |
 | --- | --- | --- |
-| Display-list at extents | 13 ms / 10k, 129 ms / 100k | GPU curves (#11, ellipses landed); per-entity×octave tessellation cache; **proposed** tiled display-list scene (Phase C) |
+| Display-list at extents | 13 ms / 10k, 129 ms / 100k | GPU curves (#11, ellipses landed); per-entity×octave tessellation cache; **Partial (Phase C)** — tiled `Scene` / dirty-tile `rebuild_scene` + frustum skip of far tiles (`scene_tiles`); absolute ≤ 80 ms @ 100k not claimed |
 | Text-heavy rebuild | 0.32–0.38 s | Glyph cache (#8); greek bars (#9); **proposed** glyph atlas (Phase D) |
-| Any edit | Full `build_mesh` + new GPU buffers | **Partial (Phase B)** — spatial mesh tiles remesh + WinUI dirty tile upload; monolithic fallback for tiny tile counts / spanning wipeouts. **Still open:** tiled display-list scene (Phase C) |
+| Any edit | Full `build_mesh` + new GPU buffers | **Partial (Phase B+C)** — spatial mesh tiles remesh + WinUI dirty tile upload; dirty display-list tiles via `rebuild_scene`; monolithic fallback for tiny tile counts / spanning wipeouts |
 | Layout VP pan across cell | 52 ms / 100k | Existing LRU; GPU curves help |
 | GPU frame time | Unknown | Host/egui `ui.inspect` `perf.buildMs` / `meshMs` / `rings` / `meshBytes` (implemented). Optional WinUI timestamp queries still open |
 

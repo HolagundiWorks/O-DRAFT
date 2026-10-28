@@ -187,7 +187,23 @@ before micro-optimising.
   is below `MIN_MESH_TILES`, above `MAX_MESH_TILES`, or a wipeout spans tiles
   (`mesh_tiling_viable` / `wipeout_spans_tiles`). Regression: `edit_only_remeshes_dirty_tiles`.
 - **Not claimed here:** absolute `meshMs` / `meshBytes` before/after on a reference machine
-  (re-measure with `aad-cli perf` / `ui.inspect`); tiled display-list scene (Phase C).
+  (re-measure with `aad-cli perf` / `ui.inspect`).
+
+## Update: tiled display-list scene (Phase C)
+
+- **Implemented:** `aad_render::scene` retains a model-space `Scene` of world-grid tiles
+  (`SceneTile` = `Arc<DisplayList>`). Entities land by bounds centroid; rays/xlines use
+  `GLOBAL_TILE`. `build_scene` / `rebuild_scene` tessellate only dirty tiles (shared
+  `MAX_BLOCK_EXPANSION` budget, rayon within/across dirty tiles); `flatten_scene` restores
+  document draw order. Frustum builds skip far tiles while `extents` still unions the full
+  model. Layout viewport model cache is a process-wide `Mutex` LRU (`vp_model_get` /
+  `vp_model_put`), not `thread_local`, so worker threads share it. WinUI `FrameCache` keeps
+  an optional `Scene` and prefers `rebuild_scene` on model edits when environment is unchanged;
+  plot / environment changes still take full `build`. Hostile caps: `MAX_SCENE_TILES` /
+  `scene_tiling_viable` (same band as mesh tiles). Regressions: `scene_tiles`,
+  `viewport_pan_cache`, `lod_and_frustum`, `parallel_build`.
+- **Not claimed here:** worker extents rebuild median ≤ ~80 ms @ 100k on a reference machine
+  (re-measure with `aad-cli perf` / `ui.inspect`); glyph atlas (Phase D).
 
 ## Update: file I/O path
 
