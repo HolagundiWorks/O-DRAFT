@@ -131,6 +131,9 @@ const TAKEOFF_PAINT: &[Field] = &[
     field("table", "Draw the table", Kind::Bool).def("true"),
     field("label", "Label the objects", Kind::Bool).def("true"),
 ];
+const TAKEOFF_KINDS: &[&str] = &[
+    "extWall", "intWall", "beam", "lintel", "linear", "floorArea", "ceilingArea", "area", "column", "count", "deduct", "slab", "slabDeduct",
+];
 const TAKEOFF_COLUMNS: &[Field] = &[
     field("layer", "Layer of the column outlines", Kind::Text).def("MEASURE-COLUMN"),
     field("units", "Units (blank: the drawing's)", Kind::Choice(UNITS)),
@@ -350,6 +353,17 @@ pub static FORMS: &[Form] = &[
     Form { id: "takeoff.floor", title: "Flooring Take-off", wrap: None, fields: TAKEOFF },
     Form { id: "takeoff.area", title: "Area Take-off", wrap: None, fields: TAKEOFF },
     Form { id: "takeoff.slab", title: "Slab Take-off", wrap: None, fields: TAKEOFF },
+    Form {
+        id: "takeoff.draw",
+        title: "Draw Take-off",
+        wrap: None,
+        fields: &[
+            field("kind", "What this line is", Kind::Choice(TAKEOFF_KINDS)).req(),
+            field("thicknessMm", "Thickness (mm; blank: the kind's default)", Kind::Number),
+            field("points", "Points of the line or outline", Kind::Points).req().ask(),
+            field("closed", "Close the outline", Kind::Bool),
+        ],
+    },
     Form {
         id: "wall.draw",
         title: "Draw Wall",

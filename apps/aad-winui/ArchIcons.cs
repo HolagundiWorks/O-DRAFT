@@ -69,6 +69,66 @@ internal static partial class ToolIcons
                 pen.Circle(12, 13, 8, pen.BaseBrush);
                 pen.Stroke(true, pen.AccentBrush, (12, 5), (15, 16), (12, 13), (9, 16));
                 break;
+            case "takeoff.ext":
+                pen.Accent(3, 16, 21, 16);
+                pen.Base(3, 10, 21, 10);
+                pen.Label("E", 12, 8, 7, pen.AccentBrush);
+                break;
+            case "takeoff.int":
+                pen.Accent(3, 8, 21, 8);
+                pen.Accent(3, 16, 21, 16);
+                pen.Label("I", 12, 13, 7, pen.BaseBrush);
+                break;
+            case "takeoff.beam":
+                pen.Box(3, 9, 18, 6, pen.AccentBrush);
+                break;
+            case "takeoff.floor":
+                pen.Box(4, 8, 16, 10, pen.BaseBrush);
+                pen.Accent(4, 18, 20, 18);
+                break;
+            case "takeoff.ceiling":
+                pen.Accent(4, 6, 20, 6);
+                pen.Base(6, 10, 6, 18);
+                pen.Base(18, 10, 18, 18);
+                break;
+            case "takeoff.column":
+                pen.FillRect(8, 6, 8, 12, pen.AccentBrush);
+                break;
+            case "takeoff.deduct":
+                pen.Base(4, 6, 4, 18);
+                pen.Base(20, 6, 20, 18);
+                pen.Accent(6, 12, 18, 12);
+                break;
+            case "takeoff.paint":
+                pen.Box(4, 5, 16, 14, pen.BaseBrush);
+                pen.Accent(8, 16, 16, 8);
+                break;
+            case "openings.sync":
+                pen.Arc(12, 12, 7, 40, 320, pen.AccentBrush);
+                pen.Arrow(16.5, 6.5, 1, -0.2);
+                break;
+            case "openings.deduct":
+                pen.Base(5, 5, 5, 19);
+                pen.Base(19, 5, 19, 19);
+                pen.Accent(7, 12, 17, 12);
+                break;
+            case "column.deduct":
+                pen.FillRect(8, 8, 8, 8, pen.BaseBrush);
+                pen.Accent(4, 20, 20, 4);
+                break;
+            case "takeoff.record":
+                pen.Circle(12, 12, 7, pen.AccentBrush);
+                pen.Accent(12, 8, 12, 13);
+                pen.Dot(12, 16);
+                break;
+            case "takeoff.maplayers":
+                pen.Base(4, 7, 10, 7);
+                pen.Accent(14, 7, 20, 7);
+                pen.Base(4, 12, 10, 12);
+                pen.Accent(14, 12, 20, 12);
+                pen.Base(4, 17, 10, 17);
+                pen.Accent(14, 17, 20, 17);
+                break;
             default:
                 for (var k = 0; k < 3; k++)
                 {

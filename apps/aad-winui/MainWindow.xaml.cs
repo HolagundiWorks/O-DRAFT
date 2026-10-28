@@ -2259,7 +2259,7 @@ public sealed partial class MainWindow : Window
     private void SetSideWidth(double width)
     {
         _leftWidth = Math.Clamp(width, 180, 640);
-        PropertiesColumn.Width = new GridLength(_leftWidth + Density.SideRailWidth);
+        PropertiesColumn.Width = new GridLength(_leftWidth + SideRailWidth);
         AutomationProperties.SetName(LeftSplitter, "Resize side panel, width " + (int)_leftWidth);
     }
 
@@ -5639,6 +5639,7 @@ public sealed partial class MainWindow : Window
         gear.Click += (_, _) => OpenTools();
         ToolStrip.Children.Add(gear);
         RebuildArchitectureBar();
+        RebuildTakeoffBar();
     }
 
     private static Button MakeToolTile(UIElement icon, string name)
@@ -5722,6 +5723,74 @@ public sealed partial class MainWindow : Window
                 var button = MakeToolTile(ToolIcons.Architecture(command, _dark), label);
                 button.Click += (_, _) => StartCommand(command);
                 ArchBar.Children.Add(button);
+            }
+        }
+    }
+
+    private void StartTakeoffDraw(string kind)
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        var preset = "{\"kind\":\"" + kind + "\"}";
+        if (Native.StartForm(_host, "takeoff.draw", preset) != 0)
+        {
+            History.Text = "Take-off draw did not start.";
+        }
+    }
+
+    private void RebuildTakeoffBar()
+    {
+        TakeoffBar.Children.Clear();
+        // Draw · compute · sync ? same section dividers as the architecture strip.
+        (string icon, string label, string? kind, string? command)[][] groups =
+        [
+            [
+                ("takeoff.ext", "Ext wall", "extWall", null),
+                ("takeoff.int", "Int wall", "intWall", null),
+                ("takeoff.beam", "Beam", "beam", null),
+                ("takeoff.floor", "Floor", "floorArea", null),
+                ("takeoff.ceiling", "Ceiling", "ceilingArea", null),
+                ("takeoff.column", "Column", "column", null),
+                ("takeoff.deduct", "Deduct", "deduct", null),
+            ],
+            [
+                ("takeoff.paint", "Paint", null, "takeoff.paint"),
+                ("openings.sync", "Openings", null, "openings.sync"),
+                ("openings.deduct", "Fix deducts", null, "openings.deduct"),
+                ("column.deduct", "Col deduct", null, "column.deduct"),
+            ],
+            [
+                ("takeoff.record", "Record", null, "takeoff.record"),
+                ("takeoff.maplayers", "Map layers", null, "takeoff.maplayers"),
+            ],
+        ];
+        var first = true;
+        foreach (var group in groups)
+        {
+            if (!first)
+            {
+                TakeoffBar.Children.Add(MakeToolDivider(horizontalBar: true));
+            }
+            first = false;
+            foreach (var (icon, label, kind, command) in group)
+            {
+                var button = MakeToolTile(ToolIcons.Architecture(icon, _dark), label);
+                var k = kind;
+                var cmd = command;
+                button.Click += (_, _) =>
+                {
+                    if (k != null)
+                    {
+                        StartTakeoffDraw(k);
+                    }
+                    else if (cmd != null)
+                    {
+                        StartCommand(cmd);
+                    }
+                };
+                TakeoffBar.Children.Add(button);
             }
         }
     }
@@ -5968,17 +6037,26 @@ public sealed partial class MainWindow : Window
         {
             RebuildArchitectureBar();
         }
+        if (tools && TakeoffBar.Children.Count == 0)
+        {
+            RebuildTakeoffBar();
+        }
         // The tool strip (drawing and architecture tools) is Classic only.
         if (ArchToolsDivider != null)
         {
             ArchToolsDivider.Visibility = tools && ArchBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         ArchBar.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
+        if (TakeoffToolsDivider != null)
+        {
+            TakeoffToolsDivider.Visibility = tools && TakeoffBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        TakeoffBar.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
         // A panel is open until its title is clicked again (or, unpinned, until the pointer has been
         // away for 1.5 s). The rail of titles is always there, so a collapsed dock is just the rail.
         var leftOpen = _leftFloat != null || !_leftCollapsed;
         var dockWidth = _leftFloat != null ? Math.Min(_leftWidth, 200) : _leftWidth;
-        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth + Density.SideRailWidth : Density.SideRailWidth);
+        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth + SideRailWidth : SideRailWidth);
         SideRail.Visibility = Visibility.Visible;
         LeftColumn.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
         RefreshSideRail();

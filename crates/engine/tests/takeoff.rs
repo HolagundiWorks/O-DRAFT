@@ -128,7 +128,10 @@ fn wall_paint_uses_the_floor_ceiling_height_and_imperial_drawings_use_feet() {
     on(&mut s, "MEASURE-DEDUCT");
     s.execute("line", &json!({"points": [[1000, 0], [2000, 0]]})).unwrap();
     let r = s.execute("takeoff.paint", &json!({"table": false})).unwrap();
-    assert_eq!(r["totals"], json!({"wallArea": 31.35, "openings": 2.85, "net": 28.5, "height": 2.85}));
+    assert_eq!(
+        r["totals"],
+        json!({"wallArea": 62.7, "openings": 5.7, "externalPaint": 28.5, "internalPaint": 28.5, "net": 57.0, "height": 2.85})
+    );
     s.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.2, "ceiling": 3.0, "lintel": 2.1}]})).unwrap();
     assert_eq!(s.execute("takeoff.paint", &json!({"table": false})).unwrap()["totals"]["height"], 3.0);
     assert!(s.execute("takeoff.paint", &json!({"floor": "Roof"})).is_err());
@@ -165,4 +168,26 @@ fn results_export_to_csv_and_clear_only_removes_labels_and_tables() {
     std::fs::remove_dir_all(&dir).unwrap();
     let mut empty = session();
     assert!(empty.execute("takeoff.export", &json!({})).is_err());
+}
+
+#[test]
+fn maplayers_stamps_legacy_walls_and_a_marked_line_is_measured_off_that_layer() {
+    let mut s = session();
+    walls(&mut s);
+    let mapped = s.execute("takeoff.maplayers", &json!({})).unwrap();
+    assert_eq!(mapped["tagged"], 3);
+    assert_eq!(mapped["byKind"]["extWall"], 3);
+    let again = s.execute("takeoff.maplayers", &json!({})).unwrap();
+    assert_eq!((again["tagged"].as_u64(), again["skipped"].as_u64()), (Some(0), Some(3)));
+    let mark = &s.doc().unwrap().model.iter().find(|e| e.common.layer == "MEASURE-FULLBRICK").unwrap().common.takeoff;
+    assert_eq!(mark.as_ref().map(|m| m.kind.as_str()), Some("extWall"));
+    assert_eq!(mark.as_ref().and_then(|m| m.thickness_mm), Some(230.0));
+
+    let drawn = s.execute("takeoff.draw", &json!({"kind": "extWall", "points": [[0, 8000], [2000, 8000]], "closed": false})).unwrap();
+    let hex = drawn["handles"][0].as_str().unwrap();
+    let h = aad_engine::doc::Handle::parse_hex(hex).unwrap();
+    s.doc_mut().unwrap().modify_entity(h, |e| e.common.layer = "0".into()).unwrap();
+    let r = s.execute("takeoff.brick", &json!({"table": false, "label": false})).unwrap();
+    assert_eq!(r["totals"]["count"], 4, "the marked line counts even on layer 0");
+    assert!(r["items"].as_array().unwrap().iter().any(|i| i["handle"] == hex && i["wallType"] == "external" && i["thicknessMm"] == 230.0));
 }

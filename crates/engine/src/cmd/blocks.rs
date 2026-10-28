@@ -221,6 +221,9 @@ fn run_insert(s: &mut Session, p: &Value) -> Result<Value> {
     let rot = f64_or(p, "rotation", 0.0).to_radians();
     let vals = p.get("attribs").and_then(Value::as_object).cloned().unwrap_or_default();
     let h = insert_with(s, &name, at, scale, rot, point_param(p, "basePoint"), &vals)?;
+    if !bool_or(p, "explode", false) {
+        super::electrical::on_insert(s)?;
+    }
     if bool_or(p, "explode", false) {
         return s.execute("explode", &json!({ "handles": [h.hex()] }));
     }

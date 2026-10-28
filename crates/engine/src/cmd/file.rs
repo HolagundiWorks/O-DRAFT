@@ -121,6 +121,7 @@ pub struct Prepared {
 /// "saved" state and one undo step, so the import can be reverted and the file on disk is only
 /// replaced by an explicit save.
 pub fn prepare(mut d: Drawing) -> Prepared {
+    super::takeoff::apply_meta(&mut d);
     let levels_note = d.project.remove(aad_doc::LEVELS_NOTE_KEY);
     let original = std::sync::Arc::new(d.clone());
     let report = crate::flatten::flatten_drawing(&mut d);
@@ -240,6 +241,9 @@ fn run_closeall(s: &mut Session, _p: &Value) -> Result<Value> {
 
 pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<usize> {
     let hooks = io().ok_or_else(|| bad("save", "file formats are not available in this build"))?;
+    if let Ok(d) = s.doc_mut() {
+        super::takeoff::sync_meta(d);
+    }
     // Stamp history.drawingId before writing a drawing file so the bytes include it. Otherwise the
     // post-save auto snapshot would add the id after commit_save and leave the drawing dirty (#327 /
     // history restore points must not undo "saved" for the user).
@@ -407,11 +411,19 @@ pub struct SaveJob {
 
 /// Plan a save to `path`, or to the drawing's own file when `path` is `None`.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn begin_save(s: &Session, path: Option<&str>) -> Result<SaveJob> {
+pub fn begin_save(s: &mut Session, path: Option<&str>) -> Result<SaveJob> {
     let path = match path {
         Some(p) => p.to_string(),
         None => s.state()?.path.clone().ok_or_else(|| bad("qsave", "drawing has no file name yet; use saveas {path}"))?,
     };
+    if is_drawing_file(&path)
+        && let Err(e) = super::history::ensure_drawing_id(s)
+    {
+        s.echo(format!("Drawing history id not prepared: {e}"));
+    }
+    if let Ok(d) = s.doc_mut() {
+        super::takeoff::sync_meta(d);
+    }
     let state = s.state()?;
     Ok(SaveJob { doc: state.doc.clone(), index: s.active, lost: not_saved(&state.doc), path })
 }
@@ -472,6 +484,29 @@ fn after_save(s: &mut Session, r: &mut Value, lost: &std::collections::BTreeMap<
             Ok(None) => {}
             Err(e) => s.echo(format!("ShilpiDB auto-push: {e}")),
         }
+        record_takeoff_if_any(s);
+    }
+}
+
+/// After a successful drawing save, record take-off / openings / electrical rows for O-CoreOp.
+/// Failure is reported and never fails the save.
+fn record_takeoff_if_any(s: &mut Session) {
+    let worth = s.doc().is_ok_and(|d| {
+        let measured = d.project.keys().any(|k| k.starts_with("takeoff:") && k != "takeoffSlot" && k != "takeoffMeta");
+        let openings = super::project::get(d, "schedule")["openings"].as_array().is_some_and(|a| !a.is_empty());
+        let elec = super::project::get(d, "electrical");
+        let wires = elec["wires"].as_array().is_some_and(|a| !a.is_empty()) || elec["ids"].as_object().is_some_and(|m| !m.is_empty());
+        measured || openings || wires
+    });
+    if !worth {
+        return;
+    }
+    match s.execute("takeoff.record", &serde_json::json!({ "annotate": false })) {
+        Ok(v) => {
+            let slot = v.get("slot").and_then(|n| n.as_u64()).unwrap_or(0);
+            s.echo(format!("Take-off recorded for O-CoreOp (slot {slot})."));
+        }
+        Err(e) => s.echo(format!("Take-off was not recorded: {e}")),
     }
 }
 

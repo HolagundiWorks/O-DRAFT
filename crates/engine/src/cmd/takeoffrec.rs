@@ -18,7 +18,9 @@
 
 use serde_json::{Map, Value, json};
 
-use super::bridge::{self, Collected, Item, KIND_COLUMN, KIND_LINTEL, KIND_OPENING, KIND_ROOM, KIND_SLAB, KIND_WALL};
+use super::bridge::{
+    self, Collected, Item, KIND_COLUMN, KIND_ELEC_BOARD, KIND_ELEC_CIRCUIT, KIND_LINTEL, KIND_OPENING, KIND_ROOM, KIND_SLAB, KIND_WALL,
+};
 use super::*;
 use crate::{Result, Session};
 
@@ -27,7 +29,8 @@ const KIND_HEADER: u8 = 1;
 /// An annotated-PDF chunk.
 pub(crate) const KIND_PDF: u8 = 9;
 /// The kinds this version writes. Records of any other kind belong to a later version and are left alone.
-const OWN_KINDS: [u8; 8] = [KIND_HEADER, KIND_WALL, KIND_OPENING, KIND_COLUMN, KIND_LINTEL, KIND_ROOM, KIND_SLAB, KIND_PDF];
+const OWN_KINDS: [u8; 10] =
+    [KIND_HEADER, KIND_WALL, KIND_OPENING, KIND_COLUMN, KIND_LINTEL, KIND_ROOM, KIND_SLAB, KIND_PDF, KIND_ELEC_BOARD, KIND_ELEC_CIRCUIT];
 /// Rows one recording writes; a larger take-off is cut and the result says so.
 const MAX_ROWS: usize = 500_000;
 /// Largest PDF chunk, and the most a stored PDF may hold (contract section 6).
@@ -166,6 +169,8 @@ fn kind_name(kind: u8) -> &'static str {
         KIND_LINTEL => "lintels",
         KIND_ROOM => "rooms",
         KIND_SLAB => "slabs",
+        KIND_ELEC_BOARD => "electrical",
+        KIND_ELEC_CIRCUIT => "electrical_circuits",
         _ => "other",
     }
 }

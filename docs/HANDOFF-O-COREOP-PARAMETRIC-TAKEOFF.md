@@ -156,8 +156,8 @@ Engine tests that lock the row shape: `cargo test -p aad-engine --test param`.
 - Columns, beams, slabs as parametric components.
 - ShilpiDB-hosted component library.
 - PDF underlay take-off.
-- `wall_ref` on openings.
 - Provenance fields inside the ShilpiDB wall payload (section 4).
+  (`wall_ref` on openings is written by `takeoff.record` / `bridge.collect` when the insert sits on a measured wall.)
 
 ## 9. Questions for O-CoreOp
 

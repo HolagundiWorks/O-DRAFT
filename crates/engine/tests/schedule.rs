@@ -65,11 +65,13 @@ fn measured_openings_map_to_schedule_entries_and_paint_uses_their_size() {
     let map = s.execute("schedule", &json!({})).unwrap()["map"].clone();
     assert_eq!(map, json!({"FB01-D1": "D2", "FB01-D2": "D3"}));
 
-    // Wall paint: 6.00 m wall, 2.85 m ceiling; mapped openings use length x door height 2.10,
-    // the unmapped one the measured length x wall height.
+    // Wall paint: 6.00 m external wall, 2.85 m ceiling. Mapped openings use length x door
+    // height 2.10; the unmapped one uses measured length x wall height. An external wall
+    // deducts that area from both faces, so the openings total is twice the one-face area.
     let r = s.execute("takeoff.paint", &json!({"table": false})).unwrap();
-    let expect_open: f64 = 0.9 * 2.1 + 1.2 * 2.1 + 0.3 * 2.85;
+    let expect_open: f64 = 2.0 * (0.9 * 2.1 + 1.2 * 2.1 + 0.3 * 2.85);
     assert!((r["totals"]["openings"].as_f64().unwrap() - (expect_open * 100.0).round() / 100.0).abs() < 1e-9, "{r}");
+    assert!((r["totals"]["externalPaint"].as_f64().unwrap() - r["totals"]["internalPaint"].as_f64().unwrap()).abs() < 1e-9, "{r}");
 }
 
 #[test]

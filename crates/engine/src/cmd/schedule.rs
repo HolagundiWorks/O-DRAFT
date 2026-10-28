@@ -32,6 +32,9 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Format", "Opening Schedule", "Update Schedule"])
             .alias(&["hcwopensync"])
             .params("{} → {counts, mapped, ambiguous} (counts block references; maps measured openings to the entry of nearest length)"),
+        CommandSpec::new("openings.deduct", "Repair Opening Deductions", run_deduct)
+            .menu(&["Format", "Opening Schedule", "Repair Deductions"])
+            .params("{} → {repaired}. Adds a MEASURE-DEDUCT line (take-off deduct mark) to scheduled or door/window blocks that have none."),
         CommandSpec::new("openings.table", "Opening Schedule Table", run_table)
             .menu(&["Format", "Opening Schedule", "Draw Opening Schedule"])
             .alias(&["hcwopensched", "mschedtable"])
@@ -372,4 +375,76 @@ fn run_bill(s: &mut Session, p: &Value) -> Result<Value> {
     #[cfg(target_arch = "wasm32")]
     let _ = p;
     Ok(json!({ "lines": lines, "total": total, "csv": csv }))
+}
+
+/// Add a deduct centre-line to door and window blocks that were placed without one.
+fn run_deduct(s: &mut Session, _p: &Value) -> Result<Value> {
+    use aad_doc::{Common, Entity, TakeoffKind, TakeoffMark};
+    let names: Vec<String> = {
+        let d = s.doc()?;
+        let mut n = std::collections::BTreeSet::new();
+        for e in d.model.iter() {
+            if let EntityKind::Insert(i) = &e.kind {
+                n.insert(i.block.clone());
+            }
+        }
+        n.into_iter().collect()
+    };
+    let sched = project::get(s.doc()?, "schedule");
+    let mut repaired = 0usize;
+    for name in names {
+        let Some(src) = s.doc()?.block(&name).map(|b| (**b).clone()) else { continue };
+        let has = src.entities.iter().any(|e| {
+            e.common.takeoff.as_ref().is_some_and(|m| m.kind == TakeoffKind::Deduct) || e.common.layer.eq_ignore_ascii_case("MEASURE-DEDUCT")
+        });
+        if has {
+            continue;
+        }
+        let scheduled = sched["openings"].as_array().is_some_and(|a| {
+            a.iter().any(|o| o["block"].as_str().unwrap_or("").split(';').any(|b| b.trim().eq_ignore_ascii_case(&name)))
+        });
+        let openingish = name.to_ascii_uppercase().starts_with("AADOPEN")
+            || src.entities.iter().any(|e| {
+                let l = e.common.layer.to_ascii_uppercase();
+                l.contains("DOOR") || l.contains("WINDOW")
+            });
+        if !scheduled && !openingish {
+            continue;
+        }
+        let mut min_x = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        for e in src.entities.iter() {
+            match &e.kind {
+                EntityKind::Line(l) => {
+                    min_x = min_x.min(l.a.x).min(l.b.x);
+                    max_x = max_x.max(l.a.x).max(l.b.x);
+                }
+                EntityKind::LwPolyline(p) => {
+                    for v in &p.vertices {
+                        min_x = min_x.min(v.p.x);
+                        max_x = max_x.max(v.p.x);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if !(min_x.is_finite() && max_x.is_finite() && max_x - min_x > 1e-6) {
+            continue;
+        }
+        let mut b = src;
+        s.doc_mut()?.ensure_layer("MEASURE-DEDUCT");
+        let h = s.doc_mut()?.new_handle();
+        b.entities.push(Entity {
+            handle: h,
+            common: Common {
+                layer: "MEASURE-DEDUCT".into(),
+                takeoff: Some(TakeoffMark { kind: TakeoffKind::Deduct, thickness_mm: None }),
+                ..Common::default()
+            },
+            kind: super::helpers::line(Vec2::new(min_x, 0.0), Vec2::new(max_x, 0.0)),
+        });
+        s.doc_mut()?.blocks.insert(name, std::sync::Arc::new(b));
+        repaired += 1;
+    }
+    Ok(json!({ "repaired": repaired }))
 }

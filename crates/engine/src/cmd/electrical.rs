@@ -79,7 +79,40 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Architecture", "Electrical", "Update"])
             .alias(&["elupdate"])
             .params("{} → {numbered, connected} (numbers new blocks, moves labels, re-checks the wiring)"),
+        CommandSpec::new("electrical.autonumber", "Auto-number Electrical Blocks", run_autonumber)
+            .menu(&["Architecture", "Electrical", "Auto-number on Insert"])
+            .params("{enabled?: bool} → {enabled}. When on (the default), inserting a mapped block numbers it."),
     ]
+}
+
+/// Number a newly inserted block when it matches a switchboard or fixture map. Default on.
+pub(crate) fn on_insert(s: &mut Session) -> Result<()> {
+    let mut o = state(s.doc()?);
+    if o.get("autonumber").and_then(Value::as_bool) == Some(false) {
+        return Ok(());
+    }
+    let space = s.space();
+    let list = items(s.doc()?, &space, &o);
+    if list.is_empty() {
+        return Ok(());
+    }
+    let ids = labels_of(&o);
+    if list.iter().all(|it| ids.contains_key(&it.handle.hex())) {
+        return Ok(());
+    }
+    number(s, &mut o, &KINDS.iter().map(|(c, _, _)| *c).collect::<Vec<_>>(), false)?;
+    save(s.doc_mut()?, &o);
+    Ok(())
+}
+
+fn run_autonumber(s: &mut Session, p: &Value) -> Result<Value> {
+    let mut o = state(s.doc()?);
+    if let Some(enabled) = p.get("enabled").and_then(Value::as_bool) {
+        o.insert("autonumber".into(), json!(enabled));
+        save(s.doc_mut()?, &o);
+    }
+    let enabled = o.get("autonumber").and_then(Value::as_bool).unwrap_or(true);
+    Ok(json!({ "enabled": enabled }))
 }
 
 fn state(d: &Drawing) -> Map<String, Value> {
@@ -474,8 +507,50 @@ fn connect(s: &mut Session, o: &Map<String, Value>, snap: f64, flag: bool) -> Re
             json!({ "id": id, "points": pts.iter().map(|p| id_of(*p)).collect::<Vec<_>>(), "counts": counts })
         })
         .collect();
+    let amb: BTreeSet<usize> = a.ambiguous.iter().copied().collect();
+    let fixtures = ["LP", "FP", "EF", "CB", "AC", "WP", "GY", "FR", "OV", "WF", "TV", "INV"];
+    let mut wires = Vec::new();
+    let mut circuits = Vec::new();
+    for (board, pts) in &a.boards {
+        let count = |code: &str| pts.iter().filter(|p| !amb.contains(*p) && list[**p].code == code).count();
+        let fixture: usize = fixtures.iter().map(|c| count(c)).sum();
+        let board_h = list.iter().enumerate().find(|(i, it)| it.code == "SB" && id_of(*i) == *board).map(|(_, it)| it.handle.hex());
+        wires.push(json!({
+            "ref": format!("EB{}", board_h.clone().unwrap_or_else(|| board.clone())),
+            "handle": board_h,
+            "switchboard": board,
+            "height": Value::Null,
+            "5amp_socket": count("P5"),
+            "15amp_socket": count("P15"),
+            "connected_fixture": fixture,
+            "two_way_switches": count("SW2"),
+            "one_way_switches": count("SW1"),
+        }));
+        for p in pts {
+            if amb.contains(p) {
+                continue;
+            }
+            let code = list[*p].code;
+            circuits.push(json!({
+                "ref": format!("EC{}", list[*p].handle.hex()),
+                "handle": list[*p].handle.hex(),
+                "switchboard": board,
+                "point": id_of(*p),
+                "kind": code,
+                "height": Value::Null,
+                "5amp_socket": u8::from(code == "P5"),
+                "15amp_socket": u8::from(code == "P15"),
+                // Count column (0 or 1), same shape as the board wire table — not the kind string.
+                "connected_fixture": u8::from(fixtures.contains(&code)),
+                "two_way_switches": u8::from(code == "SW2"),
+                "one_way_switches": u8::from(code == "SW1"),
+            }));
+        }
+    }
     Ok(json!({
         "boards": boards,
+        "wires": wires,
+        "circuits": circuits,
         "unwired": a.unwired.iter().map(|i| id_of(*i)).collect::<Vec<_>>(),
         "ambiguous": a.ambiguous.iter().map(|i| id_of(*i)).collect::<Vec<_>>(),
         "emptyBoards": a.empty,
@@ -497,7 +572,16 @@ fn run_connect(s: &mut Session, p: &Value) -> Result<Value> {
     let _ = list;
     save(s.doc_mut()?, &o);
     let snap = snap_of(s, p)?;
-    connect(s, &o, snap, bool_or(p, "flag", true))
+    let result = connect(s, &o, snap, bool_or(p, "flag", true))?;
+    let mut o = state(s.doc()?);
+    if let Some(wires) = result.get("wires") {
+        o.insert("wires".into(), wires.clone());
+    }
+    if let Some(circuits) = result.get("circuits") {
+        o.insert("circuits".into(), circuits.clone());
+    }
+    save(s.doc_mut()?, &o);
+    Ok(result)
 }
 
 fn schedule_rows(s: &Session, o: &Map<String, Value>, mode: &str, snap: f64) -> Result<(Vec<String>, Vec<Vec<String>>)> {

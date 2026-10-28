@@ -81,6 +81,106 @@ impl Transparency {
     }
 }
 
+/// What a take-off line or outline measures. Stored on the entity; `MEASURE-*` layers are only a
+/// display and a legacy source for drawings that have no mark yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TakeoffKind {
+    ExtWall,
+    IntWall,
+    Beam,
+    Lintel,
+    Linear,
+    FloorArea,
+    CeilingArea,
+    Area,
+    Column,
+    Count,
+    Deduct,
+    Slab,
+    SlabDeduct,
+}
+
+impl TakeoffKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TakeoffKind::ExtWall => "extWall",
+            TakeoffKind::IntWall => "intWall",
+            TakeoffKind::Beam => "beam",
+            TakeoffKind::Lintel => "lintel",
+            TakeoffKind::Linear => "linear",
+            TakeoffKind::FloorArea => "floorArea",
+            TakeoffKind::CeilingArea => "ceilingArea",
+            TakeoffKind::Area => "area",
+            TakeoffKind::Column => "column",
+            TakeoffKind::Count => "count",
+            TakeoffKind::Deduct => "deduct",
+            TakeoffKind::Slab => "slab",
+            TakeoffKind::SlabDeduct => "slabDeduct",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "extwall" | "external" | "fullbrick" | "ext" => Some(TakeoffKind::ExtWall),
+            "intwall" | "internal" | "halfbrick" | "int" => Some(TakeoffKind::IntWall),
+            "beam" => Some(TakeoffKind::Beam),
+            "lintel" => Some(TakeoffKind::Lintel),
+            "linear" => Some(TakeoffKind::Linear),
+            "floorarea" | "floor" => Some(TakeoffKind::FloorArea),
+            "ceilingarea" | "ceiling" => Some(TakeoffKind::CeilingArea),
+            "area" => Some(TakeoffKind::Area),
+            "column" => Some(TakeoffKind::Column),
+            "count" => Some(TakeoffKind::Count),
+            "deduct" => Some(TakeoffKind::Deduct),
+            "slab" => Some(TakeoffKind::Slab),
+            "slabdeduct" | "slab-deduct" => Some(TakeoffKind::SlabDeduct),
+            _ => None,
+        }
+    }
+
+    /// Closed outline (area, column, slab) rather than a wall centre-line.
+    pub fn is_outline(self) -> bool {
+        matches!(
+            self,
+            TakeoffKind::FloorArea
+                | TakeoffKind::CeilingArea
+                | TakeoffKind::Area
+                | TakeoffKind::Column
+                | TakeoffKind::Count
+                | TakeoffKind::Slab
+                | TakeoffKind::SlabDeduct
+        )
+    }
+
+    /// `external` or `internal` for plaster and paint. A linear mark of 200 mm or more is external.
+    pub fn wall_type(self, thickness_mm: Option<f64>) -> &'static str {
+        match self {
+            TakeoffKind::ExtWall => "external",
+            TakeoffKind::Linear if thickness_mm.is_some_and(|t| t >= 200.0) => "external",
+            _ => "internal",
+        }
+    }
+
+    /// Nominal thickness when the kind implies one and the user did not give one.
+    pub fn default_thickness_mm(self) -> Option<f64> {
+        match self {
+            TakeoffKind::ExtWall => Some(230.0),
+            TakeoffKind::IntWall => Some(115.0),
+            _ => None,
+        }
+    }
+}
+
+/// Take-off identity of one entity.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TakeoffMark {
+    pub kind: TakeoffKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thickness_mm: Option<f64>,
+}
+
 /// Properties every entity has.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -97,6 +197,9 @@ pub struct Common {
     /// Named plot style: `ByLayer`, `ByBlock` or a style of the layout's named (`.stb`) plot
     /// style table.
     pub plot_style: String,
+    /// What this object is for quantity take-off. Absent on ordinary geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub takeoff: Option<TakeoffMark>,
 }
 
 impl Default for Common {
@@ -112,6 +215,7 @@ impl Default for Common {
             thickness: 0.0,
             extrusion: Vec3::Z,
             plot_style: "ByLayer".into(),
+            takeoff: None,
         }
     }
 }

@@ -1,14 +1,19 @@
-//! Quantity take-off from the geometry on the `MEASURE-*` layers (the kit's TOSTART, MLIN, MBRK,
-//! MBML, MCOL, MREC, MPAINT, MCEIL, MFLOOR, MAREA, MSLAB, MCLEAR and MEXPORT).
+//! Quantity take-off from entity take-off marks, with a fallback to the `MEASURE-*` layers
+//! (the kit's TOSTART, MLIN, MBRK, MBML, MCOL, MREC, MPAINT, MCEIL, MFLOOR, MAREA, MSLAB, MCLEAR
+//! and MEXPORT) for drawings that have not been mapped yet.
 //!
 //! Every quantity is computed here from the drawing geometry and units, never by the caller:
 //! lengths of lines and polyline segments, areas of closed outlines, openings deducted where a
-//! line on `MEASURE-DEDUCT` lies on a wall (or sits inside a block that carries such a line).
-//! Lengths in metric drawings round to 1 cm; in imperial drawings to 1/8 inch. Each command labels
-//! the elements on `MEASURE-LABELS`, draws a summary table on `MEASURE-TABLE`, and saves the result
-//! in the drawing as `takeoff:<name>` so it can be exported later.
+//! deduct mark (or a line on `MEASURE-DEDUCT`) lies on a wall (or sits inside a block that carries
+//! such a line). Lengths in metric drawings round to 1 cm; in imperial drawings to 1/8 inch. Each
+//! command labels the elements on `MEASURE-LABELS`, draws a summary table on `MEASURE-TABLE`, and
+//! saves the result in the drawing as `takeoff:<name>` so it can be exported later.
+//!
+//! New tools stamp [`aad_doc::TakeoffMark`] on the entity. `takeoff.maplayers` copies the old
+//! layer convention onto those marks. DXF does not store the mark on the entity, so it is also
+//! kept in the project entry `takeoffMeta` (handle hex → mark) and restored on open.
 
-use aad_doc::{Drawing, EntityKind, HAlign, Handle, Space, VAlign};
+use aad_doc::{Drawing, EntityKind, HAlign, Handle, Space, TakeoffKind, TakeoffMark, VAlign};
 use aad_geom::{Bounds2, Polyline, Segment, Vec2, point_in_polygon};
 use serde_json::{Value, json};
 
@@ -99,6 +104,28 @@ pub fn specs() -> Vec<CommandSpec> {
                  path?: .vdb from takeoff.record, server?: \"host:port\", file?: true for <drawing>.takeoff.vdb} \
                  → {restored: [name], tables, source: drawing|shilpidb}",
             ),
+        CommandSpec::new("takeoff.draw", "Draw Take-off", run_draw)
+            .menu(&["Architecture", "Take-off", "Draw"])
+            .alias(&["mdraw"])
+            .params(
+                "{kind: extWall|intWall|beam|lintel|linear|floorArea|ceilingArea|area|column|count|deduct|slab|slabDeduct, \
+                 thicknessMm?, points: [[x,y],...], closed?: bool} → {handles}. Stamps take-off metadata; the MEASURE-* layer is display only.",
+            ),
+        CommandSpec::new("takeoff.tag", "Tag Take-off", run_tag)
+            .menu(&["Architecture", "Take-off", "Tag Selection"])
+            .alias(&["mtag"])
+            .params("{kind, thicknessMm?, handles? (default the selection)} → {tagged}"),
+        CommandSpec::new("takeoff.maplayers", "Map Measure Layers", run_maplayers)
+            .menu(&["Architecture", "Take-off", "Map Layers to Metadata"])
+            .alias(&["mmap"])
+            .params(
+                "{force?: bool (default false; leave entities that already have a mark)} → {tagged, skipped, byKind}. \
+                 MEASURE-FULLBRICK → extWall 230 mm, MEASURE-HALFBRICK → intWall 115 mm, and the other MEASURE-* layers to their kinds. \
+                 MEASURE-LABELS and MEASURE-TABLE are left alone.",
+            ),
+        CommandSpec::new("column.deduct", "Column Slab Deducts", run_column_deduct)
+            .menu(&["Architecture", "Take-off", "Column Slab Deducts"])
+            .params("{} → {added}. Copies column outlines onto slab-deduct marks where none already cover them."),
     ]
 }
 
@@ -167,6 +194,148 @@ struct Wall {
     layer: String,
     seg: Segment,
     handle: Handle,
+    kind: TakeoffKind,
+    thickness_mm: Option<f64>,
+}
+
+/// Project key that mirrors take-off marks so a DXF round-trip (which does not store the entity field) keeps them.
+pub(crate) const META_KEY: &str = "takeoffMeta";
+
+/// Display layer for a take-off kind. Colour only; measurement reads the mark first.
+pub(crate) fn layer_for_kind(kind: TakeoffKind) -> &'static str {
+    match kind {
+        TakeoffKind::ExtWall => L_FULL,
+        TakeoffKind::IntWall => L_HALF,
+        TakeoffKind::Beam => L_BEAM,
+        TakeoffKind::Lintel => L_LINTEL,
+        TakeoffKind::Linear => L_LINEAR,
+        TakeoffKind::FloorArea => L_FLOOR,
+        TakeoffKind::CeilingArea => L_CEILING,
+        TakeoffKind::Area => L_AREA,
+        TakeoffKind::Column => L_COLUMN,
+        TakeoffKind::Count => L_COUNT,
+        TakeoffKind::Deduct => L_DEDUCT,
+        TakeoffKind::Slab => L_SLAB,
+        TakeoffKind::SlabDeduct => L_SLAB_DEDUCT,
+    }
+}
+
+fn kind_for_layer(layer: &str) -> Option<(TakeoffKind, Option<f64>)> {
+    let (kind, thick) = if layer.eq_ignore_ascii_case(L_FULL) {
+        (TakeoffKind::ExtWall, Some(230.0))
+    } else if layer.eq_ignore_ascii_case(L_HALF) {
+        (TakeoffKind::IntWall, Some(115.0))
+    } else if layer.eq_ignore_ascii_case(L_BEAM) {
+        (TakeoffKind::Beam, None)
+    } else if layer.eq_ignore_ascii_case(L_LINTEL) {
+        (TakeoffKind::Lintel, None)
+    } else if layer.eq_ignore_ascii_case(L_LINEAR) {
+        (TakeoffKind::Linear, None)
+    } else if layer.eq_ignore_ascii_case(L_COLUMN) {
+        (TakeoffKind::Column, None)
+    } else if layer.eq_ignore_ascii_case(L_COUNT) {
+        (TakeoffKind::Count, None)
+    } else if layer.eq_ignore_ascii_case(L_DEDUCT) {
+        (TakeoffKind::Deduct, None)
+    } else if layer.eq_ignore_ascii_case(L_CEILING) {
+        (TakeoffKind::CeilingArea, None)
+    } else if layer.eq_ignore_ascii_case(L_FLOOR) {
+        (TakeoffKind::FloorArea, None)
+    } else if layer.eq_ignore_ascii_case(L_AREA) {
+        (TakeoffKind::Area, None)
+    } else if layer.eq_ignore_ascii_case(L_SLAB) {
+        (TakeoffKind::Slab, None)
+    } else if layer.eq_ignore_ascii_case(L_SLAB_DEDUCT) {
+        (TakeoffKind::SlabDeduct, None)
+    } else {
+        return None;
+    };
+    Some((kind, thick))
+}
+
+fn mark_matches(mark: &TakeoffMark, layer: &str) -> bool {
+    layer_for_kind(mark.kind).eq_ignore_ascii_case(layer)
+}
+
+/// A marked entity matches by its kind. An unmarked entity matches by its MEASURE layer.
+fn matches_measure(e: &aad_doc::Entity, layer: &str) -> bool {
+    match &e.common.takeoff {
+        Some(mark) => mark_matches(mark, layer),
+        None => on_layer(e, layer),
+    }
+}
+
+fn kind_of_wall(e: &aad_doc::Entity, layer: &str) -> (TakeoffKind, Option<f64>) {
+    if let Some(mark) = &e.common.takeoff {
+        let thick = mark.thickness_mm.or_else(|| mark.kind.default_thickness_mm());
+        return (mark.kind, thick);
+    }
+    kind_for_layer(layer).unwrap_or((TakeoffKind::Linear, None))
+}
+
+/// Copy marks from `takeoffMeta` onto entities that lost them (DXF load). Existing marks stay.
+pub(crate) fn apply_meta(d: &mut Drawing) {
+    let meta = project::get(d, META_KEY);
+    let Some(obj) = meta.as_object() else { return };
+    let pairs: Vec<(Handle, TakeoffMark)> = obj
+        .iter()
+        .filter_map(|(k, v)| {
+            let h = Handle::parse_hex(k)?;
+            let mark = serde_json::from_value(v.clone()).ok()?;
+            Some((h, mark))
+        })
+        .collect();
+    for (h, mark) in pairs {
+        let _ = d.modify_entity(h, |e| {
+            if e.common.takeoff.is_none() {
+                e.common.takeoff = Some(mark);
+            }
+        });
+    }
+}
+
+/// Write every entity mark into `takeoffMeta` so the next DXF save keeps them.
+pub(crate) fn sync_meta(d: &mut Drawing) {
+    let mut m = serde_json::Map::new();
+    let stores: Vec<&aad_doc::EntityStore> = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).collect();
+    for store in stores {
+        for e in store.iter() {
+            if let Some(mark) = &e.common.takeoff
+                && let Ok(v) = serde_json::to_value(mark)
+            {
+                m.insert(e.handle.hex(), v);
+            }
+        }
+    }
+    if m.is_empty() {
+        d.project.remove(META_KEY);
+    } else {
+        project::set(d, META_KEY, &serde_json::Value::Object(m));
+    }
+}
+
+fn parse_kind(cmd: &str, p: &Value) -> Result<TakeoffKind> {
+    let raw = str_param(p, "kind").ok_or_else(|| bad(cmd, "`kind` is required"))?;
+    TakeoffKind::parse(raw).ok_or_else(|| bad(cmd, format!("unknown take-off kind `{raw}`")))
+}
+
+fn thickness_param(cmd: &str, p: &Value, kind: TakeoffKind) -> Result<Option<f64>> {
+    match p.get("thicknessMm") {
+        None | Some(Value::Null) => Ok(kind.default_thickness_mm()),
+        Some(v) => {
+            let n = v.as_f64().ok_or_else(|| bad(cmd, "`thicknessMm` must be a number"))?;
+            if !(n.is_finite() && n > 0.0) {
+                return Err(bad(cmd, "`thicknessMm` must be positive"));
+            }
+            Ok(Some(n))
+        }
+    }
+}
+
+fn ensure_measure_layer(d: &mut Drawing, layer: &str) {
+    if let Some((name, aci, desc)) = LAYERS.iter().find(|(n, _, _)| n.eq_ignore_ascii_case(layer)) {
+        ensure_layer(d, name, *aci, "Continuous", 18, desc);
+    }
 }
 
 pub(crate) fn segments_of(kind: &EntityKind) -> Vec<Segment> {
@@ -185,10 +354,11 @@ fn walls(d: &Drawing, space: &Space, layers: &[&str]) -> Vec<Wall> {
     let mut out = Vec::new();
     if let Some(store) = d.space(space) {
         for e in store.iter().filter(|e| d.is_visible(e)) {
-            if let Some(layer) = layers.iter().find(|l| on_layer(e, l)) {
+            if let Some(layer) = layers.iter().copied().find(|l| matches_measure(e, l)) {
+                let (kind, thickness_mm) = kind_of_wall(e, layer);
                 for seg in segments_of(&e.kind) {
                     if seg.len() > 1e-12 {
-                        out.push(Wall { layer: (*layer).to_string(), seg, handle: e.handle });
+                        out.push(Wall { layer: layer.to_string(), seg, handle: e.handle, kind, thickness_mm });
                     }
                 }
             }
@@ -252,7 +422,7 @@ fn polygon_area_centroid(pts: &[Vec2]) -> (f64, Vec2) {
 fn shapes(d: &Drawing, space: &Space, layer: &str) -> Vec<Shape> {
     let mut out = Vec::new();
     if let Some(store) = d.space(space) {
-        for e in store.iter().filter(|e| d.is_visible(e) && on_layer(e, layer)) {
+        for e in store.iter().filter(|e| d.is_visible(e) && matches_measure(e, layer)) {
             let Some(pts) = shape_of(&e.kind) else { continue };
             let (area, centroid) = polygon_area_centroid(&pts);
             let perimeter: f64 = pts.windows(2).map(|w| w[0].dist(w[1])).sum::<f64>() + pts.first().zip(pts.last()).map_or(0.0, |(a, b)| a.dist(*b));
@@ -298,8 +468,8 @@ fn deductions(d: &Drawing, space: &Space) -> Vec<Deduction> {
     let Some(store) = d.space(space) else { return out };
     for e in store.iter().filter(|e| d.is_visible(e)) {
         match &e.kind {
-            EntityKind::Line(l) if on_layer(e, L_DEDUCT) => out.push(Deduction { a: l.a.xy(), b: l.b.xy(), from_block: false }),
-            EntityKind::LwPolyline(p) if on_layer(e, L_DEDUCT) => {
+            EntityKind::Line(l) if matches_measure(e, L_DEDUCT) => out.push(Deduction { a: l.a.xy(), b: l.b.xy(), from_block: false }),
+            EntityKind::LwPolyline(p) if matches_measure(e, L_DEDUCT) => {
                 for seg in (Polyline { vertices: p.vertices.clone(), closed: p.closed }).segments() {
                     out.push(Deduction { a: seg.start(), b: seg.end(), from_block: false });
                 }
@@ -313,7 +483,7 @@ fn deductions(d: &Drawing, space: &Space) -> Vec<Deduction> {
                 };
                 for be in b.entities.iter() {
                     if let EntityKind::Line(l) = &be.kind
-                        && on_layer(be, L_DEDUCT)
+                        && matches_measure(be, L_DEDUCT)
                     {
                         out.push(Deduction { a: tf(l.a), b: tf(l.b), from_block: true });
                     }
@@ -639,7 +809,12 @@ fn measure_walls(s: &mut Session, p: &Value, cmd: &str, name: &'static str, titl
             let at = w.seg.start() + (w.seg.end() - w.seg.start()).normalized() * m.t;
             label(s, &c, Vec2::new(at.x, at.y - c.th * 1.2), &ded_names[k].0)?;
         }
-        items.push(json!({ "mark": names[i], "group": format!("{prefix}-{letter}"), "handle": w.handle.hex(), "length": len, "openings": ded_names.iter().map(|(n, l)| json!({"name": n, "length": l})).collect::<Vec<_>>(), "net": (len - ded_total).max(0.0) }));
+        items.push(json!({
+            "mark": names[i], "group": format!("{prefix}-{letter}"), "handle": w.handle.hex(),
+            "length": len, "wallType": w.kind.wall_type(w.thickness_mm), "thicknessMm": w.thickness_mm,
+            "openings": ded_names.iter().map(|(n, l)| json!({"name": n, "length": l})).collect::<Vec<_>>(),
+            "net": (len - ded_total).max(0.0),
+        }));
         rowsv.push(Row { group: format!("{prefix}-{letter}"), len, ded: ded_total });
     }
     for di in &orphans {
@@ -1008,12 +1183,18 @@ fn run_paint(s: &mut Session, p: &Value) -> Result<Value> {
     let to_m = c.unit.metres();
     let mut total_wall = 0.0;
     let mut total_open = 0.0;
+    let mut total_ext = 0.0;
+    let mut total_int = 0.0;
     let mut items = Vec::new();
     let mut rows = Vec::new();
     for (i, w) in ws.iter().enumerate() {
         let len_m = w.seg.len() * to_m;
-        let wall_area = len_m * height_m;
-        let mut open_area = 0.0;
+        let one_face = len_m * height_m;
+        // External walls: one external face and one internal face. Internal walls: two internal faces.
+        let external = w.kind.wall_type(w.thickness_mm) == "external";
+        let (ext_faces, int_faces) = if external { (1.0, 1.0) } else { (0.0, 2.0) };
+        let faces = ext_faces + int_faces;
+        let mut open_one = 0.0;
         let mut mine: Vec<&Matched> = matched.iter().filter(|m| m.wall == i).collect();
         mine.sort_by(|a, b| a.t.total_cmp(&b.t));
         for (k, m) in mine.iter().enumerate() {
@@ -1023,24 +1204,44 @@ fn run_paint(s: &mut Session, p: &Value) -> Result<Value> {
                 .as_str()
                 .and_then(|n| sched["openings"].as_array()?.iter().find(|o| o["name"].as_str() == Some(n)))
                 .and_then(|o| Some(o["length"].as_f64()? * o["height"].as_f64()?));
-            open_area += mapped.unwrap_or(measured * height_m);
+            open_one += mapped.unwrap_or(measured * height_m);
         }
-        total_wall += wall_area;
-        total_open += open_area;
-        items.push(json!({ "handle": w.handle.hex(), "length": len_m, "height": height_m, "wallArea": wall_area, "openings": open_area, "net": (wall_area - open_area).max(0.0) }));
+        let net_one = (one_face - open_one).max(0.0);
+        let ext_paint = net_one * ext_faces;
+        let int_paint = net_one * int_faces;
+        total_wall += one_face * faces;
+        total_open += open_one * faces;
+        total_ext += ext_paint;
+        total_int += int_paint;
+        items.push(json!({
+            "handle": w.handle.hex(), "length": len_m, "height": height_m, "wallType": w.kind.wall_type(w.thickness_mm),
+            "thicknessMm": w.thickness_mm,
+            "wallArea": one_face * faces, "openings": open_one * faces, "net": ext_paint + int_paint,
+            "externalPaint": ext_paint, "internalPaint": int_paint,
+        }));
         let mid = w.seg.mid();
-        label(s, &c, Vec2::new(mid.x, mid.y + c.th * 1.2), &format!("{:.2}", ((wall_area - open_area).max(0.0) * 100.0).round() / 100.0))?;
+        label(s, &c, Vec2::new(mid.x, mid.y + c.th * 1.2), &format!("{:.2}", (((ext_paint + int_paint) * 100.0).round()) / 100.0))?;
     }
     let conv = |m2: f64| if c.metric() { m2 } else { m2 / (0.3048 * 0.3048) };
-    let (tw, to, tn) = (conv(total_wall), conv(total_open), conv((total_wall - total_open).max(0.0)));
+    let (tw, to, tn, te, ti) = (conv(total_wall), conv(total_open), conv(total_ext + total_int), conv(total_ext), conv(total_int));
     if !ws.is_empty() {
-        rows.push(vec![ws.len().to_string(), format!("{height_m:.2}"), format!("{tw:.2}"), format!("{to:.2}"), format!("{tn:.2}")]);
+        rows.push(vec![
+            ws.len().to_string(),
+            format!("{height_m:.2}"),
+            format!("{tw:.2}"),
+            format!("{to:.2}"),
+            format!("{te:.2}"),
+            format!("{ti:.2}"),
+            format!("{tn:.2}"),
+        ]);
     }
-    let header =
-        ["Walls", "Height (m)", &format!("Wall area ({})", c.area_unit()), "Openings", "Net paint"].iter().map(|x| (*x).to_string()).collect();
+    let header = ["Walls", "Height (m)", &format!("Gross ({})", c.area_unit()), "Openings", "External", "Internal", "Net paint"]
+        .iter()
+        .map(|x| (*x).to_string())
+        .collect();
     let mut warnings = Vec::new();
     if ws.is_empty() {
-        warnings.push("no walls found on the brick or linear layers".to_string());
+        warnings.push("no walls found on the brick or linear layers, or tagged as walls".to_string());
     }
     if !orphans.is_empty() {
         warnings.push(format!("{} deduction line(s) lie on no wall and are not counted", orphans.len()));
@@ -1055,7 +1256,14 @@ fn run_paint(s: &mut Session, p: &Value) -> Result<Value> {
             header,
             rows,
             items,
-            totals: json!({ "wallArea": (tw * 100.0).round() / 100.0, "openings": (to * 100.0).round() / 100.0, "net": (tn * 100.0).round() / 100.0, "height": height_m }),
+            totals: json!({
+                "wallArea": (tw * 100.0).round() / 100.0,
+                "openings": (to * 100.0).round() / 100.0,
+                "externalPaint": (te * 100.0).round() / 100.0,
+                "internalPaint": (ti * 100.0).round() / 100.0,
+                "net": (tn * 100.0).round() / 100.0,
+                "height": height_m,
+            }),
             warnings,
         },
     )
@@ -1264,4 +1472,118 @@ pub(crate) fn table_ctx(th: f64) -> Ctx {
 /// Draw a table with its top-left corner at `at` on `MEASURE-TABLE`.
 pub(crate) fn table(s: &mut Session, c: &Ctx, at: Vec2, title: &str, header: &[String], rows: &[Vec<String>]) -> Result<()> {
     draw_table(s, c, at, title, header, rows)
+}
+
+fn add_marked(s: &mut Session, geom: EntityKind, mark: TakeoffMark) -> Result<Handle> {
+    let layer = layer_for_kind(mark.kind);
+    ensure_measure_layer(s.doc_mut()?, layer);
+    let mut common = s.current_common();
+    common.layer = layer.to_string();
+    common.takeoff = Some(mark);
+    let space = s.space();
+    s.doc_mut()?.add(&space, common, geom).map_err(|e| bad("takeoff.draw", e.to_string()))
+}
+
+fn run_draw(s: &mut Session, p: &Value) -> Result<Value> {
+    let kind = parse_kind("takeoff.draw", p)?;
+    let thickness_mm = thickness_param("takeoff.draw", p, kind)?;
+    let pts = points_param(p, "points").ok_or_else(|| bad("takeoff.draw", "`points` [[x,y],...] (2 or more) is required"))?;
+    if pts.len() < 2 {
+        return Err(bad("takeoff.draw", "need at least 2 points"));
+    }
+    let closed = match p.get("closed") {
+        Some(Value::Bool(b)) => *b,
+        _ => kind.is_outline(),
+    };
+    let mark = TakeoffMark { kind, thickness_mm };
+    let mut handles = Vec::new();
+    if closed || kind.is_outline() {
+        if pts.len() < 3 {
+            return Err(bad("takeoff.draw", "a closed outline needs at least 3 points"));
+        }
+        let vs: Vec<aad_geom::PolyVertex> = pts.iter().copied().map(aad_geom::PolyVertex::new).collect();
+        handles.push(add_marked(s, super::helpers::lwpoly(vs, true), mark)?.hex());
+    } else {
+        for w in pts.windows(2) {
+            if let [a, b] = w {
+                if a.near(*b, 1e-12) {
+                    continue;
+                }
+                handles.push(add_marked(s, line(*a, *b), mark.clone())?.hex());
+            }
+        }
+        if handles.is_empty() {
+            return Err(bad("takeoff.draw", "need at least 2 different points"));
+        }
+    }
+    sync_meta(s.doc_mut()?);
+    Ok(json!({ "handles": handles, "kind": kind.as_str(), "thicknessMm": thickness_mm }))
+}
+
+fn run_tag(s: &mut Session, p: &Value) -> Result<Value> {
+    let kind = parse_kind("takeoff.tag", p)?;
+    let thickness_mm = thickness_param("takeoff.tag", p, kind)?;
+    let hs = targets(s, p)?;
+    if hs.is_empty() {
+        return Err(bad("takeoff.tag", "nothing selected"));
+    }
+    let mark = TakeoffMark { kind, thickness_mm };
+    let mut tagged = 0;
+    for h in hs {
+        if s.doc_mut()?.modify_entity(h, |e| e.common.takeoff = Some(mark.clone())).is_ok() {
+            tagged += 1;
+        }
+    }
+    sync_meta(s.doc_mut()?);
+    Ok(json!({ "tagged": tagged, "kind": kind.as_str(), "thicknessMm": thickness_mm }))
+}
+
+fn run_maplayers(s: &mut Session, p: &Value) -> Result<Value> {
+    let force = bool_or(p, "force", false);
+    let handles: Vec<Handle> = {
+        let d = s.doc()?;
+        d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())).map(|e| e.handle).collect()
+    };
+    let mut tagged = 0usize;
+    let mut skipped = 0usize;
+    let mut by_kind: std::collections::BTreeMap<&'static str, usize> = std::collections::BTreeMap::new();
+    for h in handles {
+        let Some(e) = s.doc()?.entity(h).cloned() else { continue };
+        let Some((kind, thick)) = kind_for_layer(&e.common.layer) else { continue };
+        if e.common.takeoff.is_some() && !force {
+            skipped += 1;
+            continue;
+        }
+        let mark = TakeoffMark { kind, thickness_mm: thick.or_else(|| kind.default_thickness_mm()) };
+        if s.doc_mut()?.modify_entity(h, |ent| ent.common.takeoff = Some(mark)).is_ok() {
+            tagged += 1;
+            *by_kind.entry(kind.as_str()).or_insert(0) += 1;
+        }
+    }
+    sync_meta(s.doc_mut()?);
+    Ok(json!({ "tagged": tagged, "skipped": skipped, "byKind": by_kind }))
+}
+
+fn run_column_deduct(s: &mut Session, _p: &Value) -> Result<Value> {
+    let space = s.space();
+    let (cols, holes) = {
+        let d = s.doc()?;
+        (shapes(d, &space, L_COLUMN), shapes(d, &space, L_SLAB_DEDUCT))
+    };
+    let mut covered: Vec<Vec<Vec2>> = holes.into_iter().map(|h| h.pts).collect();
+    let mut added = 0usize;
+    for col in &cols {
+        if col.pts.len() < 3 {
+            continue;
+        }
+        if covered.iter().any(|pts| point_in_polygon(pts, col.centroid)) {
+            continue;
+        }
+        let vs: Vec<aad_geom::PolyVertex> = col.pts.iter().copied().map(aad_geom::PolyVertex::new).collect();
+        add_marked(s, super::helpers::lwpoly(vs, true), TakeoffMark { kind: TakeoffKind::SlabDeduct, thickness_mm: None })?;
+        covered.push(col.pts.clone());
+        added += 1;
+    }
+    sync_meta(s.doc_mut()?);
+    Ok(json!({ "added": added }))
 }

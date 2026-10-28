@@ -52,8 +52,16 @@ Everything is millimetres, whatever the drawing units. The id is `(kind << 56) |
 | Kind | Record |
 |---|---|
 | 1 | Header, one per drawing, `n = 0`: `format` `hcw-takeoff-shilpi`, `version` 1, `units` `mm`, `state`, `source` (`app` `O-Draft`, `drawing`, `drawing_id`, `project_ref` (the suite's `ProjectRef`) while the drawing is linked to a project in the OSAS company file, `exported`, `revision_sha256` while the saved file still matches its recorded revision), and the bridge file's `project`, `levels`, `beam_depths_mm`, `opening_schedule`; `annotated_pdf` (`sha256`, `bytes`, `chunks`, `pages`, `generated`) once a PDF is stored |
-| 3 to 8 | Wall, opening, column, lintel, room, slab: the payload is the bridge row as written; the box is the item's bounds in millimetres (the room's box when one is drawn, else its name text; zeros when it has no geometry) |
+| 3 to 8 | Wall, opening, column, lintel, room, slab: the payload is the bridge row as written; the box is the item's bounds in millimetres (the room's box when one is drawn, else its name text; zeros when it has no geometry). A wall row also carries `wall_type` (`external` or `internal`), `thickness_mm` (from the entity mark, else 230 mm full brick / 115 mm half brick) and, when `takeoff.paint` has been run, `paint_external_m2` and `paint_internal_m2` |
 | 9 | A chunk of the annotated PDF: raw bytes, at most 512 KiB, `n` from 0, zero box; at most 64 MiB in all |
+| 10 | Electrical switchboard row: `switchboard`, `height`, `5amp_socket`, `15amp_socket`, `connected_fixture`, `two_way_switches`, `one_way_switches` (written by `electrical.connect`, included by `takeoff.record`) |
+| 11 | Electrical circuit row: one wired point, with `switchboard`, `point`, `kind` and the same count columns |
+
+## Metadata and legacy layers
+
+`takeoff.draw` and `takeoff.tag` store a `TakeoffMark` (`kind`, optional `thicknessMm`) on the entity. Measure commands use that mark. An entity with no mark is still measured from its `MEASURE-*` layer. `takeoff.maplayers` copies the layer onto the mark (`MEASURE-FULLBRICK` → external wall 230 mm, `MEASURE-HALFBRICK` → internal wall 115 mm, and the other measure layers to their kinds). Marks are mirrored in the project entry `takeoffMeta` so a DXF save keeps them; open restores them onto entities that have none.
+
+A saved drawing that has take-off results, an opening schedule or electrical ids is recorded again after a successful save (`annotate` false). The Record button still runs `takeoff.record` with the annotated PDF.
 
 `n` is the entity handle of the measured thing: the measured line or polyline of a take-off row, the
 block insert of an opening, the room's name text, or the first face line of a committed parametric

@@ -152,6 +152,8 @@ pub(crate) const KIND_COLUMN: u8 = 5;
 pub(crate) const KIND_LINTEL: u8 = 6;
 pub(crate) const KIND_ROOM: u8 = 7;
 pub(crate) const KIND_SLAB: u8 = 8;
+pub(crate) const KIND_ELEC_BOARD: u8 = 10;
+pub(crate) const KIND_ELEC_CIRCUIT: u8 = 11;
 
 /// The number of an item in its record id: the low 56 bits of the entity handle.
 fn number_of(h: aad_doc::Handle) -> u64 {
@@ -484,20 +486,35 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
         let (lf, _) = factors(&t);
         for it in t["items"].as_array().into_iter().flatten() {
             let (Some(mark), Some(len)) = (it["mark"].as_str(), it["length"].as_f64()) else { continue };
-            let layer = if it["group"].as_str().is_some_and(|g| g.starts_with("HB")) { "MEASURE-HALFBRICK" } else { "MEASURE-FULLBRICK" };
+            let half = it["group"].as_str().is_some_and(|g| g.starts_with("HB")) || it["wallType"].as_str() == Some("internal");
+            let layer = if half { "MEASURE-HALFBRICK" } else { "MEASURE-FULLBRICK" };
             let handle = stable_handle(it);
             let wall_ref = handle.map_or_else(|| mark.to_string(), |h| format!("W{}", h.hex()));
-            let nominal = if layer == "MEASURE-HALFBRICK" { HALF_BRICK_MM } else { FULL_BRICK_MM };
+            let nominal = if half { HALF_BRICK_MM } else { FULL_BRICK_MM };
+            let from_mark = it["thicknessMm"].as_f64().filter(|t| t.is_finite() && *t > 0.0);
             let measured = handle.and_then(|h| super::takeoff::thickness_from_faces_mm(d, &space, h, unit_mm));
+            let thickness = from_mark.or(measured).unwrap_or(nominal);
+            let wall_type = it["wallType"].as_str().unwrap_or(if half { "internal" } else { "external" });
+            let paint = saved(d, "WallPaint").and_then(|t| {
+                t["items"].as_array().and_then(|a| a.iter().find(|p| handle.is_some_and(|h| p["handle"].as_str() == Some(&h.hex()))).cloned())
+            });
             let wall_level = level_of(handle);
             let mut row = json!({
                 "ref": wall_ref, "level": wall_level, "length_mm": mm(len * lf), "height_mm": mm(ceiling_of(&wall_level)),
-                "thickness_mm": measured.unwrap_or(nominal), "layer": layer,
+                "thickness_mm": thickness, "layer": layer, "wall_type": wall_type,
             });
-            if measured.is_none() {
+            if from_mark.is_none() && measured.is_none() {
                 nominal_thickness += 1;
                 row["_note"] =
                     json!(format!("thickness {nominal} mm is the nominal value the measure layer implies, not a measured thickness; check it"));
+            }
+            if let Some(p) = paint {
+                if let Some(v) = p["externalPaint"].as_f64() {
+                    row["paint_external_m2"] = json!((v * 100.0).round() / 100.0);
+                }
+                if let Some(v) = p["internalPaint"].as_f64() {
+                    row["paint_internal_m2"] = json!((v * 100.0).round() / 100.0);
+                }
             }
             if let Some(h) = handle {
                 items.push(Item { kind: KIND_WALL, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
@@ -668,10 +685,44 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     }
     root.insert("slabs".into(), Value::Array(slabs.clone()));
 
+    // Electrical switchboard table and one row per wired point (kinds 10 and 11).
+    let elec = project::get(d, "electrical");
+    let mut boards = Vec::new();
+    let mut circuits = Vec::new();
+    for (i, row) in elec["wires"].as_array().into_iter().flatten().enumerate() {
+        let mut row = row.clone();
+        if row.get("level").is_none() {
+            row["level"] = json!(level);
+        }
+        let n = row["handle"].as_str().and_then(aad_doc::Handle::parse_hex).map(number_of).unwrap_or(i as u64 + 1);
+        items.push(Item { kind: KIND_ELEC_BOARD, n, row: row.clone(), bbox: [0.0; 4] });
+        boards.push(row);
+    }
+    for (i, row) in elec["circuits"].as_array().into_iter().flatten().enumerate() {
+        let mut row = row.clone();
+        if row.get("level").is_none() {
+            row["level"] = json!(level);
+        }
+        let n = row["handle"].as_str().and_then(aad_doc::Handle::parse_hex).map(number_of).unwrap_or(i as u64 + 1);
+        items.push(Item { kind: KIND_ELEC_CIRCUIT, n, row: row.clone(), bbox: [0.0; 4] });
+        circuits.push(row);
+    }
+    if !boards.is_empty() {
+        root.insert("electrical".into(), Value::Array(boards.clone()));
+    }
+    if !circuits.is_empty() {
+        root.insert("electrical_circuits".into(), Value::Array(circuits));
+    }
+
     if unstable > 0 {
         warnings.push(format!("{unstable} take-off row(s) have no entity handle, so their `ref` is a position and can change when the take-off is run again: run the take-off again"));
     }
-    let counts = json!({ "walls": walls.len(), "openings": opening_rows.len(), "openingSchedule": schedule_rows.len(), "columns": columns.len(), "lintels": lintels.len(), "slabs": slabs.len(), "rooms": items.iter().filter(|i| i.kind == KIND_ROOM).count() });
+    let counts = json!({
+        "walls": walls.len(), "openings": opening_rows.len(), "openingSchedule": schedule_rows.len(),
+        "columns": columns.len(), "lintels": lintels.len(), "slabs": slabs.len(),
+        "rooms": items.iter().filter(|i| i.kind == KIND_ROOM).count(),
+        "electrical": boards.len(), "electricalCircuits": items.iter().filter(|i| i.kind == KIND_ELEC_CIRCUIT).count(),
+    });
     Ok(Collected { root, warnings, drawing_id: id, items, counts })
 }
 
