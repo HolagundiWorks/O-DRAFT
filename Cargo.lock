@@ -4119,8 +4119,8 @@ dependencies = [
 
 [[package]]
 name = "shilpi-client"
-version = "0.2.0"
-source = "git+https://github.com/HolagundiWorks/shilpidb?rev=0797da6bb10954aff8dce604451c92d73374946e#0797da6bb10954aff8dce604451c92d73374946e"
+version = "0.2.1"
+source = "git+https://github.com/HolagundiWorks/shilpidb?tag=v0.2.1#5be82224e9edcae075fa0b8eb99a6d9eb673e9d9"
 dependencies = [
  "shilpi-protocol",
  "shilpidb",
@@ -4128,16 +4128,16 @@ dependencies = [
 
 [[package]]
 name = "shilpi-protocol"
-version = "0.2.0"
-source = "git+https://github.com/HolagundiWorks/shilpidb?rev=0797da6bb10954aff8dce604451c92d73374946e#0797da6bb10954aff8dce604451c92d73374946e"
+version = "0.2.1"
+source = "git+https://github.com/HolagundiWorks/shilpidb?tag=v0.2.1#5be82224e9edcae075fa0b8eb99a6d9eb673e9d9"
 dependencies = [
  "shilpidb",
 ]
 
 [[package]]
 name = "shilpidb"
-version = "0.2.0"
-source = "git+https://github.com/HolagundiWorks/shilpidb?rev=0797da6bb10954aff8dce604451c92d73374946e#0797da6bb10954aff8dce604451c92d73374946e"
+version = "0.2.1"
+source = "git+https://github.com/HolagundiWorks/shilpidb?tag=v0.2.1#5be82224e9edcae075fa0b8eb99a6d9eb673e9d9"
 
 [[package]]
 name = "shlex"

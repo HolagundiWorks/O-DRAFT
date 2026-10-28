@@ -39,7 +39,7 @@ Output: `dist/release/o-draft-<version>-windows-x64.msi` and `...-portable.zip`,
 | Mode | How to enable | Notes |
 |---|---|---|
 | Org PFX | `WINDOWS_CERTIFICATE` (base64 `.pfx`) and optional `WINDOWS_CERTIFICATE_PASSWORD` | Production / CI vault |
-| Azure Trusted Signing | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SIGNING_ENDPOINT`, `AZURE_SIGNING_ACCOUNT`, `AZURE_CERT_PROFILE`; optional `AZURE_SIGNING_REGION`, `SIGN_BACKEND=ossign\|signtool`, `OSSIGN` | Prefer OSSign when `ossign.exe` is present; copy `ossign.config.example.yaml` locally — never commit filled secrets |
+| Azure Trusted Signing | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SIGNING_ACCOUNT`, `AZURE_CERT_PROFILE`, plus `AZURE_SIGNING_ENDPOINT` **or** `AZURE_SIGNING_REGION`; optional `SIGN_BACKEND=ossign\|signtool`, `OSSIGN` | Prefer OSSign when `ossign.exe` is present; copy `ossign.config.example.yaml` locally — never commit filled secrets. Same secret names as OSAS / O-Studio / O-CoreOp packaging workflows |
 | Dev self-sign | `SIGN_SELF_SIGNED=1` | Creates or reuses `CN=O-Draft Development (self-signed)` under `%LOCALAPPDATA%\O-Draft\dev-codesign\`; SmartScreen still warns |
 
 With none of the above, the script warns and leaves files unsigned (exit 0). **Never** commit `.pfx`,
