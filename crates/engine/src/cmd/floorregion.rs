@@ -65,6 +65,23 @@ fn entity_map(d: &Drawing) -> Map<String, Value> {
     }
 }
 
+/// Floor name assigned to an entity by `floor.declare` / `floor.refresh` (`entityFloors`), if any.
+pub(crate) fn floor_of(d: &Drawing, handle: Handle) -> Option<String> {
+    entity_map(d).get(&handle.hex()).and_then(Value::as_str).filter(|n| !n.is_empty()).map(str::to_string)
+}
+
+/// How many distinct floor names are assigned in `entityFloors`.
+pub(crate) fn assigned_floor_count(d: &Drawing) -> usize {
+    let map = entity_map(d);
+    let mut names = std::collections::BTreeSet::new();
+    for v in map.values() {
+        if let Some(n) = v.as_str().filter(|n| !n.is_empty()) {
+            names.insert(n);
+        }
+    }
+    names.len()
+}
+
 fn ensure_floor_name(s: &mut Session, name: &str) -> Result<String> {
     let name = name.trim();
     if name.is_empty() || name.len() > MAX_NAME || name.chars().any(|c| c.is_control()) {

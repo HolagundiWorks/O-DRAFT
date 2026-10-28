@@ -291,18 +291,20 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
         .or_else(|| d.active_level_ref().map(|l| l.name.clone()))
         .or_else(|| floors.first().and_then(|f| f["name"].as_str()).map(str::to_string))
         .unwrap_or_else(|| "Ground".into());
-    let ceiling_mm = floors
-        .iter()
-        .find(|f| f["name"].as_str() == Some(level.as_str()))
-        .or(floors.first())
-        .and_then(|f| f["ceiling"].as_f64())
-        .map_or(2850.0, |c| c * 1000.0);
+    let ceiling_of = |name: &str| -> f64 {
+        floors.iter().find(|f| f["name"].as_str() == Some(name)).or(floors.first()).and_then(|f| f["ceiling"].as_f64()).map_or(2850.0, |c| c * 1000.0)
+    };
+    // Prefer a floor region assignment (`entityFloors`) for the entity; else the export-wide `level`.
+    let level_of = |h: Option<aad_doc::Handle>| -> String { h.and_then(|h| super::floorregion::floor_of(d, h)).unwrap_or_else(|| level.clone()) };
     let mut warnings: Vec<String> = Vec::new();
-    if floors.len() > 1 && !level_explicit {
+    let region_floors = super::floorregion::assigned_floor_count(d);
+    if floors.len() > 1 && !level_explicit && region_floors == 0 {
         warnings.push(format!(
-            "drawing has {} floors; all measured rows are stamped as `{level}` (active level / first floor). Pass `level` explicitly if that is wrong — one export covers one floor",
+            "drawing has {} floors; all measured rows are stamped as `{level}` (active level / first floor). Pass `level` explicitly or declare floor regions (`floor.declare`) if that is wrong",
             floors.len()
         ));
+    } else if region_floors > 0 && !level_explicit {
+        warnings.push(format!("floor regions assign entities to {region_floors} floor(s); unmapped measured rows still use `{level}`"));
     }
     // Take-off rows saved without an entity handle: their `ref` is a position, which can change when the take-off is run again.
     let mut unstable = 0usize;
@@ -347,7 +349,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     let mut no_outline = 0usize;
     for r in &rooms {
         let mut row = r.row.clone();
-        row["level"] = json!(level);
+        row["level"] = json!(level_of(r.outline.or(Some(r.handle))));
         match r.outline {
             Some(h) => match rectangle_spans_mm(d, h, unit_mm) {
                 Some((length, breadth)) => {
@@ -458,7 +460,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     for (handle, b) in &inserts {
         let Some(e) = entry_of(b) else { continue };
         let mut row = json!({
-            "ref": format!("O{}", handle.hex()), "kind": kind_name(&text_of(e, "kind")), "mark": text_of(e, "name"), "level": level,
+            "ref": format!("O{}", handle.hex()), "kind": kind_name(&text_of(e, "kind")), "mark": text_of(e, "name"), "level": level_of(Some(*handle)),
             "width_mm": mm(e["length"].as_f64().unwrap_or(0.0) * 1000.0), "height_mm": mm(e["height"].as_f64().unwrap_or(0.0) * 1000.0),
             "sill_mm": mm(e["sill"].as_f64().unwrap_or(0.0) * 1000.0),
         });
@@ -487,8 +489,9 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             let wall_ref = handle.map_or_else(|| mark.to_string(), |h| format!("W{}", h.hex()));
             let nominal = if layer == "MEASURE-HALFBRICK" { HALF_BRICK_MM } else { FULL_BRICK_MM };
             let measured = handle.and_then(|h| super::takeoff::thickness_from_faces_mm(d, &space, h, unit_mm));
+            let wall_level = level_of(handle);
             let mut row = json!({
-                "ref": wall_ref, "level": level, "length_mm": mm(len * lf), "height_mm": mm(ceiling_mm),
+                "ref": wall_ref, "level": wall_level, "length_mm": mm(len * lf), "height_mm": mm(ceiling_of(&wall_level)),
                 "thickness_mm": measured.unwrap_or(nominal), "layer": layer,
             });
             if measured.is_none() {
@@ -585,7 +588,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 let (w, dep) = (l.min(b) * lf, l.max(b) * lf);
                 let handle = stable_handle(it);
                 let col_ref = handle.map_or_else(|| format!("C{:04}", n + 1), |h| format!("C{}", h.hex()));
-                let row = json!({ "ref": col_ref, "mark": mark, "level": level, "width_mm": mm(w), "depth_mm": mm(dep) });
+                let row = json!({ "ref": col_ref, "mark": mark, "level": level_of(handle), "width_mm": mm(w), "depth_mm": mm(dep) });
                 if let Some(h) = handle {
                     items.push(Item { kind: KIND_COLUMN, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
                 } else {
@@ -616,7 +619,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 let handle = stable_handle(it);
                 let lintel_ref = handle.map_or_else(|| format!("L{:04}", lintels.len() + 1), |h| format!("L{}", h.hex()));
                 let row = json!({
-                    "ref": lintel_ref, "mark": format!("L{}", g + 1), "level": level,
+                    "ref": lintel_ref, "mark": format!("L{}", g + 1), "level": level_of(handle),
                     "opening_mm": mm((len * lf - 2.0 * bearing).max(0.0)), "bearing_mm": bearing,
                 });
                 if let Some(h) = handle {
@@ -632,8 +635,9 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     root.insert("lintels".into(), Value::Array(lintels.clone()));
 
     // Slabs.
-    let slab_mm =
-        floors.iter().find(|f| f["name"].as_str() == Some(level.as_str())).or(floors.first()).and_then(|f| f["slab"].as_f64()).unwrap_or(150.0);
+    let slab_of = |name: &str| -> f64 {
+        floors.iter().find(|f| f["name"].as_str() == Some(name)).or(floors.first()).and_then(|f| f["slab"].as_f64()).unwrap_or(150.0)
+    };
     let mut slabs = Vec::new();
     match saved(d, "Slab") {
         Some(t) => {
@@ -642,8 +646,9 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 let Some(gross) = it["gross"].as_f64() else { continue };
                 let handle = stable_handle(it);
                 let slab_ref = handle.map_or_else(|| format!("S{:04}", n + 1), |h| format!("S{}", h.hex()));
+                let slab_level = level_of(handle);
                 let mut row = json!({
-                    "ref": slab_ref, "level": level, "area_m2": (gross * af * 1000.0).round() / 1000.0, "thickness_mm": slab_mm,
+                    "ref": slab_ref, "level": slab_level, "area_m2": (gross * af * 1000.0).round() / 1000.0, "thickness_mm": slab_of(&slab_level),
                 });
                 // A rectangular slab carries its two spans; any other shape keeps only its area.
                 if let Some((length, breadth)) = handle.and_then(|h| rectangle_spans_mm(d, h, unit_mm)) {

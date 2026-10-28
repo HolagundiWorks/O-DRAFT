@@ -133,6 +133,14 @@ Checked: `rows_carry_what_o_coreop_needs_to_use_them_without_guessing`; the fail
   not block). Without a company-file link there is no strong project match, so record-time overlap
   is not reported.
 
+## Floor regions and per-entity level
+
+`floor.declare` / `floor.refresh` store `entityFloors` (handle → floor name). `bridge.export` /
+`takeoff.record` stamp each measured row's `level` from that map when the entity is assigned;
+unmapped rows still use the export-wide `level` (explicit param, active level, or first floor).
+A multi-floor drawing without regions still warns; with regions it notes that unmapped rows use the
+fallback level.
+
 ## Floor regions (single drawing)
 
 `floor.declare` / `floor.refresh` / `floor.regions` / `floor.export` / `floor.xref` assign a window (or
