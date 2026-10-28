@@ -86,6 +86,7 @@ as raw data when read and are not written back; saving reports them.
 
 - Control channel: `aad --control PORT` accepts JSON lines (`cmdline.input`, `engine.execute`,
   `ui.screenshot`, `ui.render`, ...); see [control-protocol.md](control-protocol.md).
+- Trust boundary (loopback only, no AuthZ today): [threat-model.md](threat-model.md).
 - MCP: `aad-cli mcp` (headless) or `--connect HOST:PORT` (the running app); see [mcp.md](mcp.md).
 - CLI: `aad-cli run --script ... --export out.png` for batch work.
 - Agent tools: `crates/agent`; see [ai-agent.md](ai-agent.md).
@@ -95,7 +96,7 @@ as raw data when read and are not written back; saving reports them.
 Production crates deny `unwrap`, `expect` and `panic!` and forbid `unsafe`. `Session::execute` and
 interactive input run under `catch_unwind`, restoring the drawing if a panic escapes. Input-sized
 allocations are capped (DXF tag counts, DWG size limits, hatch segment and island limits,
-`MAX_BLOCK_DEPTH`). The quality gate is `cargo xtask ci`.
+`MAX_BLOCK_DEPTH`, control JSON-line size). The quality gate is `cargo xtask ci`.
 
 ## Undo and redo
 

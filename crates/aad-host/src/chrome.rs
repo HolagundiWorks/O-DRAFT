@@ -312,3 +312,34 @@ fn units_label(session: &Session) -> String {
     let Ok(drawing) = session.doc() else { return "units?".into() };
     aad_engine::annot::drawing_unit(drawing).map_or_else(|| "units?".into(), |unit| unit.name().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::popup_json;
+    use aad_engine::Session;
+    use serde_json::json;
+
+    #[test]
+    fn send_to_level_nests_move_and_copy() {
+        let mut s = Session::new();
+        s.execute("line", &json!({ "points": [[0.0, 0.0], [10.0, 0.0]] })).unwrap();
+        let handle = s.doc().unwrap().model.iter().next().unwrap().handle;
+        s.set_selection(vec![handle]);
+        let one = serde_json::from_str::<serde_json::Value>(&popup_json(&s, false, 0, 0)).unwrap();
+        let send = |m: &serde_json::Value| {
+            m["groups"].as_array().unwrap().iter().flat_map(|g| g.as_array().unwrap().iter()).find(|i| i["label"] == "Send to Level").cloned()
+        };
+        assert!(send(&one).is_none(), "one level: no Send to Level");
+        s.execute("level.new", &json!({ "name": "First", "first": "Ground" })).unwrap();
+        s.execute("level.new", &json!({ "name": "Second" })).unwrap();
+        s.set_selection(vec![handle]);
+        let multi = serde_json::from_str::<serde_json::Value>(&popup_json(&s, false, 0, 0)).unwrap();
+        let entry = send(&multi).expect("Send to Level with other levels");
+        let labels: Vec<&str> = entry["items"].as_array().unwrap().iter().map(|i| i["label"].as_str().unwrap()).collect();
+        assert_eq!(labels, ["Move to Level", "Copy to Level"]);
+        let move_items = entry["items"][0]["items"].as_array().unwrap();
+        assert_eq!(move_items.iter().map(|i| i["label"].as_str().unwrap()).collect::<Vec<_>>(), ["First", "Second"]);
+        assert!(move_items.iter().all(|i| i["run"] == "levelmove"));
+        assert!(entry["items"][1]["items"].as_array().unwrap().iter().all(|i| i["run"] == "levelcopy"));
+    }
+}

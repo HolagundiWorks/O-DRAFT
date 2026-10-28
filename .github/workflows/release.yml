@@ -63,6 +63,31 @@ jobs:
           } >>"$GITHUB_OUTPUT"
           echo "### AAD v$v (\`${GITHUB_SHA::9}\`)" >>"$GITHUB_STEP_SUMMARY"
 
+  sbom:
+    name: CycloneDX SBOM
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      AAD_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-sbom
+      - name: Apply version override
+        if: inputs.version != ''
+        run: cargo xtask version set "$AAD_VERSION"
+      - name: Generate CycloneDX SBOM
+        run: |
+          mkdir -p dist/release
+          cargo xtask sbom --out "dist/release/o-draft-$AAD_VERSION.cdx.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sbom
+          path: dist/release/*
+          if-no-files-found: error
+
   macos:
     name: macOS universal
     needs: version
@@ -391,7 +416,7 @@ jobs:
 
   release:
     name: Draft GitHub Release
-    needs: [version, macos, windows, linux, linux-riscv64, flatpak, web, freebsd]
+    needs: [version, sbom, macos, windows, linux, linux-riscv64, flatpak, web, freebsd]
     # Only the `release` branch publishes; a dry run on another branch stops before this job.
     if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest

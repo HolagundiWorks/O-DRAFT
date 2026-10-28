@@ -72,7 +72,7 @@ public sealed partial class MainWindow
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 MinHeight = Density.DialogButtonHeight,
-                Padding = new Thickness(12, 6, 12, 6),
+                Padding = Density.RecentItemPadding,
             };
             ToolTipService.SetToolTip(button, filePath);
             AutomationProperties.SetName(button, "Open recent " + name);

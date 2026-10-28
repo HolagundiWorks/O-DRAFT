@@ -39,4 +39,6 @@
     <Thickness x:Key="MarginSection">0,0,0,12</Thickness>
     <Thickness x:Key="MarginGroupStart">8,0,0,0</Thickness>
     <Thickness x:Key="MarginToolbarDivider">4,2,4,2</Thickness>
+    <Thickness x:Key="MarginWelcomePanel">24</Thickness>
+    <Thickness x:Key="MarginRevisionHeaderIndent">18,0,0,0</Thickness>
 </ResourceDictionary>

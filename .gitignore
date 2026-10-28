@@ -8,6 +8,9 @@
 /temp/
 .DS_Store
 *.swp
+*.pfx
+*.p12
+ossign.config.yaml
 /apps/aad-web/dist/
 /apps/aad-winui/obj/
 /apps/aad-winui/bin/

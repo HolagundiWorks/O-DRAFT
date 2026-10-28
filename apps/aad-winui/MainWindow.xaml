@@ -394,12 +394,12 @@
             AutomationProperties.Name="Welcome">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel
-                    MaxWidth="520"
+                    MaxWidth="{StaticResource WelcomeMaxWidth}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Margin="24"
+                    Margin="{StaticResource MarginWelcomePanel}"
                     Spacing="{StaticResource SpaceLg}">
-                    <Image x:Name="WelcomeLogo" Width="72" Height="72" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
+                    <Image x:Name="WelcomeLogo" Width="{StaticResource LogoWelcome}" Height="{StaticResource LogoWelcome}" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
                     <TextBlock
                         Text="O-Draft"
                         FontSize="{StaticResource FontSizeSplashTitle}"
@@ -470,14 +470,14 @@
                 BorderBrush="{ThemeResource BorderDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="{StaticResource CornerRadiusAskCard}"
-                Padding="28,24"
-                MinWidth="280"
-                MaxWidth="420">
+                Padding="{StaticResource BusyCardPadding}"
+                MinWidth="{StaticResource BusyCardMinWidth}"
+                MaxWidth="{StaticResource StatusMaxWidth}">
                 <StackPanel Spacing="{StaticResource SpaceMd}" HorizontalAlignment="Center">
                     <ProgressRing
                         x:Name="BusyRing"
-                        Width="40"
-                        Height="40"
+                        Width="{StaticResource BusyRingSize}"
+                        Height="{StaticResource BusyRingSize}"
                         IsActive="False"
                         HorizontalAlignment="Center" />
                     <TextBlock
@@ -502,7 +502,7 @@
         <!-- In-window splash (avoids a second top-level window fighting the command chrome). -->
         <Grid x:Name="SplashOverlay" Grid.RowSpan="5" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">
-                <Image x:Name="SplashLogo" Width="96" Height="96" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
+                <Image x:Name="SplashLogo" Width="{StaticResource LogoSplash}" Height="{StaticResource LogoSplash}" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
                 <TextBlock Text="O-Draft" FontSize="{StaticResource FontSizeSplashTitle}" FontWeight="SemiBold" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="Architectural drafting for OSAS" FontSize="{StaticResource FontSizeSection}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="Open Source Architecture Suite · with O-Studio and O-CoreOp" FontSize="{StaticResource FontSizeBody}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />

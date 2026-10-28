@@ -28,7 +28,9 @@ LOD, WinUI async zoom-band rebuild, control-channel and menu save via workers.
 - UI-005: an overly wide Properties panel in a layout tab, seen once, not reproduced.
 - GitHub: `cad-ci.yml` runs on every push (it passed on 2026-10-27 and failed at the `fmt` step of a later push, for formatting in the companion code); `cad-nightly.yml` failed on its last three scheduled runs (2026-10-25 to 2026-10-27) and the cause has not been looked into.
 - The release installer was installed, run and uninstalled silently on the development machine, but not on a clean machine, and the wizard pages were not exercised ([RELEASE_AND_PACKAGING.md](RELEASE_AND_PACKAGING.md)).
-- Neither package ships `NOTICE` (third-party notices); both are unsigned.
+- Packages are often unsigned until release signing secrets are set (SmartScreen warns). Staging
+  copies `NOTICE`, `ATTRIBUTION.md` and `THIRD_PARTY_LICENSES.md` into the MSI and portable zip
+  (`packaging/windows/package.ps1`, `aad.wxs`); re-verify on the next release candidate.
 - Dependencies are not audited for advisories on this machine (`cargo audit` is run by the nightly
   workflow only).
 
