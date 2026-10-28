@@ -18,6 +18,7 @@ pub mod paper;
 mod plotstyle;
 mod point;
 pub mod raster;
+pub mod scene;
 mod trace;
 pub mod units;
 mod wide;
@@ -32,6 +33,7 @@ pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, d
 pub use fill::{triangulate_evenodd, triangulate_outline};
 pub use hatch::pattern_lines;
 pub use paper::{PAPER_SIZES, PaperSize, Sheet, paper_size, sheet};
+pub use scene::{Scene, SceneTile, build_scene, flatten_scene, rebuild_scene, scene_tile_edge, scene_tiling_viable};
 pub use trace::{build_with_traces, stylize_trace};
 
 /// Handle carried by model-space geometry drawn inside a paper-space viewport (it belongs to no
@@ -608,7 +610,7 @@ fn build_space_inner(d: &Drawing, space: &Space, opts: &Options, plotting: bool)
 /// Fewer entities than this are built on one thread (the split costs more than it saves).
 const PARALLEL_MIN: usize = 4096;
 /// Entities per unit of parallel work.
-const PARALLEL_CHUNK: usize = 256;
+pub(crate) const PARALLEL_CHUNK: usize = 256;
 
 /// Append `part` (built separately) to `dst`, keeping draw order: its primitives' starts move past
 /// what `dst` already holds.
@@ -626,7 +628,7 @@ fn append(dst: &mut DisplayList, part: DisplayList) {
 
 /// Whether everything an entity's drawing depends on, other than the entity itself, is the same in
 /// both drawings (header, tables, styles, block definitions).
-fn same_environment(a: &Drawing, b: &Drawing) -> bool {
+pub(crate) fn same_environment(a: &Drawing, b: &Drawing) -> bool {
     a.header == b.header
         && a.layers == b.layers
         && a.linetypes == b.linetypes
@@ -832,35 +834,37 @@ const VP_MODEL_LRU: usize = 6;
 /// Model units of pan before the tessellation cell changes (`N × view_height`).
 const VP_PAN_CELL_MULT: f64 = 8.0;
 
-thread_local! {
-    /// Model geometry tessellated for a viewport (world coords, correct linetype scale).
-    /// Reused when only `view_center` pans — transform + clip instead of re-expanding text/hatch.
-    /// Small LRU so crossing one cell boundary does not drop the previous tile.
-    static VP_MODEL: std::cell::RefCell<Vec<(u64, Arc<DisplayList>)>> = const { std::cell::RefCell::new(Vec::new()) };
+/// Process-wide layout-viewport model tessellation LRU (Phase C: no longer `thread_local`, so
+/// display-list worker threads share the same tiles as the UI thread).
+fn vp_model_cache() -> &'static std::sync::Mutex<Vec<(u64, Arc<DisplayList>)>> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(u64, Arc<DisplayList>)>>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()))
 }
 
-fn vp_model_get(key: u64) -> Option<Arc<DisplayList>> {
-    VP_MODEL.with(|slot| {
-        let mut v = slot.borrow_mut();
-        if let Some(i) = v.iter().position(|(k, _)| *k == key) {
-            let entry = v.remove(i);
-            let list = Arc::clone(&entry.1);
-            v.insert(0, entry);
-            return Some(list);
-        }
-        None
-    })
+pub(crate) fn vp_model_get(key: u64) -> Option<Arc<DisplayList>> {
+    let mut guard = match vp_model_cache().lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    if let Some(i) = guard.iter().position(|(k, _)| *k == key) {
+        let entry = guard.remove(i);
+        let list = Arc::clone(&entry.1);
+        guard.insert(0, entry);
+        return Some(list);
+    }
+    None
 }
 
-fn vp_model_put(key: u64, list: Arc<DisplayList>) {
-    VP_MODEL.with(|slot| {
-        let mut v = slot.borrow_mut();
-        v.retain(|(k, _)| *k != key);
-        v.insert(0, (key, list));
-        if v.len() > VP_MODEL_LRU {
-            v.truncate(VP_MODEL_LRU);
-        }
-    });
+pub(crate) fn vp_model_put(key: u64, list: Arc<DisplayList>) {
+    let mut guard = match vp_model_cache().lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    guard.retain(|(k, _)| *k != key);
+    guard.insert(0, (key, list));
+    if guard.len() > VP_MODEL_LRU {
+        guard.truncate(VP_MODEL_LRU);
+    }
 }
 
 /// Map a circular arc through a similarity transform. Non-uniform scales return `None` (ellipse).

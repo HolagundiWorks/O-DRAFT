@@ -103,6 +103,8 @@ struct FrameCache {
     list_key: ListKey,
     list: Option<DisplayList>,
     list_doc: Option<std::sync::Arc<Drawing>>,
+    /// Phase C model-space scene (Arc tiles); `None` for paper, traces, or monolithic builds.
+    scene: Option<aad_render::Scene>,
     mesh_key: Option<u64>,
     /// Composed mesh (monolithic or merged tiles) for inspect / present fallback.
     mesh: Option<MeshData>,
@@ -140,6 +142,7 @@ impl Default for FrameCache {
             list_key: (0, 0, 0, false, 0, 0b11, 0),
             list: None,
             list_doc: None,
+            scene: None,
             mesh_key: None,
             mesh: None,
             mesh_origin: Vec2::ZERO,
@@ -171,6 +174,7 @@ impl FrameCache {
         self.tiles_remeshed = 0;
         self.tiles_total = 0;
         self.mesh_tiled = false;
+        self.scene = None;
     }
 }
 
@@ -183,11 +187,23 @@ fn has_traces(doc: &Drawing) -> bool {
 /// The display list of `space`; model space of a level with traces is built with its traces,
 /// faded towards `background`.
 fn build_list(doc: &Drawing, space: &Space, opts: &aad_render::Options, background: Rgb) -> DisplayList {
+    build_list_and_scene(doc, space, opts, background).0
+}
+
+/// Like [`build_list`], also returning a Phase C [`aad_render::Scene`] when model-space tiling applies.
+fn build_list_and_scene(doc: &Drawing, space: &Space, opts: &aad_render::Options, background: Rgb) -> (DisplayList, Option<aad_render::Scene>) {
     if matches!(space, Space::Model) && has_traces(doc) {
-        aad_render::build_with_traces(doc, opts, background)
-    } else {
-        aad_render::build(doc, space, opts)
+        return (aad_render::build_with_traces(doc, opts, background), None);
     }
+    if matches!(space, Space::Model) {
+        let edge = aad_render::scene_tile_edge(opts.view_height);
+        if aad_render::scene_tiling_viable(doc, edge) {
+            let scene = aad_render::build_scene(doc, opts);
+            let list = aad_render::flatten_scene(&scene);
+            return (list, Some(scene));
+        }
+    }
+    (aad_render::build(doc, space, opts), None)
 }
 
 fn space_fp(space: &Space) -> u64 {
@@ -2064,22 +2080,40 @@ impl Host {
                 self.frame.pending = None;
                 aad_engine::spatial::warm(state.doc.clone(), state.space.clone());
                 let t0 = std::time::Instant::now();
-                let incremental = match (&self.frame.list, &self.frame.list_doc) {
-                    (Some(old), Some(old_doc))
-                        if matches!(state.space, Space::Model)
-                            && !has_traces(&state.doc)
-                            && !has_traces(old_doc)
-                            && self.frame.list_key.0 == list_key.0
-                            && self.frame.list_key.2 == list_key.2
-                            && self.frame.list_key.3 == list_key.3
-                            && self.frame.list_key.5 == list_key.5
-                            && self.frame.list_key.6 == list_key.6 =>
-                    {
-                        aad_render::rebuild(old, old_doc, &state.doc, &opts)
+                let can_incremental = matches!(state.space, Space::Model)
+                    && !has_traces(&state.doc)
+                    && self.frame.list_doc.as_ref().is_some_and(|old_doc| !has_traces(old_doc))
+                    && self.frame.list_key.0 == list_key.0
+                    && self.frame.list_key.2 == list_key.2
+                    && self.frame.list_key.3 == list_key.3
+                    && self.frame.list_key.5 == list_key.5
+                    && self.frame.list_key.6 == list_key.6;
+                let (list, scene) = if can_incremental {
+                    if let (Some(old_scene), Some(old_doc)) = (&self.frame.scene, &self.frame.list_doc) {
+                        if let Some(next) = aad_render::rebuild_scene(old_scene, old_doc, &state.doc, &opts) {
+                            let list = aad_render::flatten_scene(&next);
+                            (list, Some(next))
+                        } else if let (Some(old), Some(old_doc)) = (&self.frame.list, &self.frame.list_doc) {
+                            match aad_render::rebuild(old, old_doc, &state.doc, &opts) {
+                                Some(list) => (list, None),
+                                None => build_list_and_scene(&state.doc, &state.space, &opts, background),
+                            }
+                        } else {
+                            build_list_and_scene(&state.doc, &state.space, &opts, background)
+                        }
+                    } else if let (Some(old), Some(old_doc)) = (&self.frame.list, &self.frame.list_doc) {
+                        match aad_render::rebuild(old, old_doc, &state.doc, &opts) {
+                            Some(list) => (list, None),
+                            None => build_list_and_scene(&state.doc, &state.space, &opts, background),
+                        }
+                    } else {
+                        build_list_and_scene(&state.doc, &state.space, &opts, background)
                     }
-                    _ => None,
+                } else {
+                    build_list_and_scene(&state.doc, &state.space, &opts, background)
                 };
-                self.frame.list = Some(incremental.unwrap_or_else(|| build_list(&state.doc, &state.space, &opts, background)));
+                self.frame.list = Some(list);
+                self.frame.scene = scene;
                 self.frame.list_build_ms = t0.elapsed().as_secs_f64() * 1000.0;
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
@@ -2090,7 +2124,9 @@ impl Host {
             if self.frame.list.is_none() {
                 aad_engine::spatial::warm(state.doc.clone(), state.space.clone());
                 let t0 = std::time::Instant::now();
-                self.frame.list = Some(build_list(&state.doc, &state.space, &opts, background));
+                let (list, scene) = build_list_and_scene(&state.doc, &state.space, &opts, background);
+                self.frame.list = Some(list);
+                self.frame.scene = scene;
                 self.frame.list_build_ms = t0.elapsed().as_secs_f64() * 1000.0;
                 self.frame.list_key = list_key;
                 self.frame.list_doc = Some(state.doc.clone());
