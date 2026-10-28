@@ -94,7 +94,7 @@ export covers one floor only — pass `level` explicitly for First / Second / �
 
 ## Tests
 
-`crates/engine/tests/takeoff_record.rs` (eleven tests): the records equal the bridge rows and the header is
+`crates/engine/tests/takeoff_record.rs`: the records equal the bridge rows and the header is
 `complete`; ids carry kind, slot and number; recording again keeps the ids and one changed wall changes one
 record; a wall no longer measured is deleted; refs survive a rebuilt take-off; millimetres for an imperial
 drawing; rectangular and L-shaped slabs; two drawings in one database stay apart and each keeps its slot; the
@@ -102,6 +102,12 @@ default file, refusal of an entity store and of an unreachable server; an empty 
 the annotated drawing (a stand-in plotter receives the measured items on `TAKEOFF-ANNOT`, a 1.2 MB PDF is
 stored as three chunks that add up, and recording again without it removes them). Unit tests in
 `cmd/takeoffrec.rs` cover the contract's slot test vectors, id layout, chunking and the slot probe.
+
+`crates/engine/tests/quantity_trust.rs` plus fixture `fixtures/quantity-trust-checklist.json`: known wall/opening
+numbers (two 6000×3000×230 walls; D2 + W3 on the front; `project_ref`; face net 32.67 m²) through
+`takeoff.record`, catching double-count, `wall_ref`, and thickness regressions. Linux/cloud driver:
+`scripts/takeoff-e2e-harness.sh` (optional `TAKEOFF_E2E_SHILPID=1`, `TAKEOFF_TRUST_EXPORT=…`). WinUI product
+steps stay on a Windows machine (OSAS store `takeoff-e2e-runbook.md`).
 
 One more test is ignored (it needs the server program): it records to a running `shilpid` three times, once
 after erasing a wall (`AAD_SHILPID_ADDR=127.0.0.1:7430 cargo test -p aad-engine --test takeoff_record -- --ignored`,
