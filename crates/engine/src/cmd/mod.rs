@@ -68,6 +68,8 @@ mod structure;
 mod symbols;
 mod takeoff;
 mod takeoffann;
+mod takeoffphase;
+pub use takeoffphase::phases_json as takeoff_phases_json;
 mod takeoffrec;
 mod texttools;
 mod trimextend;
@@ -238,6 +240,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(space::specs());
         v.extend(takeoff::specs());
         v.extend(takeoffann::specs());
+        v.extend(takeoffphase::specs());
         v.extend(takeoffrec::specs());
         v.extend(floorregion::specs());
         v.extend(library::specs());

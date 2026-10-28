@@ -436,11 +436,7 @@ fn run_deduct(s: &mut Session, _p: &Value) -> Result<Value> {
         let h = s.doc_mut()?.new_handle();
         b.entities.push(Entity {
             handle: h,
-            common: Common {
-                layer: "MEASURE-DEDUCT".into(),
-                takeoff: Some(TakeoffMark { kind: TakeoffKind::Deduct, thickness_mm: None }),
-                ..Common::default()
-            },
+            common: Common { layer: "MEASURE-DEDUCT".into(), takeoff: Some(TakeoffMark::new(TakeoffKind::Deduct, None)), ..Common::default() },
             kind: super::helpers::line(Vec2::new(min_x, 0.0), Vec2::new(max_x, 0.0)),
         });
         s.doc_mut()?.blocks.insert(name, std::sync::Arc::new(b));

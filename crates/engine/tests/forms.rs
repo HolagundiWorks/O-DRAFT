@@ -170,3 +170,69 @@ fn the_trace_form_adds_and_edits_a_trace() {
     assert!(t["layers"].is_null());
     assert!(forms::parse_input(f, &json!({"add": "Ground", "colour": "red"})).is_err());
 }
+
+/// Vertical extent of the A-WALL lines: the wall's thickness for a wall drawn along x.
+fn wall_thickness(s: &Session) -> f64 {
+    let ys: Vec<f64> = s
+        .doc()
+        .unwrap()
+        .model
+        .iter()
+        .filter(|e| e.common.layer == "A-WALL")
+        .filter_map(|e| if let EntityKind::Line(l) = &e.kind { Some([l.a.y, l.b.y]) } else { None })
+        .flatten()
+        .collect();
+    ys.iter().cloned().fold(f64::MIN, f64::max) - ys.iter().cloned().fold(f64::MAX, f64::min)
+}
+
+#[test]
+fn architecture_commands_take_a_length_in_any_unit() {
+    // A millimetre drawing: every spelling of 304.8 mm gives the same wall.
+    for t in ["1'", "12\"", "304.8mm", "30.48cm", "0.3048m", "1 ft", "304.8"] {
+        let mut s = session();
+        s.execute("wall.draw", &json!({"points": [[0, 0], [4000, 0]], "thickness": t})).unwrap_or_else(|e| panic!("{t}: {e}"));
+        assert!((wall_thickness(&s) - 304.8).abs() < 1e-6, "{t}: {}", wall_thickness(&s));
+    }
+    // A metre drawing: a bare number is metres, a suffix converts.
+    let mut m = Session::new();
+    m.execute("drawing.units", &json!({"units": "m", "mode": "metadata"})).unwrap();
+    m.execute("wall.draw", &json!({"points": [[0, 0], [4, 0]], "thickness": "230mm"})).unwrap();
+    assert!((wall_thickness(&m) - 0.23).abs() < 1e-9, "{}", wall_thickness(&m));
+    // Numbers still work, and a word that is not a length is left for the command to refuse.
+    let mut n = session();
+    n.execute("wall.draw", &json!({"points": [[0, 0], [4000, 0]], "thickness": 200})).unwrap();
+    assert!((wall_thickness(&n) - 200.0).abs() < 1e-6);
+}
+
+#[test]
+fn lists_and_fixed_unit_fields_take_units_too() {
+    use aad_engine::annot::Unit;
+    // Column size and grid bays are lists in the drawing's unit: `12"` and `300mm` in one call.
+    let c = forms::normalize_lengths("column.place", &json!({"size": ["12\"", "300mm"]}), Some(Unit::Mm)).unwrap();
+    assert_eq!(c["size"], json!([304.8, 300.0]));
+    let g = forms::normalize_lengths("grid.axis", &json!({"bays": "4m, 5000mm, 15'"}), Some(Unit::Mm)).unwrap();
+    assert_eq!(g["bays"], json!([4000.0, 5000.0, 4572.0]));
+    assert!(forms::normalize_lengths("column.place", &json!({"size": [300, 450]}), Some(Unit::Mm)).is_none(), "numbers need no change");
+    // Beam depths are millimetres whatever the drawing unit is.
+    let v = forms::normalize_lengths("beams", &json!({"depths": ["1'", "450mm", "0.5m"]}), Some(aad_engine::annot::Unit::M));
+    assert_eq!(v.unwrap()["depths"], json!([304.8, 450.0, 500.0]));
+    // Level heights are metres.
+    let l = forms::normalize_lengths("level.mark", &json!({"value": "3000mm"}), Some(aad_engine::annot::Unit::Mm)).unwrap();
+    assert_eq!(l["value"], json!(3.0));
+}
+
+#[test]
+fn the_dialog_and_prompts_take_units_and_say_what_is_wrong() {
+    let f = forms::get("wall.draw").unwrap();
+    let p = aad_engine::units::with_drawn_unit(Some(aad_engine::annot::Unit::Mm), || {
+        forms::parse_input(f, &json!({"thickness": "9\"", "points": [[0, 0], [1, 0]]}))
+    })
+    .unwrap();
+    assert_eq!(p["thickness"], json!(228.6));
+    let e = forms::parse_input(f, &json!({"thickness": "nine", "points": [[0, 0], [1, 0]]})).unwrap_err().to_string();
+    assert!(e.contains("not a length"), "{e}");
+    // A plain number field still says number.
+    let t = forms::get("level.trace").unwrap();
+    let e = forms::parse_input(t, &json!({"add": "L2", "fade": "x"})).unwrap_err().to_string();
+    assert!(e.contains("not a number"), "{e}");
+}

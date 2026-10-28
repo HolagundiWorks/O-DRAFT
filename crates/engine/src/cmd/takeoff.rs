@@ -193,6 +193,8 @@ struct Wall {
     handle: Handle,
     kind: TakeoffKind,
     thickness_mm: Option<f64>,
+    /// The mark carries a thickness the user set; otherwise `thickness_mm` is only what the kind or layer implies.
+    thickness_set: bool,
 }
 
 /// Project key that mirrors take-off marks so a DXF round-trip (which does not store the entity field) keeps them.
@@ -262,12 +264,13 @@ fn matches_measure(e: &aad_doc::Entity, layer: &str) -> bool {
     }
 }
 
-fn kind_of_wall(e: &aad_doc::Entity, layer: &str) -> (TakeoffKind, Option<f64>) {
+fn kind_of_wall(e: &aad_doc::Entity, layer: &str) -> (TakeoffKind, Option<f64>, bool) {
     if let Some(mark) = &e.common.takeoff {
         let thick = mark.thickness_mm.or_else(|| mark.kind.default_thickness_mm());
-        return (mark.kind, thick);
+        return (mark.kind, thick, mark.thickness_mm.is_some());
     }
-    kind_for_layer(layer).unwrap_or((TakeoffKind::Linear, None))
+    let (kind, thick) = kind_for_layer(layer).unwrap_or((TakeoffKind::Linear, None));
+    (kind, thick, false)
 }
 
 /// Copy marks from `takeoffMeta` onto entities that lost them (DXF load). Existing marks stay.
@@ -352,10 +355,10 @@ fn walls(d: &Drawing, space: &Space, layers: &[&str]) -> Vec<Wall> {
     if let Some(store) = d.space(space) {
         for e in store.iter().filter(|e| d.is_visible(e)) {
             if let Some(layer) = layers.iter().copied().find(|l| matches_measure(e, l)) {
-                let (kind, thickness_mm) = kind_of_wall(e, layer);
+                let (kind, thickness_mm, thickness_set) = kind_of_wall(e, layer);
                 for seg in segments_of(&e.kind) {
                     if seg.len() > 1e-12 {
-                        out.push(Wall { layer: layer.to_string(), seg, handle: e.handle, kind, thickness_mm });
+                        out.push(Wall { layer: layer.to_string(), seg, handle: e.handle, kind, thickness_mm, thickness_set });
                     }
                 }
             }
@@ -808,7 +811,7 @@ fn measure_walls(s: &mut Session, p: &Value, cmd: &str, name: &'static str, titl
         }
         items.push(json!({
             "mark": names[i], "group": format!("{prefix}-{letter}"), "handle": w.handle.hex(),
-            "length": len, "wallType": w.kind.wall_type(w.thickness_mm), "thicknessMm": w.thickness_mm,
+            "length": len, "wallType": w.kind.wall_type(w.thickness_mm), "thicknessMm": w.thickness_mm.filter(|_| w.thickness_set),
             "openings": ded_names.iter().map(|(n, l)| json!({"name": n, "length": l})).collect::<Vec<_>>(),
             "net": (len - ded_total).max(0.0),
         }));
@@ -1212,7 +1215,7 @@ fn run_paint(s: &mut Session, p: &Value) -> Result<Value> {
         total_int += int_paint;
         items.push(json!({
             "handle": w.handle.hex(), "length": len_m, "height": height_m, "wallType": w.kind.wall_type(w.thickness_mm),
-            "thicknessMm": w.thickness_mm,
+            "thicknessMm": w.thickness_mm.filter(|_| w.thickness_set),
             "wallArea": one_face * faces, "openings": open_one * faces, "net": ext_paint + int_paint,
             "externalPaint": ext_paint, "internalPaint": int_paint,
         }));
@@ -1492,7 +1495,8 @@ fn run_draw(s: &mut Session, p: &Value) -> Result<Value> {
         Some(Value::Bool(b)) => *b,
         _ => kind.is_outline(),
     };
-    let mark = TakeoffMark { kind, thickness_mm };
+    let (phase, bill_phase) = super::takeoffphase::for_new_mark("takeoff.draw", s.doc()?, p)?;
+    let mark = TakeoffMark::new(kind, thickness_mm).in_phases(phase.clone(), bill_phase.clone());
     let mut handles = Vec::new();
     if closed || kind.is_outline() {
         if pts.len() < 3 {
@@ -1514,7 +1518,7 @@ fn run_draw(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     sync_meta(s.doc_mut()?);
-    Ok(json!({ "handles": handles, "kind": kind.as_str(), "thicknessMm": thickness_mm }))
+    Ok(json!({ "handles": handles, "kind": kind.as_str(), "thicknessMm": thickness_mm, "phase": phase, "billPhase": bill_phase }))
 }
 
 fn run_tag(s: &mut Session, p: &Value) -> Result<Value> {
@@ -1524,7 +1528,8 @@ fn run_tag(s: &mut Session, p: &Value) -> Result<Value> {
     if hs.is_empty() {
         return Err(bad("takeoff.tag", "nothing selected"));
     }
-    let mark = TakeoffMark { kind, thickness_mm };
+    let (phase, bill_phase) = super::takeoffphase::for_new_mark("takeoff.tag", s.doc()?, p)?;
+    let mark = TakeoffMark::new(kind, thickness_mm).in_phases(phase.clone(), bill_phase.clone());
     let mut tagged = 0;
     for h in hs {
         if s.doc_mut()?.modify_entity(h, |e| e.common.takeoff = Some(mark.clone())).is_ok() {
@@ -1532,11 +1537,12 @@ fn run_tag(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     sync_meta(s.doc_mut()?);
-    Ok(json!({ "tagged": tagged, "kind": kind.as_str(), "thicknessMm": thickness_mm }))
+    Ok(json!({ "tagged": tagged, "kind": kind.as_str(), "thicknessMm": thickness_mm, "phase": phase, "billPhase": bill_phase }))
 }
 
 fn run_maplayers(s: &mut Session, p: &Value) -> Result<Value> {
     let force = bool_or(p, "force", false);
+    let (phase, bill_phase) = super::takeoffphase::for_new_mark("takeoff.maplayers", s.doc()?, p)?;
     let handles: Vec<Handle> = {
         let d = s.doc()?;
         d.model.iter().chain(d.layouts.iter().flat_map(|l| l.entities.iter())).map(|e| e.handle).collect()
@@ -1551,7 +1557,7 @@ fn run_maplayers(s: &mut Session, p: &Value) -> Result<Value> {
             skipped += 1;
             continue;
         }
-        let mark = TakeoffMark { kind, thickness_mm: thick.or_else(|| kind.default_thickness_mm()) };
+        let mark = TakeoffMark::new(kind, thick.or_else(|| kind.default_thickness_mm())).in_phases(phase.clone(), bill_phase.clone());
         if s.doc_mut()?.modify_entity(h, |ent| ent.common.takeoff = Some(mark)).is_ok() {
             tagged += 1;
             *by_kind.entry(kind.as_str()).or_insert(0) += 1;
@@ -1577,7 +1583,7 @@ fn run_column_deduct(s: &mut Session, _p: &Value) -> Result<Value> {
             continue;
         }
         let vs: Vec<aad_geom::PolyVertex> = col.pts.iter().copied().map(aad_geom::PolyVertex::new).collect();
-        add_marked(s, super::helpers::lwpoly(vs, true), TakeoffMark { kind: TakeoffKind::SlabDeduct, thickness_mm: None })?;
+        add_marked(s, super::helpers::lwpoly(vs, true), TakeoffMark::new(TakeoffKind::SlabDeduct, None))?;
         covered.push(col.pts.clone());
         added += 1;
     }

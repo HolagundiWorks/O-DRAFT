@@ -132,6 +132,31 @@ After reading a database O-Draft wrote, O-CoreOp asked for four changes (`HANDOF
 
 Checked: `rows_carry_what_o_coreop_needs_to_use_them_without_guessing`; the failure test `a_recording_that_dies_half_way_leaves_the_drawing_recording_and_the_next_one_completes_it`; and `apps/aad-cli/tests/takeoff_pdf.rs`, which uses the real plotter: the PDF is stored in chunks that reassemble to the bytes and SHA-256 the header names, and an ignored test run against a real `shilpid` recorded two drawings with their PDFs.
 
+## Phases (estimation and running bill)
+
+A measured dimension belongs to an **estimation phase** (a stage of the work: Foundation, Plinth, Superstructure,
+Finishing by default) and a **running-bill phase** (Phase 1 to 3 by default). Both are names from lists the drawing
+keeps, chosen in O-Draft while measuring and shown as columns by O-CoreOp. The take-off mark carries them
+(`phase`, `billPhase`) and so does every exported row (`phase`, `bill_phase`, both optional: a row with none has no
+field, so an older reader is unaffected).
+
+- `takeoff.phases {estimation?, billing?, current?: {estimation?, billing?}}` reads or edits the two lists and the
+  *current* phases. Lists are trimmed, case-insensitive-unique, at most 50 names of 60 characters; the current phase
+  must be in its list. The WinUI take-off bar has a picker for each (`apps/aad-winui/TakeoffPhases.cs`).
+- `takeoff.draw`, `takeoff.tag` and `takeoff.maplayers` stamp the current phases on what they mark, or the `phase` /
+  `billPhase` of the call (a name outside the list is refused; null clears).
+- `takeoff.phase {estimation?, billing?, handles?}` changes the phases of dimensions already marked; unmarked objects
+  are skipped and counted, never guessed.
+- Walls, columns, lintels and slabs carry the phases of their own mark. An opening has no mark: it takes the phases
+  of the wall it sits in (`wall_ref`) unless it has its own. Rooms and electrical rows carry none yet.
+- The marks are mirrored in the project entry that a DXF round trip keeps (`takeoffMeta`), so the phases survive a
+  save as DXF.
+
+Checked by `crates/engine/tests/takeoff_phases.rs` (defaults, list editing and hostile input, stamping, change and
+undo, exported wall and opening rows, no columns when none are set) and
+`aad-host` `panels_carry_the_take_off_phases_for_the_pickers`. The WinUI pickers were compiled but not clicked
+through, and O-CoreOp's table columns are a change in that repository.
+
 ## Not done
 
 - **PDF underlay and calibration**: built for vector PDFs, see [pdf-underlay.md](pdf-underlay.md); scanned PDFs are not supported. (Old text follows.) O-CoreOp's PDF panel is gone; O-Draft had no PDF underlay or scale

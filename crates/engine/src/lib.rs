@@ -685,6 +685,9 @@ impl Session {
         (spec.enabled)(self).map_err(|m| EngineError::Disabled(spec.id.into(), m))?;
         let before = self.state().ok().map(|s| (s.doc.clone(), s.selection.clone(), s.uid));
         let run = spec.run;
+        // Lengths typed with a unit (`"230mm"`, `"3'"`) become numbers in the field's unit first.
+        let converted = forms::normalize_lengths(spec.id, params, self.doc().ok().and_then(annot::drawing_unit));
+        let params = converted.as_ref().unwrap_or(params);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(self, params)));
         let result = match result {
             Ok(r) => r,

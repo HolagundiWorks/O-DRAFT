@@ -40,6 +40,26 @@ pub enum Kind {
     Table(&'static [Col]),
 }
 
+/// The unit a length field's bare numbers are in. A value typed with a unit (`12mm`, `1'6"`, `18"`, `0.3 m`) is
+/// converted into it, so every length can be typed in any unit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Len {
+    /// The drawing's unit (`INSUNITS`).
+    Drawing,
+    Mm,
+    M,
+}
+
+impl Len {
+    fn unit(self) -> Option<crate::annot::Unit> {
+        match self {
+            Len::Drawing => crate::units::drawn_unit_now(),
+            Len::Mm => Some(crate::annot::Unit::Mm),
+            Len::M => Some(crate::annot::Unit::M),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Field {
     pub key: &'static str,
@@ -50,10 +70,12 @@ pub struct Field {
     /// Ask for the points even if optional (Enter skips them).
     pub ask: bool,
     pub help: &'static str,
+    /// Set for a length: what a bare number means, and what a typed unit converts into.
+    pub len: Option<Len>,
 }
 
 const fn field(key: &'static str, label: &'static str, kind: Kind) -> Field {
-    Field { key, label, kind, default: "", required: false, ask: false, help: "" }
+    Field { key, label, kind, default: "", required: false, ask: false, help: "", len: None }
 }
 impl Field {
     const fn req(mut self) -> Self {
@@ -66,6 +88,18 @@ impl Field {
     }
     const fn ask(mut self) -> Self {
         self.ask = true;
+        self
+    }
+    const fn drawing(mut self) -> Self {
+        self.len = Some(Len::Drawing);
+        self
+    }
+    const fn mm(mut self) -> Self {
+        self.len = Some(Len::Mm);
+        self
+    }
+    const fn metres(mut self) -> Self {
+        self.len = Some(Len::M);
         self
     }
     const fn help(mut self, h: &'static str) -> Self {
@@ -123,7 +157,7 @@ const TAKEOFF: &[Field] = &[
     field("units", "Units (blank: the drawing's)", Kind::Choice(UNITS)),
     field("table", "Draw the table", Kind::Bool).def("true"),
     field("label", "Label the objects", Kind::Bool).def("true"),
-    field("tolerance", "Matching distance (drawing units)", Kind::Number).help("Blank: about 10 mm"),
+    field("tolerance", "Matching distance (drawing units)", Kind::Number).help("Blank: about 10 mm").drawing(),
 ];
 const TAKEOFF_PAINT: &[Field] = &[
     field("floor", "Floor name (blank: the first)", Kind::Text),
@@ -158,8 +192,8 @@ pub static FORMS: &[Form] = &[
             field("address", "Address", Kind::Text),
             field("authority", "Approving authority", Kind::Text),
             field("date", "Date", Kind::Text),
-            field("slabMm", "Default slab thickness (mm)", Kind::Number).def("150"),
-            field("beamMm", "Default beam depth including slab (mm)", Kind::Number).def("450"),
+            field("slabMm", "Default slab thickness (mm)", Kind::Number).def("150").mm(),
+            field("beamMm", "Default beam depth including slab (mm)", Kind::Number).def("450").mm(),
         ],
     },
     Form { id: "floors", title: "Floors", wrap: None, fields: &[field("floors", "Floor names", Kind::Table(FLOOR_COLS)).req()] },
@@ -169,8 +203,8 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[
             field("name", "Level name", Kind::Text).req(),
-            field("elevation", "Elevation (drawing units)", Kind::Number),
-            field("height", "Floor to floor height (drawing units)", Kind::Number),
+            field("elevation", "Elevation (drawing units)", Kind::Number).drawing(),
+            field("height", "Floor to floor height (drawing units)", Kind::Number).drawing(),
         ],
     },
     Form {
@@ -180,8 +214,8 @@ pub static FORMS: &[Form] = &[
         fields: &[
             field("level", "Level (name)", Kind::Text).req(),
             field("name", "New name (blank: keep)", Kind::Text),
-            field("elevation", "Elevation (drawing units; blank: keep)", Kind::Number),
-            field("height", "Floor to floor height (drawing units; blank: keep)", Kind::Number),
+            field("elevation", "Elevation (drawing units; blank: keep)", Kind::Number).drawing(),
+            field("height", "Floor to floor height (drawing units; blank: keep)", Kind::Number).drawing(),
         ],
     },
     Form {
@@ -239,7 +273,7 @@ pub static FORMS: &[Form] = &[
         id: "beams",
         title: "Beam Depth List",
         wrap: None,
-        fields: &[field("depths", "Beam depths in mm (for example 300, 375, 450)", Kind::Numbers).req()],
+        fields: &[field("depths", "Beam depths in mm (for example 300, 375, 450)", Kind::Numbers).req().mm()],
     },
     Form {
         id: "schedule",
@@ -358,7 +392,7 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[
             field("kind", "What this line is", Kind::Choice(TAKEOFF_KINDS)).req(),
-            field("thicknessMm", "Thickness (mm; blank: the kind's default)", Kind::Number),
+            field("thicknessMm", "Thickness (mm; blank: the kind's default)", Kind::Number).mm(),
             field("points", "Points of the line or outline", Kind::Points).req().ask(),
             field("closed", "Close the outline", Kind::Bool),
         ],
@@ -368,7 +402,7 @@ pub static FORMS: &[Form] = &[
         title: "Draw Wall",
         wrap: None,
         fields: &[
-            field("thickness", "Thickness (drawing units; blank: 230 mm)", Kind::Number),
+            field("thickness", "Thickness (drawing units; blank: 230 mm)", Kind::Number).drawing(),
             field("closed", "Close the path", Kind::Bool),
             field("layer", "Layer", Kind::Text).def("A-WALL"),
             field("points", "Wall centre line: pick points, Enter to finish", Kind::Points).req(),
@@ -382,14 +416,14 @@ pub static FORMS: &[Form] = &[
             field("block", "Block (from the Blocks panel; opening width comes from the block)", Kind::Text),
             field("name", "Schedule mark (for example D2)", Kind::Text),
             field("openingType", "Type", Kind::Choice(&["single", "double", "sliding", "folding"])).def("single"),
-            field("width", "Width override (drawing units; blank: block width)", Kind::Number),
-            field("openingHeight", "Opening height (drawing units; blank: up to the lintel)", Kind::Number),
-            field("sill", "Sill height (drawing units; blank: 0)", Kind::Number),
+            field("width", "Width override (drawing units; blank: block width)", Kind::Number).drawing(),
+            field("openingHeight", "Opening height (drawing units; blank: up to the lintel)", Kind::Number).drawing(),
+            field("sill", "Sill height (drawing units; blank: 0)", Kind::Number).drawing(),
             field("lintelMode", "Lintel", Kind::Choice(&["standard", "custom"])).def("standard"),
-            field("head", "Custom head height (drawing units)", Kind::Number),
+            field("head", "Custom head height (drawing units)", Kind::Number).drawing(),
             field("swing", "Swing", Kind::Choice(&["left", "right"])).def("left"),
             field("side", "Side", Kind::Choice(&["up", "down"])).def("up"),
-            field("thickness", "Wall thickness (blank: read from the wall)", Kind::Number),
+            field("thickness", "Wall thickness (blank: read from the wall)", Kind::Number).drawing(),
             field("deduct", "Deduct from the wall in the take-off", Kind::Bool).def("true"),
             field("at", "Door centre on the wall", Kind::Point).req(),
         ],
@@ -402,12 +436,12 @@ pub static FORMS: &[Form] = &[
             field("block", "Block (from the Blocks panel; opening width comes from the block)", Kind::Text),
             field("name", "Schedule mark (for example W3)", Kind::Text),
             field("openingType", "Type", Kind::Choice(&["fixed", "casement", "sliding", "ventilator"])).def("casement"),
-            field("width", "Width override (drawing units; blank: block width)", Kind::Number),
-            field("openingHeight", "Opening height (drawing units; blank: up to the lintel)", Kind::Number),
-            field("sill", "Sill height (drawing units; blank: 0.9 m)", Kind::Number),
+            field("width", "Width override (drawing units; blank: block width)", Kind::Number).drawing(),
+            field("openingHeight", "Opening height (drawing units; blank: up to the lintel)", Kind::Number).drawing(),
+            field("sill", "Sill height (drawing units; blank: 0.9 m)", Kind::Number).drawing(),
             field("lintelMode", "Lintel", Kind::Choice(&["standard", "custom"])).def("standard"),
-            field("head", "Custom head height (drawing units)", Kind::Number),
-            field("thickness", "Wall thickness (blank: read from the wall)", Kind::Number),
+            field("head", "Custom head height (drawing units)", Kind::Number).drawing(),
+            field("thickness", "Wall thickness (blank: read from the wall)", Kind::Number).drawing(),
             field("deduct", "Deduct from the wall in the take-off", Kind::Bool).def("true"),
             field("at", "Window centre on the wall", Kind::Point).req(),
         ],
@@ -417,9 +451,9 @@ pub static FORMS: &[Form] = &[
         title: "Axis Grid",
         wrap: None,
         fields: &[
-            field("bays", "Bay widths along x (for example 4000, 5000)", Kind::Numbers).req(),
-            field("rows", "Row depths along y (blank: none)", Kind::Numbers),
-            field("extend", "Line extension beyond the grid", Kind::Number),
+            field("bays", "Bay widths along x (for example 4000, 5000)", Kind::Numbers).req().drawing(),
+            field("rows", "Row depths along y (blank: none)", Kind::Numbers).drawing(),
+            field("extend", "Line extension beyond the grid", Kind::Number).drawing(),
             field("origin", "Grid origin", Kind::Point).ask(),
         ],
     },
@@ -428,7 +462,7 @@ pub static FORMS: &[Form] = &[
         title: "Place Columns",
         wrap: None,
         fields: &[
-            field("size", "Column size: one number for square, or width, depth", Kind::Numbers).req(),
+            field("size", "Column size: one number for square, or width, depth", Kind::Numbers).req().drawing(),
             field("points", "Pick column positions (Enter: every grid intersection)", Kind::Points).ask(),
         ],
     },
@@ -436,7 +470,7 @@ pub static FORMS: &[Form] = &[
         id: "lintel.draw",
         title: "Generate Lintel",
         wrap: None,
-        fields: &[field("bearing", "Bearing each side (drawing units; blank: 150 mm)", Kind::Number)],
+        fields: &[field("bearing", "Bearing each side (drawing units; blank: 150 mm)", Kind::Number).drawing()],
     },
     Form {
         id: "stair.plan",
@@ -444,12 +478,12 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[
             field("kind", "Kind", Kind::Choice(&["straight", "dogleg"])).def("straight"),
-            field("rise", "Floor-to-floor rise (drawing units)", Kind::Number).req(),
-            field("width", "Flight width (drawing units)", Kind::Number).req(),
-            field("going", "Going (drawing units; blank: ~250 mm)", Kind::Number),
-            field("riserMax", "Largest riser (drawing units; blank: ~175 mm)", Kind::Number),
-            field("landing", "Landing depth (dog-leg; drawing units)", Kind::Number),
-            field("waist", "Waist thickness (drawing units; blank: ~150 mm)", Kind::Number),
+            field("rise", "Floor-to-floor rise (drawing units)", Kind::Number).req().drawing(),
+            field("width", "Flight width (drawing units)", Kind::Number).req().drawing(),
+            field("going", "Going (drawing units; blank: ~250 mm)", Kind::Number).drawing(),
+            field("riserMax", "Largest riser (drawing units; blank: ~175 mm)", Kind::Number).drawing(),
+            field("landing", "Landing depth (dog-leg; drawing units)", Kind::Number).drawing(),
+            field("waist", "Waist thickness (drawing units; blank: ~150 mm)", Kind::Number).drawing(),
             field("at", "Start of the stair", Kind::Point).req(),
         ],
     },
@@ -458,9 +492,9 @@ pub static FORMS: &[Form] = &[
         title: "Lift Shaft",
         wrap: None,
         fields: &[
-            field("width", "Clear shaft width (drawing units)", Kind::Number).req(),
-            field("depth", "Clear shaft depth (drawing units)", Kind::Number).req(),
-            field("wall", "Wall thickness (drawing units; blank: ~230 mm)", Kind::Number),
+            field("width", "Clear shaft width (drawing units)", Kind::Number).req().drawing(),
+            field("depth", "Clear shaft depth (drawing units)", Kind::Number).req().drawing(),
+            field("wall", "Wall thickness (drawing units; blank: ~230 mm)", Kind::Number).drawing(),
             field("at", "Lower-left corner of the clear shaft", Kind::Point).req(),
         ],
     },
@@ -469,8 +503,8 @@ pub static FORMS: &[Form] = &[
         title: "Handrail",
         wrap: None,
         fields: &[
-            field("post", "Post spacing (drawing units; blank: ~1.2 m)", Kind::Number),
-            field("size", "Post size (drawing units; blank: ~50 mm)", Kind::Number),
+            field("post", "Post spacing (drawing units; blank: ~1.2 m)", Kind::Number).drawing(),
+            field("size", "Post size (drawing units; blank: ~50 mm)", Kind::Number).drawing(),
             field("points", "Rail path: pick points, Enter to finish", Kind::Points).req(),
         ],
     },
@@ -479,9 +513,9 @@ pub static FORMS: &[Form] = &[
         title: "Level Mark",
         wrap: None,
         fields: &[
-            field("value", "Level in metres (or use a floor below)", Kind::Number),
+            field("value", "Level in metres (or use a floor below)", Kind::Number).metres(),
             field("floor", "Floor name (its finished level)", Kind::Text),
-            field("offset", "Offset in metres", Kind::Number),
+            field("offset", "Offset in metres", Kind::Number).metres(),
             field("at", "Mark position", Kind::Point).req(),
         ],
     },
@@ -513,7 +547,7 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[
             field("angle", "Direction of north (degrees; 90 is up the sheet)", Kind::Number).def("90"),
-            field("size", "Size (drawing units; blank: 1.5 m of real size)", Kind::Number),
+            field("size", "Size (drawing units; blank: 1.5 m of real size)", Kind::Number).drawing(),
             field("at", "Position", Kind::Point).req(),
         ],
     },
@@ -532,7 +566,7 @@ pub static FORMS: &[Form] = &[
         title: "Connect Circuits",
         wrap: None,
         fields: &[
-            field("snap", "Wire end snap distance (drawing units; blank: 20 mm)", Kind::Number),
+            field("snap", "Wire end snap distance (drawing units; blank: 20 mm)", Kind::Number).drawing(),
             field("flag", "Flag unwired points", Kind::Bool).def("true"),
         ],
     },
@@ -554,7 +588,7 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[
             field("level", "Floor the measured items belong to (blank: the first)", Kind::Text),
-            field("bearing", "Lintel bearing each side (mm)", Kind::Number).def("150"),
+            field("bearing", "Lintel bearing each side (mm)", Kind::Number).def("150").mm(),
             field("write", "Write the file beside the drawing", Kind::Bool).def("true"),
         ],
     },
@@ -600,7 +634,22 @@ fn number_of(f: &Field, v: &Value) -> Result<Option<f64>> {
     if t.is_empty() {
         return Ok(None);
     }
-    t.parse::<f64>().ok().filter(|x| x.is_finite()).map(Some).ok_or_else(|| bad(f, format!("`{t}` is not a number")))
+    length_or_number(f, &t).map(Some).ok_or_else(|| bad(f, format!("`{t}` is not a {}", if f.len.is_some() { "length" } else { "number" })))
+}
+
+/// One typed value. A length field takes any unit (`12mm`, `1'6"`, `18"`, `0.3 m`); a bare number stays in the
+/// field's own unit. Other fields take plain numbers.
+fn length_or_number(f: &Field, t: &str) -> Option<f64> {
+    match f.len {
+        Some(len) => crate::units::parse_distance_as(t, len.unit()).map(tidy),
+        None => t.parse::<f64>().ok(),
+    }
+    .filter(|x| x.is_finite())
+}
+
+/// Drop the binary noise a unit conversion leaves (12 in is 304.8 mm, not 304.79999999999995).
+fn tidy(x: f64) -> f64 {
+    (x * 1e9).round() / 1e9
 }
 
 fn bad(f: &Field, msg: String) -> EngineError {
@@ -614,6 +663,43 @@ fn point_of(f: &Field, v: &Value) -> Result<Value> {
         (Some(x), Some(y)) if x.is_finite() && y.is_finite() => Ok(json!([x, y])),
         _ => Err(bad(f, "a point needs two numbers".into())),
     }
+}
+
+/// Convert the lengths in a JSON call (`"thickness": "230mm"`, `"width": "3'"`) into numbers in the unit each
+/// field is measured in, so scripts, MCP and the control channel take the same units as the dialogs. Only a
+/// string that reads as a length is changed; anything else is left for the command to judge. Returns `None`
+/// when nothing needed converting (the usual case, so no copy is made).
+pub fn normalize_lengths(id: &str, params: &Value, drawn: Option<crate::annot::Unit>) -> Option<Value> {
+    let form = get(id)?;
+    let obj = params.as_object()?;
+    let convert = |f: &Field, s: &str| -> Option<Value> {
+        let unit = match f.len? {
+            Len::Drawing => drawn,
+            Len::Mm => Some(crate::annot::Unit::Mm),
+            Len::M => Some(crate::annot::Unit::M),
+        };
+        crate::units::parse_distance_as(s, unit).filter(|x| x.is_finite()).map(|x| json!(tidy(x)))
+    };
+    let mut out: Option<Map<String, Value>> = None;
+    for f in form.fields.iter().filter(|f| f.len.is_some()) {
+        let Some(v) = obj.get(f.key) else { continue };
+        let new = match v {
+            Value::String(s) if matches!(f.kind, Kind::Number) => convert(f, s.trim()),
+            Value::String(s) if matches!(f.kind, Kind::Numbers) => {
+                let parts: Vec<Value> = s.split([',', ';']).filter(|p| !p.trim().is_empty()).filter_map(|p| convert(f, p.trim())).collect();
+                (parts.len() == s.split([',', ';']).filter(|p| !p.trim().is_empty()).count() && !parts.is_empty()).then_some(Value::Array(parts))
+            }
+            Value::Array(a) if matches!(f.kind, Kind::Numbers) && a.iter().any(Value::is_string) => {
+                let items: Vec<Value> = a.iter().map(|x| x.as_str().and_then(|s| convert(f, s.trim())).unwrap_or_else(|| x.clone())).collect();
+                Some(Value::Array(items))
+            }
+            _ => None,
+        };
+        if let Some(n) = new {
+            out.get_or_insert_with(|| obj.clone()).insert(f.key.into(), n);
+        }
+    }
+    out.map(Value::Object)
 }
 
 /// Turn what a dialog (or the prompts) collected into the command's parameters.
@@ -672,13 +758,16 @@ fn parse_fields(form: &Form, input: &Value, picks: bool) -> Result<Value> {
             }
             Kind::Numbers => {
                 let t = match &v {
-                    Value::Array(a) => a.iter().map(text_of).collect::<Vec<_>>().join(" "),
+                    Value::Array(a) => a.iter().map(text_of).collect::<Vec<_>>().join(", "),
                     other => text_of(other),
                 };
                 let nums: Vec<f64> = t
-                    .split([',', ';', ' '])
+                    .split(if t.contains([',', ';']) && f.len.is_some() { &[',', ';'][..] } else { &[',', ';', ' '][..] })
+                    .map(str::trim)
                     .filter(|s| !s.is_empty())
-                    .map(|s| s.parse::<f64>().ok().filter(|x| x.is_finite()).ok_or_else(|| bad(f, format!("`{s}` is not a number"))))
+                    .map(|s| {
+                        length_or_number(f, s).ok_or_else(|| bad(f, format!("`{s}` is not a {}", if f.len.is_some() { "length" } else { "number" })))
+                    })
                     .collect::<Result<_>>()?;
                 if nums.len() > 200 {
                     return Err(bad(f, "too many numbers".into()));
@@ -867,7 +956,9 @@ impl FormRun {
         let spec = crate::cmd::find_command(self.form.id).ok_or_else(|| EngineError::UnknownCommand(self.form.id.into()))?;
         // The running command records the single undo step. A refusal ends the command with the
         // reason shown, instead of leaving a prompt with nothing to answer.
-        let run = parse_input(self.form, &Value::Object(self.values.clone())).and_then(|params| (spec.run)(s, &params));
+        let drawn = s.doc().ok().and_then(crate::annot::drawing_unit);
+        let run = crate::units::with_drawn_unit(drawn, || parse_input(self.form, &Value::Object(self.values.clone())))
+            .and_then(|params| (spec.run)(s, &params));
         let r = match run {
             Ok(r) => r,
             Err(e) => {

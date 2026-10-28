@@ -24,6 +24,11 @@ fn active_drawn_unit() -> Option<Unit> {
     DRAWN_UNIT.with(Cell::get)
 }
 
+/// The drawing unit that distance suffixes convert into right now (set by [`with_drawn_unit`]).
+pub(crate) fn drawn_unit_now() -> Option<Unit> {
+    active_drawn_unit()
+}
+
 /// Format a distance per LUNITS (1 scientific, 2 decimal, 3 engineering, 4 architectural,
 /// 5 fractional) and LUPREC.
 pub fn format_distance(v: f64, lunits: i64, luprec: i64) -> String {

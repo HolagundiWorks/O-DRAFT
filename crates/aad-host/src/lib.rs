@@ -2570,6 +2570,18 @@ mod tests {
     }
 
     #[test]
+    fn panels_carry_the_take_off_phases_for_the_pickers() {
+        let mut host = Host::create(false);
+        let before: serde_json::Value = serde_json::from_str(&host.panels_json()).unwrap();
+        assert_eq!(before["takeoffPhases"]["estimation"][0], "Foundation");
+        assert_eq!(before["takeoffPhases"]["current"]["estimation"], serde_json::Value::Null);
+        host.execute("takeoff.phases", &json!({ "current": { "estimation": "Plinth", "billing": "Phase 2" } })).unwrap();
+        let after: serde_json::Value = serde_json::from_str(&host.panels_json()).unwrap();
+        assert_eq!(after["takeoffPhases"]["current"], json!({ "estimation": "Plinth", "billing": "Phase 2" }));
+        assert_ne!(before["revision"], after["revision"], "the panels refresh when the choice changes");
+    }
+
+    #[test]
     fn panels_follow_the_drawing_revision() {
         let mut host = Host::create(false);
         let first: serde_json::Value = serde_json::from_str(&host.panels_json()).unwrap();

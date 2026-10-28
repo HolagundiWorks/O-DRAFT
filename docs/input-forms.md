@@ -20,6 +20,18 @@ Both paths end in the same call, `forms::parse_input` turns the collected text i
 parameters, and a refusal from the command is shown and ends the command. Numbers must be finite;
 tables are limited to 500 rows and point lists to 10 000 points.
 
+**Lengths take any unit.** A form field that is a length (wall thickness, door width, sill, stair rise, grid bays,
+column size, level height and the rest; the `drawing`, `mm` and `m` markers in `FORMS`) accepts `12mm`, `30 cm`,
+`0.3m`, `1'`, `1'6"`, `18"` or a bare number. A suffix converts into the unit the field is measured in: the drawing's
+unit for most fields, millimetres for the `...Mm` fields and beam depths, metres for the level fields. A bare number
+stays in that unit. The same holds for JSON calls: `forms::normalize_lengths` runs in `Session::execute`, so
+`{"thickness": "230mm"}` works from a script, MCP or the control channel. A list (`bays`, `rows`, `size`, `depths`)
+takes one unit per entry (`4m, 5000mm, 15'`; commas separate entries when there are any). Only a string that reads
+as a length is converted; anything else is left for the command to refuse. Commands that have no form (and so no
+declared length fields) still take numbers in drawing units; the command line accepts units on every distance
+(`units-annotation.md`). Checked by `forms::tests` and `crates/engine/tests/forms.rs`
+(`architecture_commands_take_a_length_in_any_unit`, `lists_and_fixed_unit_fields_take_units_too`).
+
 Forms exist for: `project`, `floors`, `beams`, `schedule`, `takeoff.rates`, `room`, `hcwlayers` (choices: standard, permit, presentation, both, all),
 `takeoff.linear|brick|beams|columns|rects|paint|ceiling|floor|area|slab`, `wall.draw`, `wall.door`,
 `wall.window`, `grid.axis`, `column.place`, `lintel.draw`, `stair.plan`, `lift.shaft`, `rail.draw`,

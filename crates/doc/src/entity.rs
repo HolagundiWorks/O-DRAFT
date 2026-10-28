@@ -179,6 +179,26 @@ pub struct TakeoffMark {
     pub kind: TakeoffKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thickness_mm: Option<f64>,
+    /// The estimation phase this dimension belongs to (a name from the project's list).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    /// The running-bill phase this dimension belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bill_phase: Option<String>,
+}
+
+impl TakeoffMark {
+    /// A mark with no phases.
+    pub fn new(kind: TakeoffKind, thickness_mm: Option<f64>) -> Self {
+        TakeoffMark { kind, thickness_mm, phase: None, bill_phase: None }
+    }
+
+    /// The same mark in the given estimation and running-bill phases.
+    pub fn in_phases(mut self, phase: Option<String>, bill_phase: Option<String>) -> Self {
+        self.phase = phase;
+        self.bill_phase = bill_phase;
+        self
+    }
 }
 
 /// Properties every entity has.

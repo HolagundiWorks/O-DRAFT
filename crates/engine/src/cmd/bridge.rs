@@ -469,6 +469,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
         if !text_of(e, "type").is_empty() {
             row["type"] = json!(text_of(e, "type"));
         }
+        super::takeoffphase::stamp_row(d, Some(*handle), &mut row);
         items.push(Item { kind: KIND_OPENING, n: number_of(*handle), row: row.clone(), bbox: box_mm(d, Some(*handle), unit_mm) });
         opening_rows.push(row);
     }
@@ -517,6 +518,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 }
             }
             if let Some(h) = handle {
+                super::takeoffphase::stamp_row(d, Some(h), &mut row);
                 items.push(Item { kind: KIND_WALL, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
             } else {
                 unstable += 1;
@@ -565,18 +567,25 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 && let Some((r, _, _)) = wall_list.iter().find(|(_, h, _)| *h == *wh)
             {
                 it.row["wall_ref"] = json!(r);
+                // An opening is measured in its wall's phases unless it was given its own.
+                if it.row.get("phase").is_none() && it.row.get("bill_phase").is_none() {
+                    super::takeoffphase::stamp_row(d, Some(*wh), &mut it.row);
+                }
                 continue;
             }
             let Some(EntityKind::Insert(ins)) = d.entity(aad_doc::Handle(it.n)).map(|e| &e.kind) else { continue };
             let at = aad_geom::Vec2::new(ins.insert.x, ins.insert.y);
             let best = wall_list
                 .iter()
-                .filter_map(|(r, h, t)| distance_to_entity(d, *h, at).map(|dist| (dist * unit_mm, r, *t)))
-                .filter(|(dist, _, t)| *dist <= t / 2.0 + 150.0)
+                .filter_map(|(r, h, t)| distance_to_entity(d, *h, at).map(|dist| (dist * unit_mm, r, *t, *h)))
+                .filter(|(dist, _, t, _)| *dist <= t / 2.0 + 150.0)
                 .min_by(|a, b| a.0.total_cmp(&b.0));
             match best {
-                Some((_, r, _)) => {
+                Some((_, r, _, wh)) => {
                     it.row["wall_ref"] = json!(r);
+                    if it.row.get("phase").is_none() && it.row.get("bill_phase").is_none() {
+                        super::takeoffphase::stamp_row(d, Some(wh), &mut it.row);
+                    }
                     it.row["_note"] = json!("wall chosen by nearest measured line (opening has no MEASURE-DEDUCT match); check it");
                     proximity += 1;
                 }
@@ -605,8 +614,9 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 let (w, dep) = (l.min(b) * lf, l.max(b) * lf);
                 let handle = stable_handle(it);
                 let col_ref = handle.map_or_else(|| format!("C{:04}", n + 1), |h| format!("C{}", h.hex()));
-                let row = json!({ "ref": col_ref, "mark": mark, "level": level_of(handle), "width_mm": mm(w), "depth_mm": mm(dep) });
+                let mut row = json!({ "ref": col_ref, "mark": mark, "level": level_of(handle), "width_mm": mm(w), "depth_mm": mm(dep) });
                 if let Some(h) = handle {
+                    super::takeoffphase::stamp_row(d, Some(h), &mut row);
                     items.push(Item { kind: KIND_COLUMN, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
                 } else {
                     unstable += 1;
@@ -635,11 +645,12 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 });
                 let handle = stable_handle(it);
                 let lintel_ref = handle.map_or_else(|| format!("L{:04}", lintels.len() + 1), |h| format!("L{}", h.hex()));
-                let row = json!({
+                let mut row = json!({
                     "ref": lintel_ref, "mark": format!("L{}", g + 1), "level": level_of(handle),
                     "opening_mm": mm((len * lf - 2.0 * bearing).max(0.0)), "bearing_mm": bearing,
                 });
                 if let Some(h) = handle {
+                    super::takeoffphase::stamp_row(d, Some(h), &mut row);
                     items.push(Item { kind: KIND_LINTEL, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
                 } else {
                     unstable += 1;
@@ -674,6 +685,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                     row["rectangular"] = json!(true);
                 }
                 if let Some(h) = handle {
+                    super::takeoffphase::stamp_row(d, Some(h), &mut row);
                     items.push(Item { kind: KIND_SLAB, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
                 } else {
                     unstable += 1;
