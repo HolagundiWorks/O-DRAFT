@@ -117,7 +117,9 @@ fn drawing_id(d: &Drawing) -> Option<String> {
     project::get(d, HIST_KEY).get("drawingId").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string)
 }
 
-fn ensure_drawing_id(s: &mut Session) -> Result<String> {
+/// Ensure project data carries a stable history `drawingId`. Used before a drawing-file save so the
+/// written DXF/DWG includes the id and the post-save auto snapshot does not dirty a just-saved drawing.
+pub(crate) fn ensure_drawing_id(s: &mut Session) -> Result<String> {
     if let Some(id) = drawing_id(s.doc()?) {
         return Ok(id);
     }
