@@ -2264,7 +2264,7 @@ public sealed partial class MainWindow : Window
     private void SetSideWidth(double width)
     {
         _leftWidth = Math.Clamp(width, 180, 640);
-        PropertiesColumn.Width = new GridLength(_leftWidth + SideRailWidth);
+        PropertiesColumn.Width = new GridLength(_leftWidth + Density.SideRailWidth);
         AutomationProperties.SetName(LeftSplitter, "Resize side panel, width " + (int)_leftWidth);
     }
 
@@ -5983,7 +5983,7 @@ public sealed partial class MainWindow : Window
         // away for 1.5 s). The rail of titles is always there, so a collapsed dock is just the rail.
         var leftOpen = _leftFloat != null || !_leftCollapsed;
         var dockWidth = _leftFloat != null ? Math.Min(_leftWidth, 200) : _leftWidth;
-        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth + SideRailWidth : SideRailWidth);
+        PropertiesColumn.Width = new GridLength(leftOpen ? dockWidth + Density.SideRailWidth : Density.SideRailWidth);
         SideRail.Visibility = Visibility.Visible;
         LeftColumn.Visibility = leftOpen ? Visibility.Visible : Visibility.Collapsed;
         RefreshSideRail();
