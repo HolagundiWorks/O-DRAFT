@@ -104,8 +104,5 @@ fn glyph_mesh_survives_scene_dirty_tile_rebuild() {
     assert!(shared >= 1, "clean tiles retain Arc lists");
     // Dirty rebuild may insert more glyph meshes for Text entities; it must not flush prior entries.
     let after_rebuild = glyph_mesh_cache_len();
-    assert!(
-        after_rebuild >= after_shape,
-        "tile rebuild must not flush glyph×band meshes (had {after_shape}, now {after_rebuild})"
-    );
+    assert!(after_rebuild >= after_shape, "tile rebuild must not flush glyph×band meshes (had {after_shape}, now {after_rebuild})");
 }
