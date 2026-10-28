@@ -16,15 +16,18 @@ agent store (and a shareable index). It is not the sole open/save format.
 
 ## Crate: `aad-vdb`
 
-Pinned to one ShilpiDB git revision in [`crates/vdb/Cargo.toml`](../../crates/vdb/Cargo.toml)
+Pinned to one ShilpiDB **release tag** in [`crates/vdb/Cargo.toml`](../../crates/vdb/Cargo.toml)
 so the embedded engine and `shilpi-client` share a single `Bbox` / codec type.
+Current pin: **`v0.2.1`**
+([release](https://github.com/HolagundiWorks/shilpidb/releases/tag/v0.2.1)).
 
 ### Bumping the ShilpiDB pin
 
-1. Check out or note the target commit on
-   [HolagundiWorks/shilpidb](https://github.com/HolagundiWorks/shilpidb).
-2. Set the same `rev = "…"` on both `shilpidb` and `shilpi-client` in
-   `crates/vdb/Cargo.toml`.
+1. Prefer a published tag on
+   [HolagundiWorks/shilpidb](https://github.com/HolagundiWorks/shilpidb)
+   (suite pin today: `v0.2.1`).
+2. Set the same `tag = "…"` (or `rev = "…"`) on both `shilpidb` and
+   `shilpi-client` in `crates/vdb/Cargo.toml`.
 3. Run `cargo update -p shilpidb -p shilpi-client` (or delete the matching
    entries from `Cargo.lock` and rebuild) so the lockfile matches.
 4. Run `cargo test -p aad-vdb` and `cargo test -p aad-engine --lib vdb` (and
