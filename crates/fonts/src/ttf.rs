@@ -558,7 +558,44 @@ pub(crate) struct GlyphOutline {
     pub(crate) advance: f64,
     pub(crate) cap: f64,
     /// The font maps the character (false: the missing-glyph shape).
-    mapped: bool,
+    pub(crate) mapped: bool,
+    /// OpenType glyph id (0 = `.notdef` / unmapped).
+    pub(crate) glyph_id: u32,
+}
+
+/// Stable identity for a flattened TrueType glyph (Phase D mesh cache key, without fill).
+///
+/// Fonts live for the whole process in the font table, so `(font_ptr, font_len)` identifies the
+/// bytes; `glyph_id` is the OpenType id; `band` is the flatten octave.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GlyphMeshKey {
+    pub font_ptr: usize,
+    pub font_len: usize,
+    pub face: u32,
+    pub glyph_id: u32,
+    pub band: i32,
+}
+
+/// Placement used to map font-unit contours into shaped local coordinates (`place_glyph`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GlyphPlace {
+    pub x: f64,
+    pub height: f64,
+    pub width_factor: f64,
+    pub shear: f64,
+    pub cap: f64,
+}
+
+impl GlyphPlace {
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite()
+            && self.height.is_finite()
+            && self.height > 0.0
+            && self.width_factor.is_finite()
+            && self.shear.is_finite()
+            && self.cap.is_finite()
+            && self.cap > 0.0
+    }
 }
 
 /// Cached glyph outlines keyed by (font bytes address, length, face, char, flatten band).
@@ -570,8 +607,43 @@ fn glyph_cache() -> &'static Mutex<GlyphCache> {
     C.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Font-unit contours keyed by [`GlyphMeshKey`] for the render-side triangulated mesh cache.
+type ContourByMesh = HashMap<GlyphMeshKey, Arc<Vec<Vec<Vec2>>>>;
+
+fn mesh_contour_cache() -> &'static Mutex<ContourByMesh> {
+    static C: OnceLock<Mutex<ContourByMesh>> = OnceLock::new();
+    C.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 const MAX_CACHED_GLYPHS: usize = 40_000;
 const UPEM: f32 = 1000.0;
+
+fn glyph_id_u32(gid: skrifa::GlyphId) -> u32 {
+    gid.to_u32()
+}
+
+/// Font-unit contours for a mesh key (Phase D). Empty when the glyph was never flattened.
+pub fn glyph_font_unit_contours(key: GlyphMeshKey) -> Option<Arc<Vec<Vec<Vec2>>>> {
+    mesh_contour_cache().lock().unwrap_or_else(PoisonError::into_inner).get(&key).cloned()
+}
+
+fn remember_mesh_contours(key: GlyphMeshKey, contours: &[Vec<Vec2>]) {
+    let mut cache = mesh_contour_cache().lock().unwrap_or_else(PoisonError::into_inner);
+    if cache.len() > MAX_CACHED_GLYPHS {
+        cache.clear();
+    }
+    cache.entry(key).or_insert_with(|| Arc::new(contours.to_vec()));
+}
+
+fn mesh_key_for(face: &Face, glyph_id: u32, band: i32) -> GlyphMeshKey {
+    GlyphMeshKey {
+        font_ptr: face.bytes.as_ptr() as usize,
+        font_len: face.bytes.len(),
+        face: face.index,
+        glyph_id,
+        band,
+    }
+}
 
 struct Pen {
     contours: Vec<Vec<Vec2>>,
@@ -664,18 +736,27 @@ pub(crate) fn glyph(face: &Face, c: char, font_tol: f64) -> Arc<GlyphOutline> {
     let band = flatten_band(font_tol);
     let key = (face.bytes.as_ptr() as usize, face.bytes.len(), face.index, c, band);
     if let Some(g) = glyph_cache().lock().unwrap_or_else(PoisonError::into_inner).get(&key) {
+        remember_mesh_contours(mesh_key_for(face, g.glyph_id, band), &g.contours);
         return g.clone();
     }
     let Some(f) = face.font() else { return Arc::new(GlyphOutline { cap: 1.0, ..Default::default() }) };
     let mapped = f.charmap().map(c);
     let gid = mapped.unwrap_or_default();
+    let glyph_id = glyph_id_u32(gid);
     let mut pen = Pen { contours: Vec::new(), cur: Vec::new(), tol: font_tol };
     if let Some(g) = f.outline_glyphs().get(gid) {
         let _ = g.draw(DrawSettings::unhinted(Size::new(UPEM), LocationRef::default()), &mut pen);
         pen.flush();
     }
     let advance = f64::from(f.glyph_metrics(Size::new(UPEM), LocationRef::default()).advance_width(gid).unwrap_or(UPEM * 0.5));
-    let g = Arc::new(GlyphOutline { contours: pen.contours, advance, cap: cap_height(&f), mapped: mapped.is_some() });
+    let g = Arc::new(GlyphOutline {
+        contours: pen.contours,
+        advance,
+        cap: cap_height(&f),
+        mapped: mapped.is_some(),
+        glyph_id,
+    });
+    remember_mesh_contours(mesh_key_for(face, glyph_id, band), &g.contours);
     let mut cache = glyph_cache().lock().unwrap_or_else(PoisonError::into_inner);
     if cache.len() > MAX_CACHED_GLYPHS {
         cache.clear();
@@ -690,18 +771,20 @@ pub(crate) fn fallback_glyph(c: char) -> Option<Arc<GlyphOutline>> {
     Some(glyph(&f, c, 0.0)).filter(|g| g.mapped)
 }
 
-fn fallback_glyph_tol(c: char, font_tol: f64) -> Option<Arc<GlyphOutline>> {
+fn fallback_glyph_tol(c: char, font_tol: f64) -> Option<(Face, Arc<GlyphOutline>)> {
     let f = fallback_for(c)?;
-    Some(glyph(&f, c, font_tol)).filter(|g| g.mapped)
+    let g = glyph(&f, c, font_tol);
+    g.mapped.then_some((f, g))
 }
 
 /// The glyph of `c` in `face`, or from a fallback font when `face` lacks it.
-fn glyph_or_fallback(face: &Face, c: char, font_tol: f64) -> Arc<GlyphOutline> {
+/// Returns the face that owns the outline (fallback face when substituted).
+fn glyph_or_fallback(face: &Face, c: char, font_tol: f64) -> (Face, Arc<GlyphOutline>) {
     let g = glyph(face, c, font_tol);
     if g.mapped || c.is_whitespace() {
-        return g;
+        return (face.clone(), g);
     }
-    fallback_glyph_tol(c, font_tol).unwrap_or(g)
+    fallback_glyph_tol(c, font_tol).unwrap_or_else(|| (face.clone(), g))
 }
 
 /// Contours of a glyph scaled so its font's cap height is `h`, at pen position `x`.
@@ -732,15 +815,24 @@ pub fn shape(face: &Face, s: &str, height: f64, width_factor: f64, oblique: f64)
     let world_tol = world_chord_tol();
     // Font-unit chord so that after place_glyph (scale = h/cap) the world error ≈ world_tol.
     let font_tol = if world_tol > 0.0 { world_tol * cap / h } else { 0.0 };
+    let band = flatten_band(font_tol);
     let mut out = Shaped::default();
     let mut spans = Vec::new();
     let mut x = 0.0;
     for (c, under, over) in crate::decode_controls(s) {
-        let g = glyph_or_fallback(face, c, font_tol);
+        let (src, g) = glyph_or_fallback(face, c, font_tol);
         if !c.is_whitespace() {
             let contours = place_glyph(&g, x, h, wf, shear);
             if !contours.is_empty() {
                 out.glyphs.push(contours);
+                out.glyph_keys.push(Some(mesh_key_for(&src, g.glyph_id, band)));
+                out.glyph_places.push(Some(GlyphPlace {
+                    x,
+                    height: h,
+                    width_factor: wf,
+                    shear,
+                    cap: g.cap,
+                }));
             }
         }
         let adv = g.advance * h / g.cap * wf;
@@ -760,7 +852,7 @@ pub fn width(face: &Face, s: &str, height: f64, width_factor: f64) -> Option<f64
         crate::decode_controls(s)
             .iter()
             .map(|(c, _, _)| {
-                let g = glyph_or_fallback(face, *c, 0.0);
+                let (_, g) = glyph_or_fallback(face, *c, 0.0);
                 g.advance * height / g.cap * wf
             })
             .sum(),

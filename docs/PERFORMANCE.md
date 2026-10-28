@@ -140,8 +140,9 @@ drawing with 705 474 primitives, most of it filled TrueType text. Text fill domi
 
 `triangulate_outline` classifies loops by nesting depth, triangulates each outer boundary with its
 holes, and falls back to `triangulate_evenodd` when the result area differs from the outline area or
-the input is hostile (too many loops or points). A per-glyph cache was tried and removed: the gain
-over ear clipping was small for the added key-quantisation risk.
+the input is hostile (too many loops or points). An earlier world-space per-glyph cache was tried
+and removed (key quantisation risk). Phase D instead retains **font-unit** triangulations keyed by
+`(font, glyph_id, band, fill)` — see the Phase D update below.
 
 Still open as absolute CPU: DWG parse (about 1.2 to 1.5 s in `acadrust` + DXF bridge; set
 `AAD_DWG_STAGE=1` for spawn timing) and DXF read/write (about 0.55 s at 100k). Split DXF benches
@@ -203,7 +204,23 @@ before micro-optimising.
   `scene_tiling_viable` (same band as mesh tiles). Regressions: `scene_tiles`,
   `viewport_pan_cache`, `lod_and_frustum`, `parallel_build`.
 - **Not claimed here:** worker extents rebuild median ≤ ~80 ms @ 100k on a reference machine
-  (re-measure with `aad-cli perf` / `ui.inspect`); glyph atlas (Phase D).
+  (re-measure with `aad-cli perf` / `ui.inspect`).
+
+## Update: text and hatch retention (Phase D)
+
+- **Implemented:** CPU triangulated glyph×band mesh cache in `aad_render::glyph_mesh`, keyed by
+  `(font, glyph_id, flatten band, fill)`. TrueType shaping keeps `GlyphMeshKey` + `GlyphPlace`;
+  filled display-list builds reuse font-unit triangles and apply place + `Shaped::post_xf`. Cap:
+  `MAX_GLYPH_MESH_ENTRIES` (clear-on-overflow). Hatch pattern expansion is retained per
+  `(boundary hash, pattern, embedded pattern_lines hash, scale, angle, origin, band)` inside
+  `aad_render::hatch` (`MAX_HATCH_PATTERN_ENTRIES`). Both caches are process-wide and content-keyed,
+  so Phase C dirty-tile `rebuild_scene` reuses them without extra invalidation; a new tessellation
+  band selects different keys. Regressions: `glyph_mesh` unit tests, `text_hatch_retention`.
+- **Prototype decision:** ship the CPU glyph×band triangulated cache first. GPU glyph atlas
+  (R8 coverage) and Loop–Blinn filled TTF remain **proposed** — pick after a measured prototype on
+  a 705k-prim class drawing.
+- **Not claimed here:** absolute text-heavy `perf_probe` before/after on a reference machine;
+  GPU atlas / Loop–Blinn; Vello (Phase E).
 
 ## Update: file I/O path
 

@@ -1,12 +1,127 @@
 //! Hatch drawing: island detection picks the boundary loops that take part, then a solid,
 //! gradient or background fill (even-odd triangles) and the pattern lines (each pattern line
 //! family swept across the boundary, even-odd clipped, then dashed).
+//!
+//! Phase D: pattern expansion is retained per `(boundary hash, pattern, scale, band)` so tile /
+//! zoom-band rebuilds reuse the swept dashes when the hatch content is unchanged.
+
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use super::{Builder, Ctx, Ink, fill, ink};
 use aad_color::{Color, Rgb};
 use aad_doc::library::pattern;
 use aad_doc::{Entity, Gradient, Hatch};
 use aad_geom::{Bounds2, Polyline, Vec2, point_in_polygon};
+
+/// Tessellation band for hatch pattern cache: inverse of [`crate::tessellation_tolerance`].
+fn hatch_band(tol: f64) -> i32 {
+    if !(tol.is_finite() && tol > 0.0) {
+        return i32::MIN;
+    }
+    (tol / 0.2).max(1e-300).log2().floor() as i32
+}
+
+/// Cap on retained hatch pattern expansions (hostile / never-crash). Clears when exceeded.
+pub const MAX_HATCH_PATTERN_ENTRIES: usize = 2_048;
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct HatchPatternKey {
+    boundary: u64,
+    pattern: String,
+    /// Hash of embedded `pattern_lines` (unknown names); 0 when empty / library-only.
+    pattern_lines: u64,
+    scale_bits: u64,
+    angle_bits: u64,
+    origin_x_bits: u64,
+    origin_y_bits: u64,
+    band: i32,
+}
+
+type HatchCache = HashMap<HatchPatternKey, Arc<Vec<Vec<Vec2>>>>;
+
+fn hatch_cache() -> &'static Mutex<HatchCache> {
+    static C: OnceLock<Mutex<HatchCache>> = OnceLock::new();
+    C.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Test / inspect helper: retained hatch pattern expansions.
+pub fn hatch_pattern_cache_len() -> usize {
+    hatch_cache().lock().unwrap_or_else(PoisonError::into_inner).len()
+}
+
+/// Drop all retained hatch pattern expansions (tests).
+pub fn hatch_pattern_cache_clear() {
+    hatch_cache().lock().unwrap_or_else(PoisonError::into_inner).clear();
+}
+
+fn f64_key(v: f64) -> u64 {
+    if v.is_finite() { v.to_bits() } else { 0 }
+}
+
+/// Stable hash of tessellated boundary loops (Phase D hatch key component).
+fn boundary_hash(loops: &[Vec<Vec2>]) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    loops.len().hash(&mut h);
+    for l in loops {
+        l.len().hash(&mut h);
+        for p in l {
+            f64_key(p.x).hash(&mut h);
+            f64_key(p.y).hash(&mut h);
+        }
+    }
+    h.finish()
+}
+
+fn pattern_lines_hash(h: &Hatch) -> u64 {
+    if h.pattern_lines.is_empty() {
+        return 0;
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    h.pattern_lines.len().hash(&mut hasher);
+    for fam in h.pattern_lines.iter().take(MAX_PATTERN_LINES) {
+        f64_key(fam.angle).hash(&mut hasher);
+        f64_key(fam.origin.0).hash(&mut hasher);
+        f64_key(fam.origin.1).hash(&mut hasher);
+        f64_key(fam.delta.0).hash(&mut hasher);
+        f64_key(fam.delta.1).hash(&mut hasher);
+        fam.dashes.len().hash(&mut hasher);
+        for d in &fam.dashes {
+            f64_key(*d).hash(&mut hasher);
+        }
+    }
+    hasher.finish()
+}
+
+fn pattern_key(h: &Hatch, loops: &[Vec<Vec2>], band: i32) -> HatchPatternKey {
+    let scale = if h.scale.is_finite() && h.scale > 1e-9 { h.scale } else { 1.0 };
+    HatchPatternKey {
+        boundary: boundary_hash(loops),
+        pattern: h.pattern.to_ascii_uppercase(),
+        pattern_lines: pattern_lines_hash(h),
+        scale_bits: f64_key(scale),
+        angle_bits: f64_key(h.angle),
+        origin_x_bits: f64_key(h.origin.x),
+        origin_y_bits: f64_key(h.origin.y),
+        band,
+    }
+}
+
+fn pattern_lines_cached(h: &Hatch, loops: &[Vec<Vec2>], band: i32) -> Arc<Vec<Vec<Vec2>>> {
+    let key = pattern_key(h, loops, band);
+    if let Some(v) = hatch_cache().lock().unwrap_or_else(PoisonError::into_inner).get(&key) {
+        return Arc::clone(v);
+    }
+    let segs = pattern_lines(h, loops);
+    let arc = Arc::new(segs);
+    let mut cache = hatch_cache().lock().unwrap_or_else(PoisonError::into_inner);
+    if cache.len() >= MAX_HATCH_PATTERN_ENTRIES {
+        cache.clear();
+    }
+    cache.insert(key, Arc::clone(&arc));
+    arc
+}
 
 /// Draw a hatch entity: `rgb` is its resolved colour, `tol` the chord tolerance.
 pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, lw: f32, tol: f64) {
@@ -47,13 +162,14 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
         b.tris(ctx, tint, &fill::triangulate_evenodd(&loops));
         return;
     }
-    for seg in pattern_lines(h, &loops) {
+    let band = hatch_band(tol);
+    for seg in pattern_lines_cached(h, &loops, band).iter() {
         if seg.len() == 1 {
             if let Some(p) = seg.first() {
                 b.point(ctx, rgb, *p);
             }
         } else {
-            b.polyline(ctx, rgb, lw, &seg);
+            b.polyline(ctx, rgb, lw, seg);
         }
     }
 }

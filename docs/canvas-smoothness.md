@@ -64,7 +64,7 @@ Every frame goes through one shared path (WinUI host and optional egui shell). T
 
 | # | Change | Fixes | Effort | Status |
 | --- | --- | --- | --- | --- |
-| 11 | GPU arcs/circles/ellipses + Loop–Blinn-style glyph fills | sharp at every zoom | 3–4 w | **Partial** — circles/arcs as SDF rings (`Kind::Arc`); ellipses and non-uniform-scaled circles as conjugate-diameter rings (`Kind::Ellipse` → same `MeshData::rings` / `vs_ring`). Continuous linetype only; dashed styles and degenerate axes stay polylines. CPU raster / clip tessellate rings via `sweep_radians` (avoids `f32::TAU` collapsing a full circle). **Still open:** Loop–Blinn glyph fills |
+| 11 | GPU arcs/circles/ellipses + Loop–Blinn-style glyph fills | sharp at every zoom | 3–4 w | **Partial** — circles/arcs as SDF rings (`Kind::Arc`); ellipses and non-uniform-scaled circles as conjugate-diameter rings (`Kind::Ellipse` → same `MeshData::rings` / `vs_ring`). Continuous linetype only; dashed styles and degenerate axes stay polylines. CPU raster / clip tessellate rings via `sweep_radians` (avoids `f32::TAU` collapsing a full circle). Phase D ships CPU glyph×band triangulated retention first; **still open:** GPU atlas / Loop–Blinn glyph fills |
 | 12 | Vello prototype for paper / plot preview behind a flag | quality compare | ~1 w | Planned (optional quality spike; not primary canvas) |
 
 ### Phase 3 (#11 curves) test commands
@@ -82,7 +82,7 @@ From `docs/PERFORMANCE.md` (Oct 2026 machine). Re-measure with `aad-cli perf` / 
 | Hotspot | Today | Direction |
 | --- | --- | --- |
 | Display-list at extents | 13 ms / 10k, 129 ms / 100k | GPU curves (#11, ellipses landed); per-entity×octave tessellation cache; **Partial (Phase C)** — tiled `Scene` / dirty-tile `rebuild_scene` + frustum skip of far tiles (`scene_tiles`); absolute ≤ 80 ms @ 100k not claimed |
-| Text-heavy rebuild | 0.32–0.38 s | Glyph cache (#8); greek bars (#9); **proposed** glyph atlas (Phase D) |
+| Text-heavy rebuild | 0.32–0.38 s | Glyph outline cache (#8); greek bars (#9); **Partial (Phase D)** — CPU glyph×band triangulated mesh cache + hatch pattern expansion cache (`text_hatch_retention`); **proposed** GPU atlas / Loop–Blinn |
 | Any edit | Full `build_mesh` + new GPU buffers | **Partial (Phase B+C)** — spatial mesh tiles remesh + WinUI dirty tile upload; dirty display-list tiles via `rebuild_scene`; monolithic fallback for tiny tile counts / spanning wipeouts |
 | Layout VP pan across cell | 52 ms / 100k | Existing LRU; GPU curves help |
 | GPU frame time | Unknown | Host/egui `ui.inspect` `perf.buildMs` / `meshMs` / `rings` / `meshBytes` (implemented). Optional WinUI timestamp queries still open |

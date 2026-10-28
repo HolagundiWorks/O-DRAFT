@@ -13,10 +13,10 @@ pub mod registry;
 mod stroke;
 pub mod ttf;
 
-use aad_geom::{Bounds2, Vec2};
+use aad_geom::{Bounds2, Mat3, Vec2};
 
 pub use mtext::{MTextColor, MTextLayout, MTextParams, MTextPiece, layout_mtext, layout_mtext_with, plain_mtext};
-pub use ttf::with_world_chord_tol;
+pub use ttf::{GlyphMeshKey, GlyphPlace, glyph_font_unit_contours, with_world_chord_tol};
 
 /// Name of the built-in font.
 pub const BUILTIN_FONT: &str = "AAD Stroke";
@@ -129,11 +129,28 @@ pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Sh
                     }
                 }
             }
-            None if !c.is_whitespace() => match ttf::fallback_glyph(c) {
-                Some(g) => {
+            None if !c.is_whitespace() => match ttf::fallback_for(c).and_then(|f| {
+                let g = ttf::glyph(&f, c, 0.0);
+                g.mapped.then_some((f, g))
+            }) {
+                Some((face, g)) => {
                     let contours = ttf::place_glyph(&g, x, h, wf, shear);
                     if !contours.is_empty() {
                         out.glyphs.push(contours);
+                        out.glyph_keys.push(Some(GlyphMeshKey {
+                            font_ptr: face.bytes.as_ptr() as usize,
+                            font_len: face.bytes.len(),
+                            face: face.index,
+                            glyph_id: g.glyph_id,
+                            band: i32::MIN,
+                        }));
+                        out.glyph_places.push(Some(GlyphPlace {
+                            x,
+                            height: h,
+                            width_factor: wf,
+                            shear,
+                            cap: g.cap,
+                        }));
                     }
                     adv = g.advance * h / g.cap * wf;
                 }
@@ -236,15 +253,44 @@ fn drawing_face_candidates(bold: bool, italic: bool) -> Vec<&'static str> {
 
 /// Shaped text in local or world coordinates: open strokes (stroke-font glyphs, underlines,
 /// fraction bars) and closed glyph outlines grouped per glyph (fill each group even-odd).
-#[derive(Clone, Debug, Default, PartialEq)]
+///
+/// When TrueType glyphs carry [`glyph_keys`] / [`glyph_places`], the render crate can reuse a
+/// font-unit triangulated mesh (Phase D) and apply [`post_xf`] after placement.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Shaped {
     pub strokes: Vec<Vec<Vec2>>,
     pub glyphs: Vec<Vec<Vec<Vec2>>>,
+    /// Parallel to [`glyphs`]: mesh identity when the glyph came from a TrueType face.
+    pub glyph_keys: Vec<Option<GlyphMeshKey>>,
+    /// Parallel to [`glyphs`]: placement used to map font-unit contours into shaped coords.
+    pub glyph_places: Vec<Option<GlyphPlace>>,
+    /// Affine applied after placement (from [`Self::transform`]); identity after [`Self::map`].
+    pub post_xf: Mat3,
     pub width: f64,
 }
 
+impl Default for Shaped {
+    fn default() -> Self {
+        Self {
+            strokes: Vec::new(),
+            glyphs: Vec::new(),
+            glyph_keys: Vec::new(),
+            glyph_places: Vec::new(),
+            post_xf: Mat3::IDENTITY,
+            width: 0.0,
+        }
+    }
+}
+
 impl Shaped {
-    /// Apply a point transform to every vertex.
+    fn bake_mesh_meta(&mut self) {
+        self.glyph_keys.clear();
+        self.glyph_places.clear();
+        self.post_xf = Mat3::IDENTITY;
+    }
+
+    /// Apply a point transform to every vertex. Clears glyph mesh metadata (arbitrary maps are
+    /// not composed into [`post_xf`]); prefer [`Self::transform`] for affine placement.
     pub fn map(&mut self, f: impl Fn(Vec2) -> Vec2) {
         for s in &mut self.strokes {
             for p in s.iter_mut() {
@@ -258,11 +304,38 @@ impl Shaped {
                 }
             }
         }
+        self.bake_mesh_meta();
     }
+
+    /// Apply an affine transform, keeping glyph mesh keys so filled triangulation can be cached.
+    pub fn transform(&mut self, m: Mat3) {
+        for s in &mut self.strokes {
+            for p in s.iter_mut() {
+                *p = m.apply(*p);
+            }
+        }
+        for g in &mut self.glyphs {
+            for c in g.iter_mut() {
+                for p in c.iter_mut() {
+                    *p = m.apply(*p);
+                }
+            }
+        }
+        // Contours are already mapped; compose so font-unit → place → post_xf matches contours.
+        self.post_xf = m.then_before(self.post_xf);
+    }
+
     /// Append another shaped piece (already in the same coordinates).
-    pub fn extend(&mut self, other: Shaped) {
+    pub fn extend(&mut self, mut other: Shaped) {
+        if self.post_xf != other.post_xf {
+            // Different accumulated affines: fall back to contour-only fill for the merge.
+            self.bake_mesh_meta();
+            other.bake_mesh_meta();
+        }
         self.strokes.extend(other.strokes);
         self.glyphs.extend(other.glyphs);
+        self.glyph_keys.extend(other.glyph_keys);
+        self.glyph_places.extend(other.glyph_places);
     }
     pub fn is_empty(&self) -> bool {
         self.strokes.is_empty() && self.glyphs.is_empty()
@@ -430,13 +503,14 @@ pub fn place(font: &TextFont, s: &str, p: &TextParams) -> (Shaped, Bounds2) {
     };
     let local = Vec2::new(dx, dy);
     let (mx, my) = (if p.backwards { -1.0 } else { 1.0 }, if p.upside_down { -1.0 } else { 1.0 });
-    let xf = |q: Vec2| {
-        let l = q + local;
-        origin + Vec2::new(l.x * mx, l.y * my).rotate(rot)
-    };
-    sh.map(xf);
+    // translate(local) → scale(mx,my) → rotate(rot) → translate(origin)
+    let xf = Mat3::translate(origin)
+        .then_before(Mat3::rotate(rot))
+        .then_before(Mat3::scale(mx, my))
+        .then_before(Mat3::translate(local));
+    sh.transform(xf);
     let bb = Bounds2::from_points(
-        [Vec2::new(0.0, -height / 3.0), Vec2::new(width, -height / 3.0), Vec2::new(width, height), Vec2::new(0.0, height)].map(xf),
+        [Vec2::new(0.0, -height / 3.0), Vec2::new(width, -height / 3.0), Vec2::new(width, height), Vec2::new(0.0, height)].map(|q| xf.apply(q)),
     );
     (sh, bb)
 }
