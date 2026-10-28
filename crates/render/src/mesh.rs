@@ -2,11 +2,18 @@
 //!
 //! [`build_mesh`] turns a [`DisplayList`] into the vertex bytes the GPU canvas uploads. The egui
 //! shell and the WinUI host both use this layout and [`CANVAS_SHADER`], so there is one mesh path.
+//!
+//! Phase B spatial tiles: [`partition_prims`] / [`build_mesh_prims`] let hosts remesh dirty
+//! fragments only; [`mesh_tiling_viable`] keeps the monolithic path when tile count is tiny or a
+//! wipeout spans tiles (draw-order unsafe).
+
+use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 
 use aad_color::Rgb;
 use aad_geom::{Bounds2, Vec2};
 
-use crate::{DisplayList, Kind};
+use crate::{DisplayList, DPrim, Kind};
 
 /// Line/triangle vertex: position (2 × f32, relative to the origin) + sRGB colour (4 × u8).
 pub const VERTEX_SIZE: usize = 12;
@@ -411,63 +418,301 @@ pub fn build_mesh(list: &DisplayList, origin: Vec2, bg: Rgb, lwdisplay: bool) ->
 
 /// Like [`build_mesh`], with an explicit lineweight display mode (screen vs true scale).
 pub fn build_mesh_mode(list: &DisplayList, origin: Vec2, bg: Rgb, lw: Option<LineweightMode>) -> MeshData {
+    let n = list.prims.len();
+    if n > MAX_MESH_PRIMS {
+        return MeshData::default();
+    }
+    let indices: Vec<usize> = (0..n).collect();
+    build_mesh_prims(list, &indices, origin, bg, lw)
+}
+
+/// World-space mesh tile identity on a uniform grid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TileId {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl TileId {
+    /// Pack for hash maps / GPU cache keys (checked; non-finite grids never produce a tile).
+    pub fn to_bits(self) -> u64 {
+        ((self.x as u32 as u64) << 32) | (self.y as u32 as u64)
+    }
+}
+
+/// Tile edge as a multiple of the current view height (same spirit as `MODEL_ORIGIN_CELL`).
+///
+/// A typical monitor then shows O(4–16) tiles of model content.
+pub const MESH_TILE_VIEW_MULT: f64 = 4.0;
+
+/// Prefer the monolithic mesh when fewer than this many non-empty tiles would be produced.
+pub const MIN_MESH_TILES: usize = 2;
+
+/// Cap retained mesh tiles; above this, fall back to a single mesh (hostile / huge extents).
+pub const MAX_MESH_TILES: usize = 256;
+
+/// Cap prims considered for tiling / mesh build (hostile input).
+pub const MAX_MESH_PRIMS: usize = 2_000_000;
+
+/// World-space edge length for mesh tiles at the current view height.
+pub fn mesh_tile_edge(view_height: f64) -> f64 {
+    if !view_height.is_finite() || view_height <= 0.0 {
+        return 1.0;
+    }
+    let edge = view_height * MESH_TILE_VIEW_MULT;
+    if edge.is_finite() && edge > 0.0 { edge } else { 1.0 }
+}
+
+/// Grid cell containing `p` for a positive finite `edge`.
+pub fn tile_id_at(p: Vec2, edge: f64) -> Option<TileId> {
+    if !(p.is_finite() && edge.is_finite() && edge > 0.0) {
+        return None;
+    }
+    let x = (p.x / edge).floor();
+    let y = (p.y / edge).floor();
+    if !(x.is_finite() && y.is_finite()) {
+        return None;
+    }
+    // Reject values outside i32 before casting.
+    if x < f64::from(i32::MIN) || x > f64::from(i32::MAX) || y < f64::from(i32::MIN) || y > f64::from(i32::MAX) {
+        return None;
+    }
+    Some(TileId { x: x as i32, y: y as i32 })
+}
+
+/// Axis-aligned bounds of one display-list primitive (empty for infinites / missing verts).
+pub fn prim_bounds(list: &DisplayList, prim: &DPrim) -> Bounds2 {
+    let pts = list.points(prim);
+    match prim.kind {
+        Kind::Infinite { .. } => Bounds2::default(),
+        Kind::Arc { .. } => {
+            if let (Some(c), Some(rim)) = (pts.first(), pts.get(1)) {
+                let r = c.dist(*rim);
+                if !r.is_finite() || r <= 0.0 {
+                    return Bounds2::default();
+                }
+                // Conservative circle bounds (sweep ignored): safe for tile assignment.
+                Bounds2::new(*c - Vec2::new(r, r), *c + Vec2::new(r, r))
+            } else {
+                Bounds2::default()
+            }
+        }
+        Kind::Ellipse { .. } => {
+            if let (Some(c), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                let u = *u_tip - *c;
+                let v = *v_tip - *c;
+                let rx = u.x.abs().max(v.x.abs());
+                let ry = u.y.abs().max(v.y.abs());
+                if !(rx.is_finite() && ry.is_finite()) {
+                    return Bounds2::default();
+                }
+                Bounds2::new(*c - Vec2::new(rx, ry), *c + Vec2::new(rx, ry))
+            } else {
+                Bounds2::default()
+            }
+        }
+        _ => Bounds2::from_points(pts.iter().copied()),
+    }
+}
+
+fn prim_centroid(list: &DisplayList, prim: &DPrim) -> Option<Vec2> {
+    let b = prim_bounds(list, prim);
+    if b.is_empty() {
+        None
+    } else {
+        Some(b.center())
+    }
+}
+
+/// True when a wipeout mask's bounds cover more than one mesh tile (draw order across tiles is unsafe).
+pub fn wipeout_spans_tiles(list: &DisplayList, edge: f64) -> bool {
+    if !(edge.is_finite() && edge > 0.0) {
+        return true;
+    }
+    for prim in &list.prims {
+        if prim.kind != Kind::Mask {
+            continue;
+        }
+        let b = prim_bounds(list, prim);
+        if b.is_empty() {
+            continue;
+        }
+        let Some(a) = tile_id_at(b.min, edge) else { return true };
+        let Some(c) = tile_id_at(b.max, edge) else { return true };
+        if a != c {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether hosts should use per-tile mesh retention for this list and tile edge.
+///
+/// Returns false when tiling is not worthwhile (too few tiles), hostile (too many), or unsafe
+/// (wipeout spans tiles). Infinites are ignored (hosts append them after tiling).
+pub fn mesh_tiling_viable(list: &DisplayList, edge: f64) -> bool {
+    if list.prims.len() > MAX_MESH_PRIMS {
+        return false;
+    }
+    if wipeout_spans_tiles(list, edge) {
+        return false;
+    }
+    let parts = partition_prims(list, edge);
+    (MIN_MESH_TILES..=MAX_MESH_TILES).contains(&parts.len())
+}
+
+/// Assign each finite primitive to one tile by its bounds centroid. Order within each tile follows
+/// display-list order. `Kind::Infinite` prims are omitted (view-clipped by the host each upload).
+pub fn partition_prims(list: &DisplayList, edge: f64) -> Vec<(TileId, Vec<usize>)> {
+    let mut map: BTreeMap<TileId, Vec<usize>> = BTreeMap::new();
+    if !(edge.is_finite() && edge > 0.0) || list.prims.len() > MAX_MESH_PRIMS {
+        return Vec::new();
+    }
+    for (i, prim) in list.prims.iter().enumerate() {
+        if matches!(prim.kind, Kind::Infinite { .. }) {
+            continue;
+        }
+        let Some(c) = prim_centroid(list, prim) else { continue };
+        let Some(id) = tile_id_at(c, edge) else { continue };
+        map.entry(id).or_default().push(i);
+        if map.len() > MAX_MESH_TILES {
+            return Vec::new();
+        }
+    }
+    map.into_iter().collect()
+}
+
+/// Fingerprint of the primitives in a tile (geometry + style). Used to skip remesh when unchanged.
+pub fn tile_content_fingerprint(list: &DisplayList, prim_indices: &[usize]) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    prim_indices.len().hash(&mut h);
+    for &i in prim_indices.iter().take(MAX_MESH_PRIMS) {
+        let Some(prim) = list.prims.get(i) else {
+            i.hash(&mut h);
+            continue;
+        };
+        prim.handle.0.hash(&mut h);
+        prim.aci7.hash(&mut h);
+        prim.lw.to_bits().hash(&mut h);
+        prim.color.0.hash(&mut h);
+        prim.color.1.hash(&mut h);
+        prim.color.2.hash(&mut h);
+        match prim.kind {
+            Kind::Polyline => 0u8.hash(&mut h),
+            Kind::Arc { sweep } => {
+                1u8.hash(&mut h);
+                sweep.to_bits().hash(&mut h);
+            }
+            Kind::Ellipse { start, sweep } => {
+                2u8.hash(&mut h);
+                start.to_bits().hash(&mut h);
+                sweep.to_bits().hash(&mut h);
+            }
+            Kind::Tris => 3u8.hash(&mut h),
+            Kind::Mask => 4u8.hash(&mut h),
+            Kind::Point => 5u8.hash(&mut h),
+            Kind::Infinite { ray } => {
+                6u8.hash(&mut h);
+                ray.hash(&mut h);
+            }
+        }
+        for p in list.points(prim) {
+            p.x.to_bits().hash(&mut h);
+            p.y.to_bits().hash(&mut h);
+        }
+    }
+    h.finish()
+}
+
+/// Build mesh data for a subset of primitives (tile fragment / list slice), preserving index order.
+pub fn build_mesh_prims(list: &DisplayList, prim_indices: &[usize], origin: Vec2, bg: Rgb, lw: Option<LineweightMode>) -> MeshData {
     let mut m = MeshData {
-        lines: Vec::with_capacity(list.segment_count().saturating_mul(2 * VERTEX_SIZE)),
-        tris: Vec::with_capacity(list.tris.len().saturating_mul(VERTEX_SIZE)),
+        lines: Vec::new(),
+        tris: Vec::new(),
         quads: Vec::new(),
         rings: Vec::new(),
         breaks: Vec::new(),
     };
-    for prim in &list.prims {
-        let c = prim.display_rgb(bg);
-        let col = [c.0, c.1, c.2, 255];
-        let pts = list.points(prim);
-        let hair = if matches!(lw, Some(LineweightMode::TrueScale)) { 0.0 } else { HAIRLINE_POINTS };
-        let w = wide_width(prim.lw, lw).unwrap_or(hair);
-        match prim.kind {
-            Kind::Polyline => {
-                stroke_polyline(&mut m.quads, pts, origin, col, w);
-            }
-            Kind::Arc { sweep } => {
-                if let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) {
-                    let radius = center.dist(*rim);
-                    let start = center.angle_to(*rim);
-                    stroke_arc(&mut m.rings, *center, radius, start, crate::sweep_radians(sweep), origin, col, w);
-                }
-            }
-            Kind::Ellipse { start, sweep } => {
-                if let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
-                    let u = *u_tip - *center;
-                    let v = *v_tip - *center;
-                    stroke_ellipse(&mut m.rings, *center, u, v, f64::from(start), crate::sweep_radians(sweep), origin, col, w);
-                }
-            }
-            Kind::Tris => {
-                for t in pts.as_chunks::<3>().0 {
-                    for q in t {
-                        push_vertex(&mut m.tris, rel(*q, origin), col);
-                    }
-                }
-            }
-            Kind::Mask => {
-                m.breaks.push([m.tri_vertices(), m.line_vertices(), m.quad_instances(), m.ring_instances()]);
-                for t in pts.as_chunks::<3>().0 {
-                    for q in t {
-                        push_vertex(&mut m.tris, rel(*q, origin), [bg.0, bg.1, bg.2, 255]);
-                    }
-                }
-            }
-            Kind::Point => {
-                if let Some(q) = pts.first() {
-                    let p = rel(*q, origin);
-                    push_instance(&mut m.quads, p, p, col, POINT_SIZE);
-                }
-            }
-            // Drawn by the shell each frame (clipped to the view).
-            Kind::Infinite { .. } => {}
-        }
+    if prim_indices.len() > MAX_MESH_PRIMS || !origin.is_finite() {
+        return m;
+    }
+    for &i in prim_indices {
+        let Some(prim) = list.prims.get(i) else { continue };
+        append_prim(&mut m, list, prim, origin, bg, lw);
     }
     m
+}
+
+fn append_prim(m: &mut MeshData, list: &DisplayList, prim: &DPrim, origin: Vec2, bg: Rgb, lw: Option<LineweightMode>) {
+    let c = prim.display_rgb(bg);
+    let col = [c.0, c.1, c.2, 255];
+    let pts = list.points(prim);
+    let hair = if matches!(lw, Some(LineweightMode::TrueScale)) { 0.0 } else { HAIRLINE_POINTS };
+    let w = wide_width(prim.lw, lw).unwrap_or(hair);
+    match prim.kind {
+        Kind::Polyline => {
+            stroke_polyline(&mut m.quads, pts, origin, col, w);
+        }
+        Kind::Arc { sweep } => {
+            if let (Some(center), Some(rim)) = (pts.first(), pts.get(1)) {
+                let radius = center.dist(*rim);
+                let start = center.angle_to(*rim);
+                stroke_arc(&mut m.rings, *center, radius, start, crate::sweep_radians(sweep), origin, col, w);
+            }
+        }
+        Kind::Ellipse { start, sweep } => {
+            if let (Some(center), Some(u_tip), Some(v_tip)) = (pts.first(), pts.get(1), pts.get(2)) {
+                let u = *u_tip - *center;
+                let v = *v_tip - *center;
+                stroke_ellipse(&mut m.rings, *center, u, v, f64::from(start), crate::sweep_radians(sweep), origin, col, w);
+            }
+        }
+        Kind::Tris => {
+            for t in pts.as_chunks::<3>().0 {
+                for q in t {
+                    push_vertex(&mut m.tris, rel(*q, origin), col);
+                }
+            }
+        }
+        Kind::Mask => {
+            m.breaks.push([m.tri_vertices(), m.line_vertices(), m.quad_instances(), m.ring_instances()]);
+            for t in pts.as_chunks::<3>().0 {
+                for q in t {
+                    push_vertex(&mut m.tris, rel(*q, origin), [bg.0, bg.1, bg.2, 255]);
+                }
+            }
+        }
+        Kind::Point => {
+            if let Some(q) = pts.first() {
+                let p = rel(*q, origin);
+                push_instance(&mut m.quads, p, p, col, POINT_SIZE);
+            }
+        }
+        // Drawn by the shell each frame (clipped to the view).
+        Kind::Infinite { .. } => {}
+    }
+}
+
+/// Concatenate tile meshes in order, adjusting wipeout break offsets.
+pub fn merge_meshes(parts: &[&MeshData]) -> MeshData {
+    let mut out = MeshData::default();
+    if parts.len() > MAX_MESH_TILES {
+        return out;
+    }
+    for part in parts {
+        let tri0 = out.tri_vertices();
+        let line0 = out.line_vertices();
+        let quad0 = out.quad_instances();
+        let ring0 = out.ring_instances();
+        for b in &part.breaks {
+            out.breaks.push([b[0].saturating_add(tri0), b[1].saturating_add(line0), b[2].saturating_add(quad0), b[3].saturating_add(ring0)]);
+        }
+        out.lines.extend_from_slice(&part.lines);
+        out.tris.extend_from_slice(&part.tris);
+        out.quads.extend_from_slice(&part.quads);
+        out.rings.extend_from_slice(&part.rings);
+    }
+    out
 }
 
 /// Clip construction lines and rays to the view and append them as hairline segments.
@@ -775,5 +1020,109 @@ mod tests {
         stroke_polyline(&mut quads, &pts, Vec2::ZERO, [0, 0, 0, 255], HAIRLINE_POINTS);
         assert_eq!(quads.len() / INSTANCE_SIZE, 1);
         assert!(instance_width(&quads, 0) > 0.0);
+    }
+
+    fn line_prim(handle: u64, a: Vec2, b: Vec2) -> (crate::DPrim, [Vec2; 2]) {
+        (
+            crate::DPrim {
+                handle: aad_doc::Handle(handle),
+                color: Rgb(0, 0, 0),
+                aci7: false,
+                lw: 0.0,
+                kind: Kind::Polyline,
+                start: 0,
+                len: 2,
+            },
+            [a, b],
+        )
+    }
+
+    #[test]
+    fn build_mesh_prims_matches_full_list_for_all_indices() {
+        let mut list = DisplayList::default();
+        let (p0, pts0) = line_prim(1, Vec2::ZERO, Vec2::new(10.0, 0.0));
+        list.verts.extend(pts0);
+        list.prims.push(p0);
+        let (mut p1, pts1) = line_prim(2, Vec2::new(100.0, 0.0), Vec2::new(110.0, 0.0));
+        p1.start = 2;
+        list.verts.extend(pts1);
+        list.prims.push(p1);
+        let full = build_mesh_mode(&list, Vec2::ZERO, Rgb(255, 255, 255), None);
+        let slice = build_mesh_prims(&list, &[0, 1], Vec2::ZERO, Rgb(255, 255, 255), None);
+        assert_eq!(full.quads, slice.quads);
+        assert_eq!(full.rings, slice.rings);
+        assert_eq!(full.tris, slice.tris);
+        let one = build_mesh_prims(&list, &[1], Vec2::ZERO, Rgb(255, 255, 255), None);
+        assert!(one.quad_instances() > 0);
+        assert!(one.quad_instances() < full.quad_instances());
+    }
+
+    #[test]
+    fn partition_splits_distant_prims_and_wipeout_span_is_detected() {
+        let mut list = DisplayList::default();
+        let (p0, pts0) = line_prim(1, Vec2::ZERO, Vec2::new(1.0, 0.0));
+        list.verts.extend(pts0);
+        list.prims.push(p0);
+        let (mut p1, pts1) = line_prim(2, Vec2::new(1000.0, 0.0), Vec2::new(1001.0, 0.0));
+        p1.start = 2;
+        list.verts.extend(pts1);
+        list.prims.push(p1);
+        let edge = 100.0;
+        let parts = partition_prims(&list, edge);
+        assert_eq!(parts.len(), 2, "distant lines land in different tiles");
+        assert!(mesh_tiling_viable(&list, edge));
+
+        // A wipeout covering both tiles makes tiling unsafe.
+        let mut wipe = list.clone();
+        wipe.tris.extend([Vec2::new(-1.0, -1.0), Vec2::new(1002.0, -1.0), Vec2::new(1002.0, 1.0), Vec2::new(-1.0, -1.0), Vec2::new(1002.0, 1.0), Vec2::new(-1.0, 1.0)]);
+        wipe.prims.push(crate::DPrim {
+            handle: aad_doc::Handle(9),
+            color: Rgb(0, 0, 0),
+            aci7: false,
+            lw: 0.0,
+            kind: Kind::Mask,
+            start: 0,
+            len: 6,
+        });
+        assert!(wipeout_spans_tiles(&wipe, edge));
+        assert!(!mesh_tiling_viable(&wipe, edge));
+    }
+
+    #[test]
+    fn merge_meshes_preserves_counts_and_break_offsets() {
+        let a = build_mesh_prims(
+            &{
+                let mut list = DisplayList::default();
+                let (p, pts) = line_prim(1, Vec2::ZERO, Vec2::new(1.0, 0.0));
+                list.verts.extend(pts);
+                list.prims.push(p);
+                list
+            },
+            &[0],
+            Vec2::ZERO,
+            Rgb(255, 255, 255),
+            None,
+        );
+        let mut b = MeshData::default();
+        b.breaks.push([0, 0, 0, 0]);
+        push_vertex(&mut b.tris, [0.0, 0.0], [1, 2, 3, 255]);
+        push_vertex(&mut b.tris, [1.0, 0.0], [1, 2, 3, 255]);
+        push_vertex(&mut b.tris, [0.0, 1.0], [1, 2, 3, 255]);
+        let merged = merge_meshes(&[&a, &b]);
+        assert_eq!(merged.quad_instances(), a.quad_instances());
+        assert_eq!(merged.tri_vertices(), 3);
+        assert_eq!(merged.breaks, vec![[a.tri_vertices(), a.line_vertices(), a.quad_instances(), a.ring_instances()]]);
+    }
+
+    #[test]
+    fn tile_fingerprint_changes_only_when_content_changes() {
+        let mut list = DisplayList::default();
+        let (p0, pts0) = line_prim(1, Vec2::ZERO, Vec2::new(1.0, 0.0));
+        list.verts.extend(pts0);
+        list.prims.push(p0);
+        let fp = tile_content_fingerprint(&list, &[0]);
+        assert_eq!(fp, tile_content_fingerprint(&list, &[0]));
+        list.verts[1] = Vec2::new(2.0, 0.0);
+        assert_ne!(fp, tile_content_fingerprint(&list, &[0]));
     }
 }

@@ -172,8 +172,22 @@ before micro-optimising.
 - **Inspect hooks:** WinUI and egui `ui.inspect` `perf` include `buildMs`, `meshMs`, `prims`,
   `rings`, and `meshBytes` (egui also keeps `frameMs` / `drawMs` / `renderer`). Absolute times are
   not re-measured here — use `aad-cli perf` / `perf_probe` on a reference machine before quoting.
-- **Proposed (not in this change):** tiled display-list / dirty mesh upload (Phases B–C), glyph
-  atlas (Phase D), Vello spike, WinUI GPU timestamp queries behind a flag.
+- **Proposed (not in this change):** tiled display-list scene (Phase C), glyph atlas (Phase D),
+  Vello spike, WinUI GPU timestamp queries behind a flag.
+
+## Update: spatial mesh tiles + dirty upload (Phase B)
+
+- **Implemented:** `aad_render::mesh` builds `MeshData` for a prim-index slice
+  (`build_mesh_prims` / `partition_prims` / `tile_content_fingerprint` / `merge_meshes`).
+  WinUI `FrameCache` and egui `CanvasState` retain per-tile meshes keyed by content fingerprint ⊕
+  mesh basis (origin / tint / band / lineweight). On revision change, only dirty tiles remesh;
+  fine pans still keep the scene key (`fine_pan_keeps_the_cached_mesh`). WinUI
+  `Gpu::present_tiles` uploads only tiles whose content key changed and draws them in tile order;
+  infinites stay a small per-present extra. Monolithic `build_mesh_mode` remains when tile count
+  is below `MIN_MESH_TILES`, above `MAX_MESH_TILES`, or a wipeout spans tiles
+  (`mesh_tiling_viable` / `wipeout_spans_tiles`). Regression: `edit_only_remeshes_dirty_tiles`.
+- **Not claimed here:** absolute `meshMs` / `meshBytes` before/after on a reference machine
+  (re-measure with `aad-cli perf` / `ui.inspect`); tiled display-list scene (Phase C).
 
 ## Update: file I/O path
 

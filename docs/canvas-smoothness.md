@@ -81,9 +81,9 @@ From `docs/PERFORMANCE.md` (Oct 2026 machine). Re-measure with `aad-cli perf` / 
 
 | Hotspot | Today | Direction |
 | --- | --- | --- |
-| Display-list at extents | 13 ms / 10k, 129 ms / 100k | GPU curves (#11, ellipses landed); per-entity×octave tessellation cache; **proposed** tiled scene (Phase B/C in Project graphics-engine design) |
+| Display-list at extents | 13 ms / 10k, 129 ms / 100k | GPU curves (#11, ellipses landed); per-entity×octave tessellation cache; **proposed** tiled display-list scene (Phase C) |
 | Text-heavy rebuild | 0.32–0.38 s | Glyph cache (#8); greek bars (#9); **proposed** glyph atlas (Phase D) |
-| Any edit | Full `build_mesh` + new GPU buffers | **Proposed** spatial mesh tiles; `write_buffer` dirty chunks |
+| Any edit | Full `build_mesh` + new GPU buffers | **Partial (Phase B)** — spatial mesh tiles remesh + WinUI dirty tile upload; monolithic fallback for tiny tile counts / spanning wipeouts. **Still open:** tiled display-list scene (Phase C) |
 | Layout VP pan across cell | 52 ms / 100k | Existing LRU; GPU curves help |
 | GPU frame time | Unknown | Host/egui `ui.inspect` `perf.buildMs` / `meshMs` / `rings` / `meshBytes` (implemented). Optional WinUI timestamp queries still open |
 
@@ -99,6 +99,7 @@ cargo test -p aad-render --test lod_and_frustum
 cargo test -p aad-host present_mode_defaults_to_vsync
 cargo test -p aad-host sample_line_and_wheel_zoom
 cargo test -p aad-host fine_pan_keeps_the_cached_mesh
+cargo test -p aad-host edit_only_remeshes_dirty_tiles
 ```
 
 ### Phase 2 (#9–#10) test commands
