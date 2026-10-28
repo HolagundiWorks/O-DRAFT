@@ -75,10 +75,7 @@ pub fn filled_tris(key: Option<GlyphMeshKey>, place: Option<GlyphPlace>, post_xf
             if font_tris.is_empty() {
                 return fill::triangulate_outline(placed_contours);
             }
-            font_tris
-                .iter()
-                .map(|p| post_xf.apply(place_pt(*p, pl)))
-                .collect()
+            font_tris.iter().map(|p| post_xf.apply(place_pt(*p, pl))).collect()
         }
         _ => fill::triangulate_outline(placed_contours),
     }
@@ -133,17 +130,8 @@ mod tests {
         let Some(g) = sh.glyphs.first() else { return };
         assert!(sh.glyph_keys.first().is_some_and(|k| k.is_some()));
         let direct = fill::triangulate_outline(g);
-        let cached = filled_tris(
-            sh.glyph_keys.first().copied().flatten(),
-            sh.glyph_places.first().copied().flatten(),
-            sh.post_xf,
-            g,
-        );
-        let area = |t: &[Vec2]| -> f64 {
-            t.chunks_exact(3)
-                .map(|c| (c[1] - c[0]).cross(c[2] - c[0]).abs() * 0.5)
-                .sum()
-        };
+        let cached = filled_tris(sh.glyph_keys.first().copied().flatten(), sh.glyph_places.first().copied().flatten(), sh.post_xf, g);
+        let area = |t: &[Vec2]| -> f64 { t.chunks_exact(3).map(|c| (c[1] - c[0]).cross(c[2] - c[0]).abs() * 0.5).sum() };
         let (ad, ac) = (area(&direct), area(&cached));
         assert!(ad > 0.0 && ac > 0.0);
         assert!((ad - ac).abs() <= 1e-4 * ad.max(ac), "cached {ac} vs direct {ad}");
@@ -154,10 +142,7 @@ mod tests {
         glyph_mesh_cache_clear();
         let mut cache = mesh_cache().lock().unwrap_or_else(PoisonError::into_inner);
         for i in 0..MAX_GLYPH_MESH_ENTRIES {
-            let key = GlyphFillKey {
-                glyph: GlyphMeshKey { font_ptr: i, font_len: 1, face: 0, glyph_id: i as u32, band: 0 },
-                fill: true,
-            };
+            let key = GlyphFillKey { glyph: GlyphMeshKey { font_ptr: i, font_len: 1, face: 0, glyph_id: i as u32, band: 0 }, fill: true };
             cache.insert(key, Arc::new(vec![Vec2::ZERO]));
         }
         assert_eq!(cache.len(), MAX_GLYPH_MESH_ENTRIES);
