@@ -34,7 +34,7 @@ internal static class HistoryWindow
     public static Window Open(Window owner, IntPtr host, Action changed)
     {
         var theme = owner.Content is FrameworkElement shell ? shell.RequestedTheme : ElementTheme.Default;
-        var panel = new Grid { Margin = Density.DialogMargin, MinWidth = 360, MinHeight = 420 };
+        var panel = new Grid { Margin = Density.DialogMargin, MinWidth = Density.HistoryPanelMinWidth, MinHeight = Density.HistoryPanelMinHeight };
         var controller = Mount(panel, host, owner.Content?.XamlRoot, changed);
         var window = new Window { Title = "Version history" };
         window.Content = panel;
@@ -81,7 +81,7 @@ internal static class HistoryWindow
             Density.Name(_namedOnly, "Named versions only");
             AutomationProperties.SetAutomationId(_namedOnly, "history.namedOnly");
 
-            _nameBox = new TextBox { PlaceholderText = "e.g. Issued for tender", MinWidth = 160 };
+            _nameBox = new TextBox { PlaceholderText = "e.g. Issued for tender", MinWidth = Density.SearchFieldWidth };
             Density.Name(_nameBox, "Milestone name");
             AutomationProperties.SetAutomationId(_nameBox, "history.milestoneName");
 
@@ -115,7 +115,7 @@ internal static class HistoryWindow
             {
                 SelectionMode = ListViewSelectionMode.Single,
                 IsItemClickEnabled = true,
-                MinHeight = 200,
+                MinHeight = Density.HistoryListMinHeight,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
             };
             Density.Name(_list, "History timeline");
@@ -287,13 +287,13 @@ internal static class HistoryWindow
             var mark = new TextBlock
             {
                 Text = " ",
-                Width = 14,
+                Width = Density.SwatchSize,
                 FontSize = Density.FontBody,
                 VerticalAlignment = VerticalAlignment.Center,
                 FontWeight = FontWeights.SemiBold,
             };
             Density.Name(mark, "Selection mark");
-            var body = new StackPanel { Spacing = 2 };
+            var body = new StackPanel { Spacing = Density.SpaceXs };
             body.Children.Add(new TextBlock
             {
                 Text = title,
@@ -431,7 +431,7 @@ internal static class HistoryWindow
             {
                 return;
             }
-            var box = new TextBox { Text = row.Name, PlaceholderText = "e.g. Issued for tender", MinWidth = 240 };
+            var box = new TextBox { Text = row.Name, PlaceholderText = "e.g. Issued for tender", MinWidth = Density.SidePanelWidth };
             Density.Name(box, "Version name");
             var dialog = new ContentDialog
             {

@@ -105,8 +105,8 @@ internal static class GraphWindow
 
             _graphCanvas = new Canvas
             {
-                Width = 720,
-                Height = 520,
+                Width = Density.GraphCanvasWidth,
+                Height = Density.GraphCanvasHeight,
                 Background = Density.ThemeBrush("SurfaceSecondaryBrush")
                     ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 28, 28, 30)),
             };
@@ -149,8 +149,8 @@ internal static class GraphWindow
             {
                 Margin = Density.DialogMargin,
                 RowSpacing = Density.SpaceXs,
-                MinWidth = 640,
-                MinHeight = 480,
+                MinWidth = Density.WindowMinWidthWide,
+                MinHeight = Density.WindowMinHeightGraph,
             };
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -361,7 +361,7 @@ internal static class GraphWindow
         private Border MakeGraphCard(string id, string type, JsonObject node, double ux, double uy)
         {
             var selected = string.Equals(id, _graphSelectedId, StringComparison.Ordinal);
-            var body = new StackPanel { Spacing = 4 };
+            var body = new StackPanel { Spacing = Density.Space1 };
             body.Children.Add(new TextBlock
             {
                 Text = type,
@@ -386,9 +386,9 @@ internal static class GraphWindow
             }
             var card = new Border
             {
-                Width = 180,
-                MinHeight = 72,
-                Padding = new Thickness(8),
+                Width = Density.ManagerListWidth,
+                MinHeight = Density.DialogActionMinWidth,
+                Padding = new Thickness(Density.Space2),
                 CornerRadius = new CornerRadius(Density.CornerControl),
                 Background = new SolidColorBrush(selected
                     ? Windows.UI.Color.FromArgb(255, 40, 70, 100)
@@ -396,7 +396,7 @@ internal static class GraphWindow
                 BorderBrush = new SolidColorBrush(selected
                     ? Windows.UI.Color.FromArgb(255, 90, 180, 255)
                     : Windows.UI.Color.FromArgb(255, 70, 78, 88)),
-                BorderThickness = new Thickness(selected ? 2 : 1),
+                BorderThickness = new Thickness(selected ? Density.SpaceXs : Density.DividerThickness),
                 Child = body,
                 Tag = id,
             };
@@ -507,7 +507,7 @@ internal static class GraphWindow
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
                 Text = node.ToJsonString(GraphJsonOpts),
-                MinHeight = 160,
+                MinHeight = Density.ListMinHeight,
                 FontFamily = new FontFamily("Consolas"),
                 FontSize = Density.FontCaption,
             };

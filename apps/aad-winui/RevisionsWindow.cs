@@ -32,7 +32,7 @@ internal static class RevisionsWindow
     public static Window Open(Window owner, IntPtr host, Action changed)
     {
         var theme = owner.Content is FrameworkElement shell ? shell.RequestedTheme : ElementTheme.Default;
-        var panel = new Grid { Margin = Density.DialogMargin, MinWidth = 640, MinHeight = 420 };
+        var panel = new Grid { Margin = Density.DialogMargin, MinWidth = Density.WindowMinWidthWide, MinHeight = Density.HistoryPanelMinHeight };
         var controller = Mount(panel, host, changed);
         var window = new Window { Title = "Revision register" };
         window.Content = panel;
@@ -72,7 +72,7 @@ internal static class RevisionsWindow
             AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
             Density.Name(_status, "Revisions status");
 
-            var header = new Grid { ColumnSpacing = Density.SpaceSm, Margin = new Thickness(18, 0, 0, 0) };
+            var header = new Grid { ColumnSpacing = Density.SpaceSm, Margin = new Thickness(Density.Space4 + Density.SpaceXs, 0, 0, 0) };
             foreach (var (title, width, col) in new (string, double, int)[]
             {
                 ("Code", 48, 0), ("Date", 80, 1), ("Description", 140, 2), ("By", 48, 3), ("Checked", 64, 4), ("Status", 100, 5),
@@ -85,19 +85,19 @@ internal static class RevisionsWindow
                 header.Children.Add(label);
             }
 
-            _description = new TextBox { PlaceholderText = "What changed in this issue", MinWidth = 160 };
+            _description = new TextBox { PlaceholderText = "What changed in this issue", MinWidth = Density.SearchFieldWidth };
             Density.Name(_description, "Issue description");
             AutomationProperties.SetAutomationId(_description, "revision.description");
-            _by = new TextBox { PlaceholderText = "Initials", MinWidth = 64, MaxWidth = 120 };
+            _by = new TextBox { PlaceholderText = "Initials", MinWidth = Density.InitialsFieldMinWidth, MaxWidth = Density.FieldWidth };
             Density.Name(_by, "Issued by");
             AutomationProperties.SetAutomationId(_by, "revision.by");
-            _checked = new TextBox { PlaceholderText = "Initials", MinWidth = 64, MaxWidth = 120 };
+            _checked = new TextBox { PlaceholderText = "Initials", MinWidth = Density.InitialsFieldMinWidth, MaxWidth = Density.FieldWidth };
             Density.Name(_checked, "Checked by");
             AutomationProperties.SetAutomationId(_checked, "revision.checked");
-            _code = new TextBox { PlaceholderText = "Optional code", MinWidth = 72, MaxWidth = 120 };
+            _code = new TextBox { PlaceholderText = "Optional code", MinWidth = Density.DialogActionMinWidth, MaxWidth = Density.FieldWidth };
             Density.Name(_code, "Revision code");
             AutomationProperties.SetAutomationId(_code, "revision.code");
-            _statusBox = new ComboBox { MinWidth = 140, SelectedIndex = 2 };
+            _statusBox = new ComboBox { MinWidth = Density.LayerStateComboWidth, SelectedIndex = 2 };
             foreach (var s in StatusChoices)
             {
                 _statusBox.Items.Add(s);
@@ -134,7 +134,7 @@ internal static class RevisionsWindow
             {
                 SelectionMode = ListViewSelectionMode.Single,
                 IsItemClickEnabled = true,
-                MinHeight = 160,
+                MinHeight = Density.ListMinHeight,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
             };
             Density.Name(_list, "Revision register");
@@ -251,7 +251,7 @@ internal static class RevisionsWindow
             var mark = new TextBlock
             {
                 Text = " ",
-                Width = 14,
+                Width = Density.SwatchSize,
                 FontSize = Density.FontBody,
                 VerticalAlignment = VerticalAlignment.Center,
                 FontWeight = FontWeights.SemiBold,

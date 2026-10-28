@@ -74,14 +74,42 @@ internal static class Density
     /// <summary>Cell editor in an inline table row.</summary>
     public const double TableCellWidth = 88;
     public const double DialogActionMinWidth = 72;
+    /// <summary>Layer-state / status combo in managers (matches Themes LayerStateComboWidth).</summary>
+    public const double LayerStateComboWidth = 140;
+    /// <summary>Search / name fields (matches Themes SearchFieldWidth).</summary>
+    public const double SearchFieldWidth = 160;
     /// <summary>Hatch pattern tile (readable, tighter than 72).</summary>
     public const double HatchSwatch = 56;
     /// <summary>Application mark in About.</summary>
     public const double LogoSize = 64;
+    /// <summary>Welcome overlay logo.</summary>
+    public const double LogoWelcome = 72;
+    /// <summary>In-window splash logo.</summary>
+    public const double LogoSplash = 96;
+    /// <summary>Parametric graph canvas default extent.</summary>
+    public const double GraphCanvasWidth = 720;
+    public const double GraphCanvasHeight = 520;
+    /// <summary>Wide manager / graph window minimums.</summary>
+    public const double WindowMinWidthWide = 640;
+    public const double WindowMinHeightGraph = 480;
+    /// <summary>History / revisions panel minimums.</summary>
+    public const double HistoryPanelMinWidth = 360;
+    public const double HistoryPanelMinHeight = 420;
+    public const double HistoryListMinHeight = 200;
+    /// <summary>Short initials / code fields on the revision register.</summary>
+    public const double InitialsFieldMinWidth = 64;
+    /// <summary>Welcome / busy overlay card.</summary>
+    public const double WelcomeMaxWidth = 520;
+    public const double BusyCardMinWidth = 280;
+    public const double BusyRingSize = 40;
     /// <summary>Upper bound for a status / validation line beside footer actions.</summary>
     public const double StatusMaxWidth = 420;
     public const double CornerChrome = 2;
     public const double CornerControl = 4;
+    /// <summary>Recent-file row on the welcome screen (horizontal Space3, vertical Space1).</summary>
+    public static Thickness RecentItemPadding { get; } = new Thickness(Space3, Space1, Space3, Space1);
+    /// <summary>Busy overlay card inset (Space5+SpaceXs by Space4+SpaceXs ≈ previous 28,24).</summary>
+    public static Thickness BusyCardPadding { get; } = new Thickness(Space6 + Space1, Space4 + Space2, Space6 + Space1, Space4 + Space2);
 
     // --- Typography (caption 11 · body/label 12 · section 13 semibold · page title 18) ---
     public static double Font = FontBody;
