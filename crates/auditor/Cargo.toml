@@ -1,0 +1,13 @@
+[package]
+name = "aad-auditor"
+description = "Auditor v0: detect-only drawing, command/menu parity and UI-token checks (no auto repair)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aad-engine = { workspace = true }
+serde_json = { workspace = true }

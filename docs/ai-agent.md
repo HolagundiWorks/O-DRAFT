@@ -11,6 +11,7 @@ work.
 |---|---|
 | Tool registry, strict parsing, schema validation, confirmation policy, loop limits, audit log (`crates/agent`) | **Implemented and tested** (13 unit tests) |
 | Tools: `get_drawing_summary`, spatial query tools, ShilpiDB `export` / `query` / `import` / `connect` / `disconnect` / `push` / `pull`, `flatten_drawing`, `audit_drawing`, `purge_unused`, `recover_file`, units/plot/annotation layout tools | **Implemented and tested**, each one an existing engine command |
+| Auditor v0 detect tools: `validate_drawing`, `check_command_parity`, `check_command_menu_coverage`, `check_ui_tokens`, `auditor_report` (plus detect path of `audit_drawing`) | **Implemented and tested** via `aad-auditor`; detect-only (no auto repair). Repo checks need the source tree (`AAD_REPO_ROOT` or cwd). Screenshot capture stays on the live Windows control/MCP path |
 | Qwen3 chat format, model-file discovery and checks, generation settings (`crates/llm`) | **Implemented and tested** (7 tests, no model needed) |
 | Assistant conversation state machine: tool list prompt, strict parse, one retry, confirmation, step and history limits (`agent::Assistant`) | **Implemented and tested** with scripted model replies (8 tests) |
 | llama.cpp runtime (`aad-llm` with feature `llama`) | **Builds and runs** (2026-10-12, LLVM 23.1.3 from `winget install LLVM.LLVM`, `LIBCLANG_PATH=C:\Program Files\LLVM\bin`, CMake, MSVC). Tests and `clippy -D warnings` pass with the feature. The model loads in about 1 s (memory-mapped) and generates about 17 tokens per second on this machine's CPU (no GPU backend) |
@@ -35,6 +36,10 @@ cannot be carried out by the agent today, although the commands can be run direc
 | "Flatten the imported drawing." | `flatten_drawing` | yes (changes the drawing, one undo step) |
 | "Audit this drawing." | `audit_drawing` `{}` | no (report only) |
 | "Audit and repair this drawing." | `audit_drawing` `{"fix": true}` | yes |
+| "Validate this drawing." | `validate_drawing` `{}` | no (detect only) |
+| "Run the auditor report." | `auditor_report` | no (detect only; never repairs) |
+| "Check command/menu parity." | `check_command_parity` / `check_command_menu_coverage` | no |
+| "Check WinUI tokens." | `check_ui_tokens` | no |
 | "Purge unused definitions." | `purge_unused` | yes (removes definitions, one undo step) |
 | "Recover this damaged file." | `recover_file` `{"path": ...}` | no (opens a repaired copy; the file is not changed) |
 | "What is in this drawing?" | `get_drawing_summary` | no |
@@ -115,8 +120,30 @@ dependency after installation. The adapter must be replaceable without changing 
 `cargo test -p aad-agent` covers: parsing (valid blocks, prose, malformed JSON, extra keys,
 multiple calls, oversize), schema validation, that only built tools are offered, refusal of unknown
 and planned tools, confirmation before changes and one undo step after, audit with and without
-`fix`, purge, argument rejection, the repeat and call limits, text in a drawing never becoming a
-call, `recover_file` leaving the file untouched, and the audit log.
+`fix`, detect-only `validate_drawing` and `auditor_report`, purge, argument rejection, the repeat
+and call limits, text in a drawing never becoming a call, `recover_file` leaving the file
+untouched, and the audit log. `cargo test -p aad-auditor` covers the detect wrappers and the
+combined JSON report.
+
+## Auditor v0 (detect-only)
+
+Aligned with the rule that the model never calculates or repairs: Auditor v0 only **proposes**
+allow-listed detect tools. Deterministic code in `crates/auditor` returns structured findings.
+Fixes remain human- or command-driven (`audit` / `validate` with `fix: true` only after
+confirmation, as today).
+
+| Tool | Backing | Confirmation |
+|---|---|---|
+| `audit_drawing` `{fix?: false}` | engine `audit` | no when detect; yes when `fix: true` |
+| `validate_drawing` `{fix?: false}` | engine `validate` | no when detect; yes when `fix: true` |
+| `check_command_parity` / `check_command_menu_coverage` | menu catalog vs `command_specs` (same breadth as `cargo xtask parity`; does not rewrite `docs/parity-checklist.md`) | no |
+| `check_ui_tokens` | WinUI scan (same rules as `cargo xtask ui`) | no |
+| `auditor_report` `{checks?}` | combined JSON (`audit`, `validate`, `parity`, `ui`) | no |
+
+CLI entrypoint: `aad-cli auditor [--file FILE \| --sample] [--checks LIST] [--out REPORT.json]`.
+Screenshot capture is **not** part of the headless report; the report's `screenshotCapture` field
+documents the Windows hook (`ui.screenshot` / MCP `screenshot` with `--connect`). Out of scope for
+v0: Phase B tiling, TLS, screenshot golden CI on Linux.
 
 ## Units and layout requests
 

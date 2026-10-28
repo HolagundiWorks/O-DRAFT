@@ -50,6 +50,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("host", Class::Layer(5)),
     ("mcp", Class::Layer(5)),
     ("agent", Class::Layer(5)),
+    ("auditor", Class::Layer(5)),
     ("llm", Class::Standalone),
     ("testkit", Class::Testkit),
     // apps and tooling
@@ -63,7 +64,7 @@ pub const TABLE: &[(&str, Class)] = &[
 /// The L0 foundation is a small chain: `raster` builds on `color` and
 /// `geom`, which the §3 diagram draws on one line. The GPU backend (`gpu`)
 /// reuses the CPU reference (`compose`) for LUTs and parity tests.
-pub const INTRA_LAYER_ORDER: &[&[&str]] = &[&["geom", "color"], &["fonts", "render"], &["agent", "host"]];
+pub const INTRA_LAYER_ORDER: &[&[&str]] = &[&["geom", "color"], &["fonts", "render"], &["auditor", "agent", "mcp", "host"]];
 
 fn intra_layer_allowed(from: &str, to: &str) -> bool {
     let (from, to) = (short_name(from), short_name(to));

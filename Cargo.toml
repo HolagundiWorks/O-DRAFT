@@ -28,6 +28,7 @@ aad-ui-egui = { path = "crates/ui-egui" }
 aad-host = { path = "crates/aad-host" }
 aad-mcp = { path = "crates/mcp" }
 aad-agent = { path = "crates/agent" }
+aad-auditor = { path = "crates/auditor" }
 aad-llm = { path = "crates/llm" }
 aad-vdb = { path = "crates/vdb" }
 aad-param = { path = "crates/param" }

@@ -8,6 +8,7 @@
 //! aad-cli mcp [--connect HOST:PORT]           MCP server on stdio (headless or bridged to the app)
 //! aad-cli perf [N]                            timing table on a synthetic N-entity drawing
 //! aad-cli sample (bracket|floorplan) OUT       write a built-in sample drawing
+//! aad-cli auditor [--file|--sample] [--checks LIST] [--out REPORT.json]
 //! ```
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -19,6 +20,7 @@ use aad_engine::{Session, View};
 use serde_json::{Value, json};
 
 mod ask;
+mod auditor;
 
 const USAGE: &str = "usage:
   aad-cli info FILE.dxf
@@ -28,6 +30,7 @@ const USAGE: &str = "usage:
   aad-cli mcp [--connect HOST:PORT]
   aad-cli perf [N]
   aad-cli sample (bracket|floorplan) OUT.(dxf|dwg|svg|png)
+  aad-cli auditor [--file FILE.dxf | --sample | --metric] [--checks LIST] [--out REPORT.json]
   aad-cli --version
 
 image framing (png 2400x1600, svg, pdf; always model space):
@@ -545,6 +548,7 @@ fn main() -> ExitCode {
             println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
         }),
         Some("mcp") => mcp(&rest),
+        Some("auditor") => auditor::run(&rest),
         Some("ask") => ask::run(&rest),
         Some("--version" | "-V") => {
             println!("aad-cli {}", env!("CARGO_PKG_VERSION"));

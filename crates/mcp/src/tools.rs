@@ -27,13 +27,83 @@ pub fn tool_definitions(has_ui: bool) -> Value {
         json!({"name": "open", "description": "Open a DXF file.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
         json!({"name": "save", "description": "Save the drawing (DXF or DWG by extension). A .svg, .png or .pdf path exports instead: the drawing keeps its name and unsaved changes.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}),
         json!({"name": "cancel", "description": "Press Escape: cancel the running command (or clear the selection).", "inputSchema": {"type": "object", "properties": {}}}),
+        json!({"name": "audit_drawing", "description": "Auditor v0 detect-only: check the open drawing for database errors (never repairs). Equivalent to execute audit with fix:false.",
+            "inputSchema": {"type": "object", "properties": {}}}),
+        json!({"name": "validate_drawing", "description": "Auditor v0 detect-only: validate the open drawing (audit plus counts; never repairs).",
+            "inputSchema": {"type": "object", "properties": {}}}),
+        json!({"name": "check_command_parity", "description": "Auditor v0 detect-only: compare the reference menu catalog to registered commands (same breadth as cargo xtask parity). Needs the O-Draft source tree.",
+            "inputSchema": {"type": "object", "properties": {}}}),
+        json!({"name": "check_ui_tokens", "description": "Auditor v0 detect-only: scan WinUI sources for template/token problems (same rules as cargo xtask ui). Needs the O-Draft source tree.",
+            "inputSchema": {"type": "object", "properties": {}}}),
+        json!({"name": "auditor_report", "description": "Auditor v0: one JSON detect report (audit, validate, parity, UI tokens). Never repairs. Screenshot capture is documented in the report; use screenshot / ui_inspect on a live Windows shell separately.",
+            "inputSchema": {"type": "object", "properties": {"checks": {"type": "string", "description": "comma list: audit,validate,parity,ui (default all)"}}}}),
     ];
     if has_ui {
-        tools.push(json!({"name": "screenshot", "description": "Screenshot the O-Draft window (PNG).", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}));
+        tools.push(json!({"name": "screenshot", "description": "Screenshot the O-Draft window (PNG). Auditor v0 capture hook on Windows (live shell / --connect).", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}));
         tools.push(json!({"name": "ui_inspect", "description": "UI state: panels, canvas rect, view, cursor and snap, performance.", "inputSchema": {"type": "object", "properties": {}}}));
         tools.push(json!({"name": "ui_click", "description": "Click in the drawing area at world coordinates (or screen with space:\"screen\"). Right button = Enter.", "inputSchema": {"type": "object", "properties": {"x": {"type": "number"}, "y": {"type": "number"}, "space": {"type": "string"}, "button": {"type": "string"}}, "required": ["x", "y"]}}));
     }
     json!({ "tools": tools })
+}
+
+fn annotate_detect(mut v: Value, tool: &str) -> Value {
+    if let Some(o) = v.as_object_mut() {
+        o.insert("detectOnly".into(), json!(true));
+        o.insert("tool".into(), json!(tool));
+    }
+    v
+}
+
+fn mcp_auditor_report(b: &mut dyn Backend, checks_raw: &str) -> Result<Value, String> {
+    let checks = aad_auditor::DetectChecks::parse(checks_raw)?;
+    let mut checks_map = serde_json::Map::new();
+    let mut failures: Vec<String> = Vec::new();
+    if checks.audit {
+        let v = annotate_detect(b.call("engine.execute", json!({"command": "audit", "params": {"fix": false}}))?, "audit_drawing");
+        if v.get("errors").and_then(Value::as_u64).unwrap_or(0) > 0 {
+            failures.push("audit_drawing".into());
+        }
+        checks_map.insert("audit_drawing".into(), v);
+    }
+    if checks.validate {
+        let v = annotate_detect(b.call("engine.execute", json!({"command": "validate", "params": {"fix": false}}))?, "validate_drawing");
+        if v.get("ok").and_then(Value::as_bool) != Some(true) {
+            failures.push("validate_drawing".into());
+        }
+        checks_map.insert("validate_drawing".into(), v);
+    }
+    if checks.parity {
+        let root = aad_auditor::repo_root_or_err()?;
+        checks_map.insert("check_command_parity".into(), aad_auditor::check_command_parity(&root)?);
+    }
+    if checks.ui_tokens {
+        let root = aad_auditor::repo_root_or_err()?;
+        let v = aad_auditor::check_ui_tokens(&root)?;
+        if v.get("ok").and_then(Value::as_bool) != Some(true) {
+            failures.push("check_ui_tokens".into());
+        }
+        checks_map.insert("check_ui_tokens".into(), v);
+    }
+    let ok = failures.is_empty();
+    Ok(json!({
+        "tool": "auditor_report",
+        "version": "v0",
+        "detectOnly": true,
+        "ok": ok,
+        "failedChecks": failures,
+        "checks": checks_map,
+        "screenshotCapture": {
+            "availableInThisReport": false,
+            "mcp": "screenshot (requires --connect to a live app)",
+            "control": "ui.screenshot",
+            "note": "Windows live shell only; not run inside this headless report."
+        },
+        "message": if ok {
+            "Auditor v0: no blocking detect findings.".to_string()
+        } else {
+            format!("Auditor v0: findings in {}.", failures.join(", "))
+        }
+    }))
 }
 
 fn text(v: &Value) -> Value {
@@ -123,6 +193,15 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
         "open" => b.call("app.open", a),
         "save" => b.call("app.save", a),
         "cancel" => b.call("cmdline.key", json!({"key": "escape"})),
+        "audit_drawing" => {
+            b.call("engine.execute", json!({"command": "audit", "params": {"fix": false}})).map(|v| annotate_detect(v, "audit_drawing"))
+        }
+        "validate_drawing" => {
+            b.call("engine.execute", json!({"command": "validate", "params": {"fix": false}})).map(|v| annotate_detect(v, "validate_drawing"))
+        }
+        "check_command_parity" => aad_auditor::repo_root_or_err().and_then(|root| aad_auditor::check_command_parity(&root)),
+        "check_ui_tokens" => aad_auditor::repo_root_or_err().and_then(|root| aad_auditor::check_ui_tokens(&root)),
+        "auditor_report" => mcp_auditor_report(b, a.get("checks").and_then(Value::as_str).unwrap_or("")),
         "screenshot" => b.call("ui.screenshot", a),
         "ui_inspect" => b.call("ui.inspect", json!({})),
         "ui_click" => b.call("ui.pointer", a),
