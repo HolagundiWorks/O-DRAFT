@@ -1,0 +1,29 @@
+{
+  "name": "quantity-trust-checklist",
+  "description": "Known wall/opening numbers for Draft→ShilpiDB→CoreOp quantity trust. Asserted by crates/engine/tests/quantity_trust.rs and mirrored in O-CoreOp CadImport.Tests.",
+  "project_ref": { "v": 1, "company_uuid": "quantity-trust-co", "project_id": 42 },
+  "level": "Ground",
+  "walls": [
+    { "role": "front", "length_mm": 6000, "height_mm": 3000, "thickness_mm": 230, "layer": "MEASURE-FULLBRICK" },
+    { "role": "back", "length_mm": 6000, "height_mm": 3000, "thickness_mm": 230, "layer": "MEASURE-FULLBRICK" }
+  ],
+  "openings": [
+    { "mark": "D2", "kind": "Door", "width_mm": 900, "height_mm": 2100, "sill_mm": 0, "type": "single", "wall_role": "front" },
+    { "mark": "W3", "kind": "Window", "width_mm": 1200, "height_mm": 1200, "sill_mm": 900, "wall_role": "front" }
+  ],
+  "expected_face_m2": {
+    "front_gross": 18.0,
+    "door_deduct": 1.89,
+    "window_deduct": 1.44,
+    "front_net": 14.67,
+    "back_net": 18.0,
+    "total_net": 32.67,
+    "note": "CadImport stores length/height/thickness and opening deduct rows; net face m² is the QS checklist number (length_m×height_m − Σ opening_w×opening_h)."
+  },
+  "regressions_caught": [
+    "re-record same drawing → same wall/opening counts (no double rows)",
+    "second drawing same project_ref + Ground → double-count warning",
+    "opening far from walls → missing wall_ref + warning",
+    "MEASURE-FULLBRICK without A-WALL faces → thickness 230 + nominal _note"
+  ]
+}
