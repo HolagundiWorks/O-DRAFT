@@ -122,14 +122,10 @@ fn level_move_menu(session: &Session) -> Option<serde_json::Value> {
     if others.is_empty() {
         return None;
     }
-    let move_items: Vec<_> = others
-        .iter()
-        .map(|l| serde_json::json!({ "label": l.name, "id": l.id.0.to_string(), "enabled": true, "run": "levelmove" }))
-        .collect();
-    let copy_items: Vec<_> = others
-        .iter()
-        .map(|l| serde_json::json!({ "label": l.name, "id": l.id.0.to_string(), "enabled": true, "run": "levelcopy" }))
-        .collect();
+    let move_items: Vec<_> =
+        others.iter().map(|l| serde_json::json!({ "label": l.name, "id": l.id.0.to_string(), "enabled": true, "run": "levelmove" })).collect();
+    let copy_items: Vec<_> =
+        others.iter().map(|l| serde_json::json!({ "label": l.name, "id": l.id.0.to_string(), "enabled": true, "run": "levelcopy" })).collect();
     Some(serde_json::json!({
         "label": "Send to Level",
         "enabled": true,
