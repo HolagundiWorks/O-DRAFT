@@ -8,6 +8,7 @@
     <x:Double x:Key="FontSizeLabel">12</x:Double>
     <x:Double x:Key="FontSizeCommand">12</x:Double>
     <x:Double x:Key="FontSizeMono">12</x:Double>
+    <x:Double x:Key="FontSizeIcon">14</x:Double>
     <x:Double x:Key="FontSizeSection">13</x:Double>
     <x:Double x:Key="FontSizeHeading">13</x:Double>
     <x:Double x:Key="FontSizePageTitle">18</x:Double>

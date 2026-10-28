@@ -24,13 +24,18 @@
     <x:Double x:Key="DividerThickness">1</x:Double>
     <x:Double x:Key="SplitterWidth">4</x:Double>
     <x:Double x:Key="SidePanelWidth">240</x:Double>
+    <GridLength x:Key="SidePanelColumnWidth">240</GridLength>
+    <x:Double x:Key="SideRailWidth">28</x:Double>
+    <GridLength x:Key="SideRailColumnWidth">28</GridLength>
     <x:Double x:Key="ManagerListWidth">180</x:Double>
     <GridLength x:Key="ManagerListColumnWidth">180</GridLength>
     <x:Double x:Key="FieldWidth">120</x:Double>
     <x:Double x:Key="DialogActionMinWidth">72</x:Double>
+    <x:Double x:Key="OrientComboMinWidth">96</x:Double>
     <x:Double x:Key="StatusMaxWidth">420</x:Double>
     <x:Double x:Key="HatchSwatch">56</x:Double>
     <x:Double x:Key="LayerStateComboWidth">140</x:Double>
+    <x:Double x:Key="LayerComboMaxWidth">200</x:Double>
     <x:Double x:Key="SearchFieldWidth">160</x:Double>
     <x:Double x:Key="LogoSize">64</x:Double>
     <x:Double x:Key="LogoWelcome">72</x:Double>
@@ -44,8 +49,12 @@
     <x:Double x:Key="WindowMinHeightGraph">480</x:Double>
     <x:Double x:Key="HistoryPanelMinWidth">360</x:Double>
     <x:Double x:Key="HistoryPanelMinHeight">420</x:Double>
+    <x:Double x:Key="HistoryListMaxHeight">200</x:Double>
     <Thickness x:Key="BusyCardPadding">28,24</Thickness>
     <Thickness x:Key="RecentItemPadding">12,4,12,4</Thickness>
+    <Thickness x:Key="AskPillPadding">6,4,6,4</Thickness>
+    <x:Double x:Key="AskAvatarSize">28</x:Double>
+    <x:Double x:Key="AskSendButtonSize">32</x:Double>
     <x:Double x:Key="CornerRadiusSm">4</x:Double>
     <x:Double x:Key="CornerRadiusMd">4</x:Double>
     <Thickness x:Key="BorderThicknessNone">0</Thickness>
@@ -57,6 +66,8 @@
     <CornerRadius x:Key="OverlayCornerRadius">4</CornerRadius>
     <CornerRadius x:Key="CornerRadiusAskCard">12</CornerRadius>
     <CornerRadius x:Key="CornerRadiusAskPill">20</CornerRadius>
+    <CornerRadius x:Key="CornerRadiusAskAvatar">14</CornerRadius>
+    <CornerRadius x:Key="CornerRadiusAskSend">16</CornerRadius>
     <x:Double x:Key="AskPillHeight">40</x:Double>
 
     <!-- Override Fluent theme mins that fight compact CAD density. -->

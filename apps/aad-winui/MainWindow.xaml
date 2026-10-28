@@ -23,12 +23,12 @@
         <Border x:Name="ToolStripHost" Grid.Row="1" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,0,1" AutomationProperties.Name="Drawing and architecture tools" AutomationProperties.LandmarkType="Navigation">
             <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" Margin="{StaticResource PaddingSm}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" AutomationProperties.Name="Layer">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceMd}" VerticalAlignment="Center" AutomationProperties.Name="Layer">
                         <TextBlock Text="Layer" FontSize="{StaticResource FontSizeCaption}" Foreground="{ThemeResource TextSecondaryBrush}" VerticalAlignment="Center" />
                         <ComboBox
                             x:Name="LayerBox"
-                            MinWidth="130"
-                            MaxWidth="200"
+                            MinWidth="{StaticResource LayerStateComboWidth}"
+                            MaxWidth="{StaticResource LayerComboMaxWidth}"
                             MinHeight="{StaticResource ControlHeight}"
                             VerticalAlignment="Center"
                             SelectionChanged="OnLayerPicked"
@@ -47,9 +47,9 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="RailColumn" Width="Auto" />
                 <ColumnDefinition x:Name="ToolColumn" Width="Auto" />
-                <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition Width="*" MinWidth="{StaticResource FieldWidth}" />
                 <ColumnDefinition x:Name="LeftSplitterColumn" Width="Auto" />
-                <ColumnDefinition x:Name="PropertiesColumn" Width="240" MinWidth="0" />
+                <ColumnDefinition x:Name="PropertiesColumn" Width="{StaticResource SidePanelColumnWidth}" MinWidth="0" />
             </Grid.ColumnDefinitions>
             <!-- Sheet sets: Design, then one entry per discipline. Shown only when the drawing has sheet sets. -->
             <Border x:Name="SheetRailHost" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" BorderThickness="0" AutomationProperties.Name="Sheet sets">
@@ -64,7 +64,7 @@
             <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="28" />
+                <ColumnDefinition Width="{StaticResource SideRailColumnWidth}" />
             </Grid.ColumnDefinitions>
             <Grid x:Name="LeftColumn" Tag="right" AutomationProperties.Name="Side panel">
                 <Grid.RowDefinitions>
@@ -133,7 +133,7 @@
             <Border
                 x:Name="SideRail"
                 Grid.Column="1"
-                Width="28"
+                Width="{StaticResource SideRailWidth}"
                 Background="{ThemeResource SurfaceSecondaryBrush}"
                 BorderBrush="{ThemeResource BorderSubtleBrush}"
                 BorderThickness="0"
@@ -165,7 +165,7 @@
                     Background="{ThemeResource SurfaceElevatedBrush}"
                     BorderBrush="{ThemeResource BorderDefaultBrush}"
                     BorderThickness="1"
-                    Padding="6,4,6,4">
+                    Padding="{StaticResource AskPillPadding}">
                     <Grid ColumnSpacing="{StaticResource SpaceMd}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -173,19 +173,19 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Width="28" Height="28" CornerRadius="14" Background="{ThemeResource SurfaceSecondaryBrush}" VerticalAlignment="Center">
-                            <FontIcon Glyph="&#xE710;" FontSize="12" Foreground="{ThemeResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Border Width="{StaticResource AskAvatarSize}" Height="{StaticResource AskAvatarSize}" CornerRadius="{StaticResource CornerRadiusAskAvatar}" Background="{ThemeResource SurfaceSecondaryBrush}" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE710;" FontSize="{StaticResource FontSizeBody}" Foreground="{ThemeResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <TextBox
                             x:Name="AiInput"
                             Grid.Column="1"
                             FontFamily="{StaticResource FontFamilyUi}"
                             FontSize="{StaticResource FontSizeCommand}"
-                            MinHeight="28"
+                            MinHeight="{StaticResource FileTabHeight}"
                             BorderThickness="0"
                             CornerRadius="0"
                             Background="Transparent"
-                            Padding="4,4,4,4"
+                            Padding="{StaticResource PaddingSm}"
                             VerticalAlignment="Center"
                             PlaceholderText="Ask about the drawing…"
                             AutomationProperties.Name="AI prompt">
@@ -202,31 +202,31 @@
                             </TextBox.Resources>
                         </TextBox>
                         <StackPanel x:Name="AssistantButtons" Grid.Column="2" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" VerticalAlignment="Center" Visibility="Collapsed">
-                            <Button Content="Allow" MinHeight="{StaticResource ControlHeight}" MinWidth="64" Click="OnAssistantAllow" AutomationProperties.Name="Allow the assistant tool" />
-                            <Button Content="Decline" MinHeight="{StaticResource ControlHeight}" MinWidth="64" Click="OnAssistantDecline" AutomationProperties.Name="Decline the assistant tool" />
+                            <Button Content="Allow" MinHeight="{StaticResource ControlHeight}" MinWidth="{StaticResource TextControlThemeMinWidth}" Click="OnAssistantAllow" AutomationProperties.Name="Allow the assistant tool" />
+                            <Button Content="Decline" MinHeight="{StaticResource ControlHeight}" MinWidth="{StaticResource TextControlThemeMinWidth}" Click="OnAssistantDecline" AutomationProperties.Name="Decline the assistant tool" />
                         </StackPanel>
                         <Button
                             x:Name="AskSend"
                             Grid.Column="3"
-                            Width="32"
-                            Height="32"
-                            MinWidth="32"
-                            MinHeight="32"
+                            Width="{StaticResource AskSendButtonSize}"
+                            Height="{StaticResource AskSendButtonSize}"
+                            MinWidth="{StaticResource AskSendButtonSize}"
+                            MinHeight="{StaticResource AskSendButtonSize}"
                             Padding="0"
-                            CornerRadius="16"
+                            CornerRadius="{StaticResource CornerRadiusAskSend}"
                             Background="{ThemeResource TextPrimaryBrush}"
                             BorderThickness="0"
                             Click="OnAskSend"
                             VerticalAlignment="Center"
                             AutomationProperties.Name="Send ask"
                             ToolTipService.ToolTip="Send">
-                            <FontIcon Glyph="&#xE898;" FontSize="14" Foreground="{ThemeResource AppBackgroundBrush}" />
+                            <FontIcon Glyph="&#xE898;" FontSize="{StaticResource FontSizeIcon}" Foreground="{ThemeResource AppBackgroundBrush}" />
                         </Button>
                     </Grid>
                 </Border>
                 <ListView
                     x:Name="HistoryList"
-                    MaxHeight="200"
+                    MaxHeight="{StaticResource HistoryListMaxHeight}"
                     Visibility="Collapsed"
                     Background="{ThemeResource SurfaceElevatedBrush}"
                     BorderBrush="{ThemeResource BorderSubtleBrush}"
@@ -293,11 +293,11 @@
                         Content="Nameplate"
                         MinHeight="{StaticResource ControlHeight}"
                         FontSize="{StaticResource FontSizeCaption}"
-                        Padding="8,2"
+                        Padding="{StaticResource PaddingControl}"
                         Click="OnNameplateMenu"
                         AutomationProperties.Name="Nameplate designer"
                         ToolTipService.ToolTip="Design Nameplate L (landscape) or Nameplate P (portrait)" />
-                    <TextBlock x:Name="Coords" VerticalAlignment="Center" Margin="8,0,0,0" FontFamily="{StaticResource FontFamilyMono}" FontSize="{StaticResource FontSizeMono}" AutomationProperties.Name="Cursor coordinates" />
+                    <TextBlock x:Name="Coords" VerticalAlignment="Center" Margin="{StaticResource MarginGroupStart}" FontFamily="{StaticResource FontFamilyMono}" FontSize="{StaticResource FontSizeMono}" AutomationProperties.Name="Cursor coordinates" />
                 </StackPanel>
             </ScrollViewer>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
@@ -327,7 +327,7 @@
                 </ToggleButton>
                 <ComboBox
                     x:Name="UnitsBox"
-                    MinWidth="64"
+                    MinWidth="{StaticResource TextControlThemeMinWidth}"
                     MinHeight="{StaticResource ControlHeight}"
                     FontSize="{StaticResource FontSizeBody}"
                     PlaceholderText="units?"
@@ -336,7 +336,7 @@
                     ToolTipService.ToolTip="Drafting units. Geometry is stored in these units; scale at plot." />
                 <ComboBox
                     x:Name="PaperBox"
-                    MinWidth="72"
+                    MinWidth="{StaticResource DialogActionMinWidth}"
                     MinHeight="{StaticResource ControlHeight}"
                     FontSize="{StaticResource FontSizeBody}"
                     PlaceholderText="Paper"
@@ -345,7 +345,7 @@
                     ToolTipService.ToolTip="ISO page size (A0–A4) for the nameplate" />
                 <ComboBox
                     x:Name="OrientBox"
-                    MinWidth="96"
+                    MinWidth="{StaticResource OrientComboMinWidth}"
                     MinHeight="{StaticResource ControlHeight}"
                     FontSize="{StaticResource FontSizeBody}"
                     SelectionChanged="OnOrientPicked"

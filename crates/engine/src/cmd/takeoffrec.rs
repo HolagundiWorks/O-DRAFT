@@ -202,9 +202,8 @@ pub(crate) fn chunk_pdf(bytes: &[u8], slot: u32, pages: u32, generated: &str) ->
 }
 
 /// The header payload: the bridge file's `source`, `project`, `levels`, `beam_depths_mm` and `opening_schedule`, the
-/// state, the AORMS project the drawing belongs to, optional `takeoff_tables` (MEASURE table snapshots for
-/// `takeoff.restore`), and once stored, the annotated PDF.
-pub(crate) fn header(root: &Map<String, Value>, project_office_id: Option<&str>, complete: bool, pdf: Option<&Value>) -> Value {
+/// state, optional `takeoff_tables` (MEASURE table snapshots for `takeoff.restore`), and once stored, the annotated PDF.
+pub(crate) fn header(root: &Map<String, Value>, complete: bool, pdf: Option<&Value>) -> Value {
     let mut source = Map::new();
     source.insert("app".into(), json!("O-Draft"));
     if let Some(src) = root.get("source") {
@@ -216,9 +215,6 @@ pub(crate) fn header(root: &Map<String, Value>, project_office_id: Option<&str>,
         if let Some(sha) = src.get("revision").and_then(|r| r.get("sha256")) {
             source.insert("revision_sha256".into(), sha.clone());
         }
-    }
-    if let Some(id) = project_office_id.filter(|s| !s.is_empty()) {
-        source.insert("project_office_id".into(), json!(id));
     }
     let mut h = Map::new();
     h.insert("format".into(), json!(FORMAT));
@@ -427,7 +423,6 @@ fn write_slot(
     sink: &mut dyn Sink,
     c: &Collected,
     built: &Built,
-    office_id: Option<&str>,
     kept: Option<u32>,
     pdf: Option<(&[u8], u32, String)>,
     compare: bool,
@@ -438,7 +433,7 @@ fn write_slot(
     let mut claims = 0;
     loop {
         let rec = |slot: u32| -> Result<Rec> {
-            let payload = serde_json::to_vec(&header(root, office_id, false, None)).map_err(|e| bad("takeoff.record", e.to_string()))?;
+            let payload = serde_json::to_vec(&header(root, false, None)).map_err(|e| bad("takeoff.record", e.to_string()))?;
             Ok(Rec { id: header_id(slot), bbox: [0.0; 4], payload })
         };
         sink.put(&[rec(slot)?])?;
@@ -494,7 +489,7 @@ fn write_slot(
         sink.put(&p.chunks)?;
         meta = Some(p.meta);
     }
-    let done = serde_json::to_vec(&header(root, office_id, true, meta.as_ref())).map_err(|e| bad("takeoff.record", e.to_string()))?;
+    let done = serde_json::to_vec(&header(root, true, meta.as_ref())).map_err(|e| bad("takeoff.record", e.to_string()))?;
     sink.put(&[Rec { id: header_id(slot), bbox: [0.0; 4], payload: done }])?;
     sink.save()?;
     Ok(Outcome { slot, added, changed: compare.then_some(changed), unchanged: compare.then_some(unchanged), deleted, written: rows.len() + 1 })
@@ -627,8 +622,6 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
             let ours = v.get("drawingId").and_then(Value::as_str) == Some(c.drawing_id.as_str());
             if ours { v.get("slot").and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()) } else { None }
         };
-        let office_id = project::get(s.doc()?, "aorms").get("projectOfficeId").and_then(Value::as_str).map(str::to_string);
-
         // The annotated drawing, when asked for and when this build can plot.
         let want_pdf = p.get("annotate").and_then(Value::as_bool).unwrap_or(true);
         let pdf = if want_pdf {
@@ -673,7 +666,7 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
         };
         let probe_slot = find_slot(sink.as_mut(), &c.drawing_id, kept)?;
         let built = build(&c, probe_slot)?;
-        let out = write_slot(sink.as_mut(), &c, &built, office_id.as_deref(), Some(probe_slot), pdf_ref, file_path.is_some())?;
+        let out = write_slot(sink.as_mut(), &c, &built, Some(probe_slot), pdf_ref, file_path.is_some())?;
         project::set(s.doc_mut()?, SLOT_KEY, &json!({ "drawingId": c.drawing_id, "slot": out.slot }));
 
         let mut result = target;
@@ -842,12 +835,12 @@ mod tests {
         let built = build(&c, slot).unwrap();
         // The claim, the rows and the final header are three writes; fail the last.
         let mut db = FailAt { inner: Mem::default(), puts_left: 2 };
-        assert!(write_slot(&mut db, &c, &built, None, None, None, false).is_err());
+        assert!(write_slot(&mut db, &c, &built, None, None, false).is_err());
         assert_eq!(state_of(&db.inner, slot), "recording", "a reader must refuse this drawing");
         assert_eq!(db.inner.0.keys().filter(|id| kind_of(**id) == KIND_WALL).count(), 2, "the rows are there but the header does not vouch for them");
         // Recording again, with the server back, completes the same slot.
         db.puts_left = usize::MAX;
-        let done = write_slot(&mut db, &c, &built, None, Some(slot), None, false).unwrap();
+        let done = write_slot(&mut db, &c, &built, Some(slot), None, false).unwrap();
         assert_eq!(done.slot, slot);
         assert_eq!(state_of(&db.inner, slot), "complete");
     }
