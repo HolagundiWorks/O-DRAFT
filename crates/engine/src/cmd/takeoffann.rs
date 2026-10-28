@@ -11,9 +11,7 @@ use aad_doc::{Common, Drawing, EntityKind, HAlign, Handle, Lineweight, Space, Te
 use aad_geom::Vec3;
 use serde_json::{Value, json};
 
-use super::bridge::{
-    Collected, Item, KIND_COLUMN, KIND_ELEC_BOARD, KIND_ELEC_CIRCUIT, KIND_LINTEL, KIND_OPENING, KIND_ROOM, KIND_SLAB, KIND_WALL,
-};
+use super::bridge::{Collected, Item, KIND_COLUMN, KIND_ELEC_BOARD, KIND_ELEC_CIRCUIT, KIND_LINTEL, KIND_OPENING, KIND_ROOM, KIND_SLAB, KIND_WALL};
 use super::*;
 use crate::{Result, Session};
 

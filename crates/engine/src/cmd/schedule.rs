@@ -400,9 +400,9 @@ fn run_deduct(s: &mut Session, _p: &Value) -> Result<Value> {
         if has {
             continue;
         }
-        let scheduled = sched["openings"].as_array().is_some_and(|a| {
-            a.iter().any(|o| o["block"].as_str().unwrap_or("").split(';').any(|b| b.trim().eq_ignore_ascii_case(&name)))
-        });
+        let scheduled = sched["openings"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|o| o["block"].as_str().unwrap_or("").split(';').any(|b| b.trim().eq_ignore_ascii_case(&name))));
         let openingish = name.to_ascii_uppercase().starts_with("AADOPEN")
             || src.entities.iter().any(|e| {
                 let l = e.common.layer.to_ascii_uppercase();

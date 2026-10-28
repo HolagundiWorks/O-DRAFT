@@ -148,23 +148,14 @@ fn connect_persists_the_switchboard_wire_table_for_takeoff_record() {
     assert_eq!(lp["connected_fixture"], json!(1));
     let sw = circuits.iter().find(|c| c["kind"] == "SW1").expect("SW1 circuit");
     assert_eq!(sw["connected_fixture"], json!(0), "a switch is not a connected fixture");
-    let elec: serde_json::Value = s
-        .doc()
-        .unwrap()
-        .project
-        .get("electrical")
-        .map(|t| serde_json::from_str(t).unwrap())
-        .unwrap_or_else(|| json!({}));
+    let elec: serde_json::Value = s.doc().unwrap().project.get("electrical").map(|t| serde_json::from_str(t).unwrap()).unwrap_or_else(|| json!({}));
     assert_eq!(elec["wires"].as_array().unwrap().len(), 2);
     assert_eq!(elec["circuits"].as_array().unwrap().len(), circuits.len());
 
     let path = std::env::temp_dir().join(format!("aad-elec-takeoff-{}.vdb", std::process::id()));
     let rec = s.execute("takeoff.record", &json!({"path": path.to_string_lossy(), "annotate": false})).unwrap();
     assert_eq!(rec["counts"]["electrical"], 2, "{rec}");
-    assert!(
-        rec["counts"]["electrical_circuits"].as_u64().is_some_and(|n| n >= 2),
-        "{rec}"
-    );
+    assert!(rec["counts"]["electrical_circuits"].as_u64().is_some_and(|n| n >= 2), "{rec}");
     let store = aad_vdb::load_path(&path).unwrap();
     let kinds: Vec<u64> = store.records().iter().map(|r| r.id >> 56).collect();
     assert!(kinds.contains(&10), "kind 10 board missing: {kinds:?}");

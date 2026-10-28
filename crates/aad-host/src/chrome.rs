@@ -7,8 +7,7 @@ use aad_engine::{Session, command_specs};
 use serde::Serialize;
 
 /// Top-level menus, in the same order as the egui shell.
-const MENUS: &[&str] =
-    &["File", "Edit", "View", "Insert", "Format", "Tools", "Draw", "Dimension", "Modify", "Architecture", "Window", "Help"];
+const MENUS: &[&str] = &["File", "Edit", "View", "Insert", "Format", "Tools", "Draw", "Dimension", "Modify", "Architecture", "Window", "Help"];
 
 const MAX_DEPTH: usize = 8;
 

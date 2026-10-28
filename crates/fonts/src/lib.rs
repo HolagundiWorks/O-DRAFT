@@ -144,13 +144,7 @@ pub fn shape_stroke(s: &str, height: f64, width_factor: f64, oblique: f64) -> Sh
                             glyph_id: g.glyph_id,
                             band: i32::MIN,
                         }));
-                        out.glyph_places.push(Some(GlyphPlace {
-                            x,
-                            height: h,
-                            width_factor: wf,
-                            shear,
-                            cap: g.cap,
-                        }));
+                        out.glyph_places.push(Some(GlyphPlace { x, height: h, width_factor: wf, shear, cap: g.cap }));
                     }
                     adv = g.advance * h / g.cap * wf;
                 }
@@ -271,14 +265,7 @@ pub struct Shaped {
 
 impl Default for Shaped {
     fn default() -> Self {
-        Self {
-            strokes: Vec::new(),
-            glyphs: Vec::new(),
-            glyph_keys: Vec::new(),
-            glyph_places: Vec::new(),
-            post_xf: Mat3::IDENTITY,
-            width: 0.0,
-        }
+        Self { strokes: Vec::new(), glyphs: Vec::new(), glyph_keys: Vec::new(), glyph_places: Vec::new(), post_xf: Mat3::IDENTITY, width: 0.0 }
     }
 }
 
@@ -504,10 +491,7 @@ pub fn place(font: &TextFont, s: &str, p: &TextParams) -> (Shaped, Bounds2) {
     let local = Vec2::new(dx, dy);
     let (mx, my) = (if p.backwards { -1.0 } else { 1.0 }, if p.upside_down { -1.0 } else { 1.0 });
     // translate(local) → scale(mx,my) → rotate(rot) → translate(origin)
-    let xf = Mat3::translate(origin)
-        .then_before(Mat3::rotate(rot))
-        .then_before(Mat3::scale(mx, my))
-        .then_before(Mat3::translate(local));
+    let xf = Mat3::translate(origin).then_before(Mat3::rotate(rot)).then_before(Mat3::scale(mx, my)).then_before(Mat3::translate(local));
     sh.transform(xf);
     let bb = Bounds2::from_points(
         [Vec2::new(0.0, -height / 3.0), Vec2::new(width, -height / 3.0), Vec2::new(width, height), Vec2::new(0.0, height)].map(|q| xf.apply(q)),

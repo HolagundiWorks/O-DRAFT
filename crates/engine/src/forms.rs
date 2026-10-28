@@ -131,9 +131,8 @@ const TAKEOFF_PAINT: &[Field] = &[
     field("table", "Draw the table", Kind::Bool).def("true"),
     field("label", "Label the objects", Kind::Bool).def("true"),
 ];
-const TAKEOFF_KINDS: &[&str] = &[
-    "extWall", "intWall", "beam", "lintel", "linear", "floorArea", "ceilingArea", "area", "column", "count", "deduct", "slab", "slabDeduct",
-];
+const TAKEOFF_KINDS: &[&str] =
+    &["extWall", "intWall", "beam", "lintel", "linear", "floorArea", "ceilingArea", "area", "column", "count", "deduct", "slab", "slabDeduct"];
 const TAKEOFF_COLUMNS: &[Field] = &[
     field("layer", "Layer of the column outlines", Kind::Text).def("MEASURE-COLUMN"),
     field("units", "Units (blank: the drawing's)", Kind::Choice(UNITS)),

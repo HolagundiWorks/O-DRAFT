@@ -128,10 +128,7 @@ fn wall_paint_uses_the_floor_ceiling_height_and_imperial_drawings_use_feet() {
     on(&mut s, "MEASURE-DEDUCT");
     s.execute("line", &json!({"points": [[1000, 0], [2000, 0]]})).unwrap();
     let r = s.execute("takeoff.paint", &json!({"table": false})).unwrap();
-    assert_eq!(
-        r["totals"],
-        json!({"wallArea": 62.7, "openings": 5.7, "externalPaint": 28.5, "internalPaint": 28.5, "net": 57.0, "height": 2.85})
-    );
+    assert_eq!(r["totals"], json!({"wallArea": 62.7, "openings": 5.7, "externalPaint": 28.5, "internalPaint": 28.5, "net": 57.0, "height": 2.85}));
     s.execute("floors", &json!({"floors": [{"name": "Ground", "floorToFloor": 3.2, "ceiling": 3.0, "lintel": 2.1}]})).unwrap();
     assert_eq!(s.execute("takeoff.paint", &json!({"table": false})).unwrap()["totals"]["height"], 3.0);
     assert!(s.execute("takeoff.paint", &json!({"floor": "Roof"})).is_err());

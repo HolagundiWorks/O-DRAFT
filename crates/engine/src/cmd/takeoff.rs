@@ -104,13 +104,10 @@ pub fn specs() -> Vec<CommandSpec> {
                  path?: .vdb from takeoff.record, server?: \"host:port\", file?: true for <drawing>.takeoff.vdb} \
                  → {restored: [name], tables, source: drawing|shilpidb}",
             ),
-        CommandSpec::new("takeoff.draw", "Draw Take-off", run_draw)
-            .menu(&["Architecture", "Take-off", "Draw"])
-            .alias(&["mdraw"])
-            .params(
-                "{kind: extWall|intWall|beam|lintel|linear|floorArea|ceilingArea|area|column|count|deduct|slab|slabDeduct, \
+        CommandSpec::new("takeoff.draw", "Draw Take-off", run_draw).menu(&["Architecture", "Take-off", "Draw"]).alias(&["mdraw"]).params(
+            "{kind: extWall|intWall|beam|lintel|linear|floorArea|ceilingArea|area|column|count|deduct|slab|slabDeduct, \
                  thicknessMm?, points: [[x,y],...], closed?: bool} → {handles}. Stamps take-off metadata; the MEASURE-* layer is display only.",
-            ),
+        ),
         CommandSpec::new("takeoff.tag", "Tag Take-off", run_tag)
             .menu(&["Architecture", "Take-off", "Tag Selection"])
             .alias(&["mtag"])

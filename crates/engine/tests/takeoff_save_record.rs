@@ -6,11 +6,7 @@ use aad_engine::cmd::file::{IoHooks, set_io};
 use serde_json::json;
 
 fn install_write() {
-    set_io(IoHooks {
-        read: |_, _| Err("no reader in this test".into()),
-        write: |_, _| Ok(b"0\nEOF\n".to_vec()),
-        plot: None,
-    });
+    set_io(IoHooks { read: |_, _| Err("no reader in this test".into()), write: |_, _| Ok(b"0\nEOF\n".to_vec()), plot: None });
 }
 
 fn measured_session() -> Session {
