@@ -45,7 +45,9 @@ the naming rules only for when DWG writing exists.
   exist, so generation can refuse to overwrite them silently.
 - **Company profiles** (`projectplan::company`): typed profile, validation, `companies/<id>/company.json`
   with atomic writes, listing, load by id (never by name), managed logo asset (PNG, JPEG or SVG up
-  to 5 MB), and `nameplate_lines` that leaves empty fields out.
+  to 5 MB), and `nameplate_lines` that leaves empty fields out. Offline / unlinked only: `save` and
+  `set_logo` are refused when `OSAS_COMPANY` is set (suite-linked Draft must refresh firm identity
+  from Studio via `companyfile`, not write a parallel local profile).
 - **Generator** (`projectplan/generate.rs`, command `project.generate`): creates the folders, one
   drawing per planned drawing through the engine's own commands (units, project details, floors and
   an `aadDrawing` record holding the drawing id, number, title, set, floor and elevation), then

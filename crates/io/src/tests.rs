@@ -1242,7 +1242,7 @@ fn extension_sample_roundtrips_and_can_be_exported() {
 
 /// DXF → DWG (acadrust) → DXF keeps what the DWG bridge supports: dimension styles with
 /// arrow blocks, override and associativity xdata, tables and text
-/// style flags. (TABLESTYLE objects do not survive the bridge.)
+/// style flags. (TABLESTYLE objects and ACAD_TABLE cell merges do not survive the bridge.)
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn dwg_roundtrip_keeps_extension_data() {
@@ -1258,7 +1258,15 @@ fn dwg_roundtrip_keeps_extension_data() {
         let st = DimStyle::default();
         assert_eq!(st.with_overrides(&x.overrides), st.with_overrides(&y.overrides));
     }
-    assert_eq!(first(&back, |k| if let EntityKind::Table(x) = k { Some(x.clone()) } else { None }), table_sample());
+    // Cell merges are written in DXF but dropped by the DWG bridge (acadrust); content still roundtrips.
+    let mut expect = table_sample();
+    for row in &mut expect.cells {
+        for cell in row {
+            cell.merged = None;
+        }
+    }
+    let got = first(&back, |k| if let EntityKind::Table(x) = k { Some(x.clone()) } else { None });
+    assert_eq!(got, expect);
     let r = back.text_style("Romans").unwrap();
     assert!(r.backwards && r.annotative);
 }

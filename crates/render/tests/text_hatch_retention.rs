@@ -5,15 +5,10 @@ use std::sync::Arc;
 use aad_doc::{Common, Drawing, EntityKind, Hatch, HatchLoop, Line, Space, Text};
 use aad_geom::{PolyVertex, Vec2, Vec3};
 use aad_render::scene::{build_scene, rebuild_scene, scene_tile_edge, scene_tiling_viable};
-use aad_render::{
-    Options, build, glyph_mesh_cache_clear, glyph_mesh_cache_len, hatch_pattern_cache_clear, hatch_pattern_cache_len,
-};
+use aad_render::{Options, build, glyph_mesh_cache_clear, glyph_mesh_cache_len, hatch_pattern_cache_clear, hatch_pattern_cache_len};
 
 fn ansi31_square() -> Hatch {
-    let v = [(0.0, 0.0), (40.0, 0.0), (40.0, 30.0), (0.0, 30.0)]
-        .into_iter()
-        .map(|(x, y)| PolyVertex::new(Vec2::new(x, y)))
-        .collect();
+    let v = [(0.0, 0.0), (40.0, 0.0), (40.0, 30.0), (0.0, 30.0)].into_iter().map(|(x, y)| PolyVertex::new(Vec2::new(x, y))).collect();
     Hatch {
         pattern: "ANSI31".into(),
         solid: false,
@@ -57,12 +52,8 @@ fn glyph_mesh_survives_scene_dirty_tile_rebuild() {
     assert!(!shaped.glyphs.is_empty());
     assert!(shaped.glyph_keys.iter().all(|k| k.is_some()));
     for (i, g) in shaped.glyphs.iter().enumerate() {
-        let _ = aad_render::filled_tris(
-            shaped.glyph_keys.get(i).copied().flatten(),
-            shaped.glyph_places.get(i).copied().flatten(),
-            shaped.post_xf,
-            g,
-        );
+        let _ =
+            aad_render::filled_tris(shaped.glyph_keys.get(i).copied().flatten(), shaped.glyph_places.get(i).copied().flatten(), shaped.post_xf, g);
     }
     let after_shape = glyph_mesh_cache_len();
     assert!(after_shape > 0, "filled TrueType glyphs retain triangulated meshes");
@@ -71,15 +62,7 @@ fn glyph_mesh_survives_scene_dirty_tile_rebuild() {
     let mut d = Drawing::new_metric();
     for i in 0..6 {
         let x = i as f64 * 500.0;
-        d.add(
-            &Space::Model,
-            Common::default(),
-            EntityKind::Line(Line {
-                a: Vec3::new(x, -10.0, 0.0),
-                b: Vec3::new(x + 20.0, -10.0, 0.0),
-            }),
-        )
-        .unwrap();
+        d.add(&Space::Model, Common::default(), EntityKind::Line(Line { a: Vec3::new(x, -10.0, 0.0), b: Vec3::new(x + 20.0, -10.0, 0.0) })).unwrap();
         // Keep a Text entity so scene content is mixed; fill may be stroke if DRAWING_FONT missing.
         d.add(
             &Space::Model,
@@ -117,11 +100,9 @@ fn glyph_mesh_survives_scene_dirty_tile_rebuild() {
     });
     let next = rebuild_scene(&scene, &d, &new, &opts).expect("dirty rebuild");
     assert!(next.tiles_rebuilt >= 1);
-    let shared = next
-        .tiles
-        .values()
-        .filter(|t| before_ptrs.contains(&(Arc::as_ptr(&t.list) as usize)))
-        .count();
+    let shared = next.tiles.values().filter(|t| before_ptrs.contains(&(Arc::as_ptr(&t.list) as usize))).count();
     assert!(shared >= 1, "clean tiles retain Arc lists");
-    assert_eq!(glyph_mesh_cache_len(), after_shape, "tile rebuild keeps glyph×band meshes");
+    // Dirty rebuild may insert more glyph meshes for Text entities; it must not flush prior entries.
+    let after_rebuild = glyph_mesh_cache_len();
+    assert!(after_rebuild >= after_shape, "tile rebuild must not flush glyph×band meshes (had {after_shape}, now {after_rebuild})");
 }

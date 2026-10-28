@@ -111,6 +111,44 @@ internal static class FormDialog
         {
             stack.Children.Add(Density.Secondary("Points are picked on the drawing after OK.", TextWrapping.Wrap));
         }
+        // Suite-linked company identity: Project Settings fields from Studio are refresh-only.
+        if (id == "project" && Native.Execute(host, "project", "{}") == 0)
+        {
+            try
+            {
+                using var suiteDoc = JsonDocument.Parse(Native.ReadResult(host));
+                if (suiteDoc.RootElement.TryGetProperty("suite", out var suite)
+                    && suite.ValueKind == JsonValueKind.Object
+                    && suite.TryGetProperty("locked_details", out var locked)
+                    && locked.ValueKind == JsonValueKind.Array)
+                {
+                    var names = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var item in locked.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } name)
+                        {
+                            names.Add(name);
+                        }
+                    }
+                    foreach (var (key, box) in scalars)
+                    {
+                        if (names.Contains(key))
+                        {
+                            box.IsReadOnly = true;
+                        }
+                    }
+                    if (names.Count > 0)
+                    {
+                        stack.Children.Add(Density.Secondary(
+                            "Some fields come from Studio (company file) and cannot be edited here. Change them in Studio and refresh with Company File Details.",
+                            TextWrapping.Wrap));
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
         var error = Ui.Status("Form error");
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Assertive);
         var ok = Ui.Action("OK", ActionKind.Primary);
