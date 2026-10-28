@@ -1,13 +1,14 @@
 # Suite integration: what O-Draft has, what the contracts need
 
-This page maps O-Draft onto a four-application suite (O-Draft drawing, AOS office management, AQC
-quantities and costing, ShilpiDB drawing database) with one shared AI runtime and shared project
-identity. It describes O-Draft's side only. The AOS, AQC and ShilpiDB repositories have not been audited
-for this page: where it names their behaviour, the source is an O-Draft document or O-Draft code, and each
-such statement is marked.
+This page maps O-Draft onto the OSAS suite (O-Draft drawing, O-Studio office
+management, O-CoreOp quantities and costing, ShilpiDB drawing database) with one
+shared project identity in the **company file**. It describes O-Draft's side
+only. Where it names O-Studio / O-CoreOp / ShilpiDB behaviour beyond what
+O-Draft code proves, the statement is marked.
 
-Nothing here is a claim that a cross-application workflow exists. Section 5 lists what is built, what
-is missing and what the first milestone needs.
+Nothing here is a claim that a full cross-application click-through has been
+proven on a clean Windows machine. Section 5 lists what is built, what is
+missing and what the first milestone needs.
 
 ## 1. Ownership
 
@@ -16,12 +17,14 @@ is missing and what the first milestone needs.
 | Drawing geometry, layers, blocks, layouts, undo, DXF/DWG | O-Draft (`aad-doc`, `aad-engine`) | Owns it. Other applications read it through commands, never through the document model |
 | Company details (name, address, registrations) | OSAS company file | Reads them (`companyfile`), prints them in the title block; never writes |
 | Project name, site, client | O-Studio, in the company file | Reads them (`companyfile`); never writes |
-| Quantities and costs | AQC (not audited) | Produces measured quantities (`takeoff.*`) and a hand-off file (`bridge.export`); does not price |
-| Reusable details and spatial records | ShilpiDB | Exports a drawing's entities to `.vdb`, queries it, imports it, and can push to or pull from a running `shilpid` (`vdb.*`) |
+| Quantities and costs | O-CoreOp | Produces measured quantities (`takeoff.*`) and a hand-off file (`bridge.export`); does not price |
+| Reusable details and spatial records | ShilpiDB | Exports a drawing's entities to `.vdb`, queries it, imports it, and can push to or pull from a running `shilpid` (`vdb.*`); `takeoff.record` writes take-off rows |
 | AI conversation, tool permissions, audit | Shared AI runtime (not built) | O-Draft has its own tool registry and audit log (`aad-agent`) for its own tools |
 
 Rules O-Draft already follows and the suite should keep: a hand-off file never changes the drawing it
 came from; imported text and tool results are data, not instructions ([ai-agent.md](../ai-agent.md)).
+
+OSS suite apps do **not** ship an AORMS / portal connector. Company file is SoR.
 
 ## 2. What exists in O-Draft
 
@@ -31,10 +34,11 @@ came from; imported text and tool results are data, not instructions ([ai-agent.
 | Control channel (loopback JSON lines) | `aad-host`, [control-protocol.md](../control-protocol.md) | Implemented: `engine.execute`, `cmdline.*`, `drawing.inspect`, `app.open`, `app.save` |
 | MCP server over the same commands | `crates/mcp`, [mcp.md](../mcp.md) | Implemented |
 | Typed agent tools with schema validation, risk classes, confirmation and an audit log | `crates/agent` | Implemented for O-Draft's own tools. Quantity take-off tools are reserved but not registered (`agent::PLANNED`) |
-| Company / project details from the OSAS company file | `crates/office`, `companyfile` | Implemented (read-only; needs `OSAS_COMPANY` / `OSAS_TICKET` or a direct `context`) |
+| Company / project details from the OSAS company file | `crates/office`, `companyfile` | Implemented (read-only; needs `OSAS_COMPANY` / `OSAS_TICKET` or a direct `context`). Interactive project-picker UI still open |
 | Quantity take-off from drawn geometry, rates, bill, opening schedule | `takeoff.*`, `schedule`, `openings.*` ([hcw-kit-port.md](../hcw-kit-port.md)) | Implemented; reads `MEASURE-*` layers |
 | Parametric wall graph → measured facts | `aad-param`, `param.*` ([parametric.md](../parametric.md)) | Implemented (Rust evaluate/commit/undo; no node editor UI). Committed walls feed `bridge.export` / `takeoff.record` |
-| Hand-off to and from AQC | `bridge.export`, `bridge.import`; file `hcw-aqc-bridge` version 1, millimetres, beside the drawing as `name.aqc.json` | Implemented. Import previews first and never changes geometry. Rooms are not exported. Wall rows may come from brick take-off and/or parametric commit |
+| Hand-off to and from O-CoreOp | `bridge.export`, `bridge.import`; file `hcw-aqc-bridge` version 1, millimetres, beside the drawing as `name.aqc.json` | Implemented. Import previews first and never changes geometry. Wall rows may come from brick take-off and/or parametric commit. CoreOp parses `source.project_ref` when present |
+| Take-off in ShilpiDB | `takeoff.record` / `takeoff.annotate` | Implemented; header carries company-file `project_ref` when linked ([takeoff-shilpidb.md](../takeoff-shilpidb.md)) |
 | Spatial index and ShilpiDB exchange | `aad-vdb`, `vdb.*` | Implemented; see [aadt-shilpidb-architecture.md](aadt-shilpidb-architecture.md) |
 | Spatial AI tools (overview, window, nearest, describe) | `crates/agent` | Implemented |
 | Drawing-level change record (revision, checksum) | `revision.rs`, `drawing.revision`, `<file>.aadrev.json` | Implemented |
@@ -49,12 +53,12 @@ runtime to touch the document model.
 |---|---|---|
 | `DrawingRef` | project id, drawing id, path, DXF/DWG format, byte size | `Session` document state, `companyfile` / project details |
 | `DrawingRevision` | `DrawingRef` + SHA-256 of the saved bytes + saved time + entity count | **new**: computed at save in `file.rs` (`commit_save`) and stored beside the file, not in the DXF |
-| `QuantityTakeoff` | the saved `takeoff.*` results: item, group, length or area or count, unit, source layer, handles, rounding rule | `takeoff.list`, `bridge.export` |
+| `QuantityTakeoff` | the saved `takeoff.*` results: item, group, length or area or count, unit, source layer, handles, rounding rule | `takeoff.list`, `bridge.export`, `takeoff.record` |
 | `AuditEvent` | request number, tool, arguments, outcome, drawing revision before and after | `agent::AuditEntry`, extended with the revision |
 
 An estimate built from a take-off must record the `DrawingRevision` it used, the measurement rules
 (metric rounding to 1 cm, imperial to 1/8 in, deduction layers) and the rate schedule. O-Draft can
-supply the first two; the third belongs to AQC.
+supply the first two; the third belongs to O-CoreOp.
 
 ## 4. The AI boundary
 
@@ -78,25 +82,25 @@ Milestone 1 is "drawing to draft estimate". O-Draft's side, step by step:
 | Step | O-Draft today | Gap |
 |---|---|---|
 | Open the project's linked drawing | `app.open` with paths from the launcher | The launcher supplies the paths; O-Draft does not look up drawing files by project id |
-| Resolve the same project in AQC | OSAS `project_ref` when the drawing is linked via `companyfile` | AQC side not audited |
+| Resolve the same project in O-CoreOp | OSAS `project_ref` when the drawing is linked via `companyfile` | CoreOp Import / Take-off consume the ref; Windows GUI E2E still open |
 | Extract measurements | `takeoff.start` and `takeoff.*` over `MEASURE-*` layers | Needs a stated list of supported geometry; unsupported objects must be reported, not skipped silently (today `takeoff` reads the measure layers only) |
-| Pass them on | `bridge.export` | Done: carries the drawing revision and rooms (AQC side not verified) |
-| Calculate quantities and cost | AQC (not audited) | Not O-Draft's part |
-| Draft in AOS | AOS (not audited) | Not O-Draft's part |
+| Pass them on | `bridge.export` / `takeoff.record` | Done on Draft side; CoreOp reader built; product E2E open |
+| Calculate quantities and cost | O-CoreOp | Not O-Draft's part (Studio surfaces estimate + RA totals on fee/invoice) |
+| Draft fee / invoice in O-Studio | O-Studio | Not O-Draft's part |
 | Reject unauthorised writes, keep an audit trail | agent confirmation policy and audit log | Done: the audit is persisted beside the drawing (section 6, step 4); sharing it across applications is not built |
 
 ## 6. Order of work in O-Draft
 
 1. `DrawingRevision` at save, written beside the file; checked by `drawing.revision`. **Done.**
-2. Rooms and the revision in `bridge.export`, as additive keys of format version 1. **Done.** Whether AQC accepts the extra keys is not verified.
+2. Rooms and the revision in `bridge.export`, as additive keys of format version 1. **Done.** CoreOp accepts extra keys / `project_ref` on import.
 3. Register the existing take-off, room and revision commands as agent tools (read-only
    ones first), with schemas, in the existing registry. **Done** for the read-only ones (`get_takeoff_result`, `get_room_log`, `get_room_area_total`, `get_drawing_revision`, `check_permit_layers`). Commands that draw into the drawing (`schedule`, running a take-off) stay planned.
 4. Persist the audit log next to the drawing revision it refers to. **Done**: `<drawing>.aadaudit.jsonl`, one line per proposed call.
-
-Each step lands with tests, and `docs/status.md` changes only when it exists.
+5. **Next:** interactive company-file project picker UI; product E2E with CoreOp/Studio; scanned-PDF underlay polish.
 
 ## 7. Not decided here
 
 The shared repository layout, the IPC protocol between applications, the shared identity and role
 model, the indexing service and the installer coordination belong to a specification that covers all
-four repositories. They need an audit of AOS, AQC and ShilpiDB first.
+suite repositories. Signing certs, ShilpiDB public release pin, and counsel review of dual licences
+on AGPL apps are suite ops — not O-Draft licence changes (O-Draft stays MIT OR Apache-2.0).
