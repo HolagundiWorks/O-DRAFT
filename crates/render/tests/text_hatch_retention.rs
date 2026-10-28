@@ -102,5 +102,10 @@ fn glyph_mesh_survives_scene_dirty_tile_rebuild() {
     assert!(next.tiles_rebuilt >= 1);
     let shared = next.tiles.values().filter(|t| before_ptrs.contains(&(Arc::as_ptr(&t.list) as usize))).count();
     assert!(shared >= 1, "clean tiles retain Arc lists");
-    assert_eq!(glyph_mesh_cache_len(), after_shape, "tile rebuild keeps glyph×band meshes");
+    // Dirty rebuild may insert more glyph meshes for Text entities; it must not flush prior entries.
+    let after_rebuild = glyph_mesh_cache_len();
+    assert!(
+        after_rebuild >= after_shape,
+        "tile rebuild must not flush glyph×band meshes (had {after_shape}, now {after_rebuild})"
+    );
 }
