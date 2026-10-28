@@ -17,4 +17,6 @@ type_complexity = "allow"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # MPL-2.0: used as an unmodified dependency only (see plan/adr/0001 and NOTICE).
-acadrust = "0.6.3"
+# Pinned: 0.6.8 loses merged table cells on a DWG round trip (aad-io dwg_roundtrip_keeps_extension_data) and reads the
+# alloc-bomb fixture as an empty drawing instead of refusing it (aad-cli dwg_isolation). Re-test before raising.
+acadrust = "=0.6.3"

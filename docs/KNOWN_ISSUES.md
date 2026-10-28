@@ -8,6 +8,7 @@ P2 significant, P3 minor, P4 cosmetic. Confirmed means reproduced; a hypothesis 
 
 | ID | Sev | Summary | Reproduce | Workaround |
 |---|---|---|---|---|
+| (dependency) | P3 | `acadrust` is pinned to 0.6.3 (`crates/dwg/Cargo.toml`): 0.6.8 loses merged table cells on a DWG round trip and reads the alloc-bomb fixture as an empty drawing instead of refusing it. A `Cargo.lock` refresh had moved it to 0.6.8 on 2026-10-28 and failed two tests | `cargo update -p acadrust` | Keep the pin; re-test both before raising it |
 | BUG-001 residual | P3 | In-process DWG reads (no `aad_dwg::isolated::enable()`) are still uncapped. The apps use the worker with a Windows Job Object memory cap (~2 GiB). Upstream `acadrust` AC18 unchecked allocs are not reported yet | Read the alloc-bomb fixture in-process | Use the apps / isolated worker |
 | UI-LINT debt | P3 | `GraphWindow` / `HistoryWindow` / `RevisionsWindow` / `WelcomeBusy` / `MainWindow.xaml` are at zero hard-coded dimensions (Density / Themes tokens). Remaining `LITERAL_BASELINE` entries are older manager/shell files plus `MainWindow.xaml.cs` (24) and `SmartBlockWindow.cs` (4); only lower a count when that file is cleaned ([UI_STANDARDS.md](UI_STANDARDS.md)) | `cargo xtask ui --counts` | Prefer tokens over new literals |
 | (limit) | P3 | Command-line `open`/`qsave`, batch plot and PDF preview still run their commit/plot work on the session thread. Menu/picker and control-channel `app.open`/`app.save` use workers (control replies are deferred across `pump`) | Batch plot a large set | Wait |

@@ -89,6 +89,9 @@ fn glyph_mesh_survives_scene_dirty_tile_rebuild() {
         return;
     }
     let scene = build_scene(&d, &opts);
+    // Building the scene meshes its own text for its zoom band; a rebuild must neither flush nor grow that.
+    let after_build = glyph_mesh_cache_len();
+    assert!(after_build >= after_shape, "the scene build does not flush the glyph meshes");
     let before_ptrs: Vec<_> = scene.tiles.values().map(|t| Arc::as_ptr(&t.list) as usize).collect();
     let handles: Vec<_> = d.model.iter().filter(|e| matches!(e.kind, EntityKind::Line(_))).map(|e| e.handle).collect();
     let edit = *handles.last().unwrap();
@@ -102,5 +105,5 @@ fn glyph_mesh_survives_scene_dirty_tile_rebuild() {
     assert!(next.tiles_rebuilt >= 1);
     let shared = next.tiles.values().filter(|t| before_ptrs.contains(&(Arc::as_ptr(&t.list) as usize))).count();
     assert!(shared >= 1, "clean tiles retain Arc lists");
-    assert_eq!(glyph_mesh_cache_len(), after_shape, "tile rebuild keeps glyph×band meshes");
+    assert_eq!(glyph_mesh_cache_len(), after_build, "tile rebuild keeps glyph×band meshes");
 }
