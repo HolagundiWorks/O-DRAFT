@@ -131,7 +131,7 @@ mod tests {
         assert!(sh.glyph_keys.first().is_some_and(|k| k.is_some()));
         let direct = fill::triangulate_outline(g);
         let cached = filled_tris(sh.glyph_keys.first().copied().flatten(), sh.glyph_places.first().copied().flatten(), sh.post_xf, g);
-        let area = |t: &[Vec2]| -> f64 { t.chunks_exact(3).map(|c| (c[1] - c[0]).cross(c[2] - c[0]).abs() * 0.5).sum() };
+        let area = |t: &[Vec2]| -> f64 { t.as_chunks::<3>().0.iter().map(|c| (c[1] - c[0]).cross(c[2] - c[0]).abs() * 0.5).sum() };
         let (ad, ac) = (area(&direct), area(&cached));
         assert!(ad > 0.0 && ac > 0.0);
         assert!((ad - ac).abs() <= 1e-4 * ad.max(ac), "cached {ac} vs direct {ad}");
