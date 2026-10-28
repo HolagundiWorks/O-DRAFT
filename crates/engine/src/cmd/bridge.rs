@@ -561,11 +561,11 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
         let mut unplaced = 0usize;
         let mut proximity = 0usize;
         for it in items.iter_mut().filter(|i| i.kind == KIND_OPENING) {
-            if let Some(wh) = by_deduct.get(&it.n) {
-                if let Some((r, _, _)) = wall_list.iter().find(|(_, h, _)| *h == *wh) {
-                    it.row["wall_ref"] = json!(r);
-                    continue;
-                }
+            if let Some(wh) = by_deduct.get(&it.n)
+                && let Some((r, _, _)) = wall_list.iter().find(|(_, h, _)| *h == *wh)
+            {
+                it.row["wall_ref"] = json!(r);
+                continue;
             }
             let Some(EntityKind::Insert(ins)) = d.entity(aad_doc::Handle(it.n)).map(|e| &e.kind) else { continue };
             let at = aad_geom::Vec2::new(ins.insert.x, ins.insert.y);
