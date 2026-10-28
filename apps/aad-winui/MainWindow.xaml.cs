@@ -197,11 +197,6 @@ public sealed partial class MainWindow : Window
             any = true;
             _docKey = "";
         }
-        if (_launch.Project is { } project && _launch.Files.Count > 0)
-        {
-            // Says on the command line when the drawing belongs to a different project (or none).
-            Native.Execute(_host, "aorms.expect", JsonSerializer.Serialize(new Dictionary<string, string> { ["projectOfficeId"] = project }));
-        }
         if (any)
         {
             HideWelcome();

@@ -19,7 +19,6 @@ shape (layering, never-crash, everything-is-a-command, clean-room) are in [CLAUD
 | L2 | `fonts` | Single-stroke drafting font, TrueType/OpenType outlines through `skrifa`, text and MTEXT layout, font fallback |
 | L2 | `render` | Display lists (linetypes, hatches, text, blocks, dimension geometry, paper-space clipping); layout viewport model-tessellation LRU; LOD flags and optional model frustum; CPU rasteriser for PNG, plot preview and tests ([PERFORMANCE.md](PERFORMANCE.md)) |
 | L3 | `io` | DXF to document mapping (`dxf_read.rs`, `dxf_write.rs`, O-Draft extension data in `dxf_ext.rs`), PDF plotting with the drawing layers as optional-content groups, SVG export with layer groups, PNG export including a layout at a chosen dpi, PDF page reading for `underlay.*` and `pdf.import` |
-| L3 | `aorms` | AORMS sign-in client and project calls (network; reached through engine `aorms.*` commands only) |
 | L3 | `office` | Loads the OSAS `office.dll` at run time (Windows) and reads the company file for the `companyfile` command |
 | L3 | `dwg` | DWG through a DXF bridge: the `acadrust` crate (MPL-2.0, unmodified) converts DWG and DXF bytes; native builds only. The apps run the conversion in a worker process (`isolated.rs`) so a damaged file cannot abort the program; on Windows the worker has a Job Object memory cap (`job_win.rs`) |
 | standalone | `llm` | Offline language-model runtime facade (Qwen3 prompt format, model file check). The llama.cpp backend is the off-by-default `llama` feature (`aad-host` / `aad` / `aad-cli` `--features assistant`) ([ai-agent.md](ai-agent.md)) |
@@ -30,7 +29,7 @@ shape (layering, never-crash, everything-is-a-command, clean-room) are in [CLAUD
 | L5 | `agent` | Tool layer for a local language model: registry, validation, confirmation, loop limits, audit log ([ai-agent.md](ai-agent.md)) |
 | L5 | `auditor` | Auditor v0 detect-only: drawing audit/validate wrappers, command/menu parity, WinUI token scan, combined JSON report ([ai-agent.md](ai-agent.md), [TESTING.md](TESTING.md)) |
 | app | `aad` | Desktop app. On Windows the default binary only launches `aad-winui` (no eframe). Optional `aad --features egui -- --egui` keeps the eframe window; macOS/Linux/BSD always link egui/eframe |
-| app | `aad-winui` | Unpackaged WinUI 3 shell over `aad-host`: registry menus, command line, dynamic input, grips, snaps, form dialogs, file pickers, plot preview (nameplate PDF), calculator, Pomodoro, panel pin and float, Project / Properties / Layer / Blocks side tabs, and resizable Classic/Pro panels around the child drawing window (`aorms.*` remains engine-only; no connect UI) |
+| app | `aad-winui` | Unpackaged WinUI 3 shell over `aad-host`: registry menus, command line, dynamic input, grips, snaps, form dialogs, file pickers, plot preview (nameplate PDF), calculator, Pomodoro, panel pin and float, Project / Properties / Layer / Blocks side tabs, and resizable Classic/Pro panels around the child drawing window |
 | app | `aad-cli` | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp`, `auditor` |
 | app | `aad-web` | WASM build of the same UI (no DWG) |
 | tool | `xtask` | `ci` (fmt, clippy, tests, assets, layers, licences, ui, wasm), `layers`, `assets`, `licenses`, `ui`, `wasm`, `parity`, `stats`, `logo`, `corpus` |

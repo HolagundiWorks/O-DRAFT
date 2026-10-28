@@ -50,7 +50,7 @@ Seen once during development; not reproduced and not in any test.
 ## Observations (design questions, not defects)
 
 - About 74 engine commands still lack both a menu entry and an alias (mostly internal helpers such
-  as `grip.*`, `properties.set`, style list/rename helpers, AORMS API, and status-bar sysvars).
+  as `grip.*`, `properties.set`, style list/rename helpers, and status-bar sysvars).
   High-value drafting and AEC commands gained menus or aliases in the UX audit follow-up; the rest
   stay command-line / MCP / agent reachable.
 - A click on empty canvas opens a selection window rather than deselecting; Escape deselects. It

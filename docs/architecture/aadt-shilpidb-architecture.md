@@ -94,4 +94,3 @@ on it. See [ARCHITECTURE.md](../ARCHITECTURE.md) and `cargo xtask layers`.
 ## Related
 
 - Layer naming for agents: [shilpidb-layers-and-agents.md](../standards/shilpidb-layers-and-agents.md)
-- ShilpiDB AORMS plan: upstream `docs/AORMS-INTEGRATION.md`

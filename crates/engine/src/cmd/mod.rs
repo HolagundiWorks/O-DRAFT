@@ -4,7 +4,6 @@
 mod aicards;
 mod annot;
 mod annotate;
-pub mod aorms;
 mod array;
 mod audit;
 pub(crate) mod bedit;
@@ -237,7 +236,6 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(project::specs());
         v.extend(companyfile::specs());
         v.extend(space::specs());
-        v.extend(aorms::specs());
         v.extend(takeoff::specs());
         v.extend(takeoffann::specs());
         v.extend(takeoffrec::specs());

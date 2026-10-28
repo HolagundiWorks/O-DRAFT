@@ -172,7 +172,7 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 
 ## Engine menu bar entries
 
-Populated at runtime from host menu JSON (`BuildMenus()`). Top-level order: File, Edit, View, Insert, Format, Tools, Draw, Dimension, Modify, Architecture, AORMS, Window, Help (`crates/aad-host/src/chrome.rs`).
+Populated at runtime from host menu JSON (`BuildMenus()`). Top-level order: File, Edit, View, Insert, Format, Tools, Draw, Dimension, Modify, Architecture, Window, Help (`crates/aad-host/src/chrome.rs`).
 
 | ID | Surface | Type | Source file | How opened | Testing status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -567,7 +567,6 @@ Windows default desktop build uses WinUI (`apps/aad-winui`). The optional egui s
 
 | ID | Surface | Type | Source file | How opened | Testing status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| egui.aorms | *(removed)* AORMS connection dialog | — | — | Stripped 2026-10-26; engine `aorms.*` remains for scripts/MCP | removed | — |
 | egui.mtext-editor | Text Editor (MText) | dialog | crates/ui-egui/src/dialogs.rs | MText edit flow in egui | not_tested | — |
 | egui.import-aqc | Import from AQC | dialog | crates/ui-egui/src/widgets.rs | egui widget window | not_tested | — |
 | egui.customize-topbar | Customize Top Bar | dialog | crates/ui-egui/src/topbar.rs | View menu in egui | not_tested | — |
