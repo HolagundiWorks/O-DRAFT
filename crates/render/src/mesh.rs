@@ -13,7 +13,7 @@ use std::hash::{Hash, Hasher};
 use aad_color::Rgb;
 use aad_geom::{Bounds2, Vec2};
 
-use crate::{DisplayList, DPrim, Kind};
+use crate::{DPrim, DisplayList, Kind};
 
 /// Line/triangle vertex: position (2 × f32, relative to the origin) + sRGB colour (4 × u8).
 pub const VERTEX_SIZE: usize = 12;
@@ -517,11 +517,7 @@ pub fn prim_bounds(list: &DisplayList, prim: &DPrim) -> Bounds2 {
 
 fn prim_centroid(list: &DisplayList, prim: &DPrim) -> Option<Vec2> {
     let b = prim_bounds(list, prim);
-    if b.is_empty() {
-        None
-    } else {
-        Some(b.center())
-    }
+    if b.is_empty() { None } else { Some(b.center()) }
 }
 
 /// True when a wipeout mask's bounds cover more than one mesh tile (draw order across tiles is unsafe).
@@ -626,13 +622,7 @@ pub fn tile_content_fingerprint(list: &DisplayList, prim_indices: &[usize]) -> u
 
 /// Build mesh data for a subset of primitives (tile fragment / list slice), preserving index order.
 pub fn build_mesh_prims(list: &DisplayList, prim_indices: &[usize], origin: Vec2, bg: Rgb, lw: Option<LineweightMode>) -> MeshData {
-    let mut m = MeshData {
-        lines: Vec::new(),
-        tris: Vec::new(),
-        quads: Vec::new(),
-        rings: Vec::new(),
-        breaks: Vec::new(),
-    };
+    let mut m = MeshData { lines: Vec::new(), tris: Vec::new(), quads: Vec::new(), rings: Vec::new(), breaks: Vec::new() };
     if prim_indices.len() > MAX_MESH_PRIMS || !origin.is_finite() {
         return m;
     }
@@ -1023,18 +1013,7 @@ mod tests {
     }
 
     fn line_prim(handle: u64, a: Vec2, b: Vec2) -> (crate::DPrim, [Vec2; 2]) {
-        (
-            crate::DPrim {
-                handle: aad_doc::Handle(handle),
-                color: Rgb(0, 0, 0),
-                aci7: false,
-                lw: 0.0,
-                kind: Kind::Polyline,
-                start: 0,
-                len: 2,
-            },
-            [a, b],
-        )
+        (crate::DPrim { handle: aad_doc::Handle(handle), color: Rgb(0, 0, 0), aci7: false, lw: 0.0, kind: Kind::Polyline, start: 0, len: 2 }, [a, b])
     }
 
     #[test]
@@ -1074,16 +1053,15 @@ mod tests {
 
         // A wipeout covering both tiles makes tiling unsafe.
         let mut wipe = list.clone();
-        wipe.tris.extend([Vec2::new(-1.0, -1.0), Vec2::new(1002.0, -1.0), Vec2::new(1002.0, 1.0), Vec2::new(-1.0, -1.0), Vec2::new(1002.0, 1.0), Vec2::new(-1.0, 1.0)]);
-        wipe.prims.push(crate::DPrim {
-            handle: aad_doc::Handle(9),
-            color: Rgb(0, 0, 0),
-            aci7: false,
-            lw: 0.0,
-            kind: Kind::Mask,
-            start: 0,
-            len: 6,
-        });
+        wipe.tris.extend([
+            Vec2::new(-1.0, -1.0),
+            Vec2::new(1002.0, -1.0),
+            Vec2::new(1002.0, 1.0),
+            Vec2::new(-1.0, -1.0),
+            Vec2::new(1002.0, 1.0),
+            Vec2::new(-1.0, 1.0),
+        ]);
+        wipe.prims.push(crate::DPrim { handle: aad_doc::Handle(9), color: Rgb(0, 0, 0), aci7: false, lw: 0.0, kind: Kind::Mask, start: 0, len: 6 });
         assert!(wipeout_spans_tiles(&wipe, edge));
         assert!(!mesh_tiling_viable(&wipe, edge));
     }

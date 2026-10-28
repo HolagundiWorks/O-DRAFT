@@ -24,12 +24,12 @@ mod surface;
 mod window;
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
-#[cfg(windows)]
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 #[cfg(windows)]
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+#[cfg(windows)]
+use std::sync::atomic::Ordering;
 
 use aad_color::Rgb;
 use aad_engine::Session;
@@ -2344,8 +2344,7 @@ impl Host {
         gpu.set_clear(paper);
         gpu.set_overlay(&overlay);
         if tiled {
-            let mut items: Vec<(u64, u64, &MeshData)> =
-                self.frame.tiles.iter().map(|(id, t)| (id.to_bits(), t.key, &t.mesh)).collect();
+            let mut items: Vec<(u64, u64, &MeshData)> = self.frame.tiles.iter().map(|(id, t)| (id.to_bits(), t.key, &t.mesh)).collect();
             items.sort_by_key(|(id, _, _)| *id);
             // Infinite lines are view-clipped and not stored in tiles; rebuild that small mesh each present.
             let mut extra = MeshData::default();
