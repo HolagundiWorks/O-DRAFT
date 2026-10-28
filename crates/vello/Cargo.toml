@@ -1,0 +1,20 @@
+[package]
+name = "aad-vello"
+description = "Optional Vello (vello_cpu) paper/plot PNG path behind AAD_CANVAS=vello — L5 quality spike only"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+aad-color = { workspace = true }
+aad-geom = { workspace = true }
+aad-render = { workspace = true }
+# Linebender Vello CPU (Apache-2.0 OR MIT). Not the interactive canvas; plot/paper PNG compare only.
+# Default features: std, png, text, u8_pipeline. Multithreading stays off (never-crash / wasm-friendly).
+vello_cpu = { version = "0.3", default-features = true }
+
+[dev-dependencies]
+aad-doc = { workspace = true }

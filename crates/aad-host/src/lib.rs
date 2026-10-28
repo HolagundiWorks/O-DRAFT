@@ -1432,7 +1432,9 @@ impl Host {
         } else {
             aad_render::raster::View { center: view.center, scale: f64::from(height) / view.height.max(1e-12), width, height }
         };
-        let Some(png) = aad_render::raster::render_png(&list, &raster, &aad_render::raster::RasterOptions::default()) else {
+        // Optional Phase E spike: AAD_CANVAS=vello uses vello_cpu for this PNG only.
+        // Interactive mesh/wgpu present is unchanged (aad-vello stays off the default path).
+        let Some(png) = aad_vello::preview_png(&list, &raster, &aad_render::raster::RasterOptions::default()) else {
             return json_err("render failed");
         };
         if let Some(path) = params.get("path").and_then(Value::as_str) {

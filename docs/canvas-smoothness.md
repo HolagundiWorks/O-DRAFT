@@ -36,7 +36,7 @@ Every frame goes through one shared path (WinUI host and optional egui shell). T
 | --- | --- |
 | Lineweight look | **Screen pixels** in model space (AutoCAD-style; not zoom-scaled). True paper scale is a Phase 2 layout mode. |
 | Vsync default | **On** (`AutoVsync`). Opt out with `AAD_VSYNC=0`. Smoothness wins over one frame of cursor lag. |
-| Vello | Prototype only after Phase 1–2, if custom shaders still fall short on sheets. |
+| Vello | Prototype only after Phase 1–2, if custom shaders still fall short on sheets. Env flag: `AAD_CANVAS=vello` (L5 `aad-vello` / `vello_cpu` PNG path for control `ui.render` only; interactive mesh unchanged). |
 
 ## Roadmap
 
@@ -65,7 +65,7 @@ Every frame goes through one shared path (WinUI host and optional egui shell). T
 | # | Change | Fixes | Effort | Status |
 | --- | --- | --- | --- | --- |
 | 11 | GPU arcs/circles/ellipses + Loop–Blinn-style glyph fills | sharp at every zoom | 3–4 w | **Partial** — circles/arcs as SDF rings (`Kind::Arc`); ellipses and non-uniform-scaled circles as conjugate-diameter rings (`Kind::Ellipse` → same `MeshData::rings` / `vs_ring`). Continuous linetype only; dashed styles and degenerate axes stay polylines. CPU raster / clip tessellate rings via `sweep_radians` (avoids `f32::TAU` collapsing a full circle). Phase D ships CPU glyph×band triangulated retention first; **still open:** GPU atlas / Loop–Blinn glyph fills |
-| 12 | Vello prototype for paper / plot preview behind a flag | quality compare | ~1 w | Planned (optional quality spike; not primary canvas) |
+| 12 | Vello prototype for paper / plot preview behind a flag | quality compare | ~1 w | **Prototype (unmeasured)** — `aad-vello` (L5) + `AAD_CANVAS=vello` selects `vello_cpu` for host/egui/MCP `ui.render` PNG only. Default unset → tiny-skia. Interactive mesh/wgpu untouched. Licence: Apache-2.0 OR MIT. **Not claimed:** sheet quality win vs custom path; GPU `vello` interactive paper; replacing Phase A–D |
 
 ### Phase 3 (#11 curves) test commands
 
@@ -74,6 +74,21 @@ cargo test -p aad-render --lib mesh::tests
 cargo test -p aad-render --test lod_and_frustum
 cargo test -p aad-ui-egui --lib gpu::tests
 ```
+
+### Phase 3 (#12 Vello spike) test commands
+
+```text
+cargo test -p aad-vello --lib
+cargo xtask layers
+cargo xtask licenses
+# Default path (flag off) still uses tiny-skia; wasm builds ui-egui without requiring AAD_CANVAS=vello:
+cargo xtask wasm
+```
+
+**How to evaluate quality (manual, not claimed here):** build a nameplate / layout sheet, export or
+`ui.render` PNG twice — once with `AAD_CANVAS` unset (custom tiny-skia) and once with
+`AAD_CANVAS=vello` — then compare AA on arcs, text, and dense hatches. Keep the interactive canvas
+on the custom mesh path either way.
 
 ## Performance (measure each change)
 
