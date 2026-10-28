@@ -32,9 +32,7 @@ use aad_geom::{Bounds2, Mat3, Polyline, TAU, Vec2};
 
 pub use dim::{ArrowGeom, Arrowhead, DimGeometry, DimText, LineRole, arrowhead, dimension_geometry, dimension_geometry_with, format_linear_value};
 pub use fill::{triangulate_evenodd, triangulate_outline};
-pub use glyph_mesh::{
-    GlyphFillKey, MAX_GLYPH_MESH_ENTRIES, filled_tris, glyph_mesh_cache_clear, glyph_mesh_cache_len,
-};
+pub use glyph_mesh::{GlyphFillKey, MAX_GLYPH_MESH_ENTRIES, filled_tris, glyph_mesh_cache_clear, glyph_mesh_cache_len};
 pub use hatch::{MAX_HATCH_PATTERN_ENTRIES, hatch_pattern_cache_clear, hatch_pattern_cache_len, pattern_lines};
 pub use paper::{PAPER_SIZES, PaperSize, Sheet, paper_size, sheet};
 pub use scene::{Scene, SceneTile, build_scene, flatten_scene, rebuild_scene, scene_tile_edge, scene_tiling_viable};
@@ -456,12 +454,7 @@ impl Builder<'_> {
         let fill = self.opts.text && ctx.d.header.i64("TEXTFILL", 1) != 0;
         for (i, g) in sh.glyphs.iter().enumerate() {
             if fill {
-                let tris = glyph_mesh::filled_tris(
-                    sh.glyph_keys.get(i).copied().flatten(),
-                    sh.glyph_places.get(i).copied().flatten(),
-                    sh.post_xf,
-                    g,
-                );
+                let tris = glyph_mesh::filled_tris(sh.glyph_keys.get(i).copied().flatten(), sh.glyph_places.get(i).copied().flatten(), sh.post_xf, g);
                 self.tris(ctx, color, &tris);
             } else {
                 for c in g {
@@ -1776,12 +1769,7 @@ fn dimension(b: &mut Builder, ctx: &Ctx, e: &Entity, dm: &aad_doc::Dimension, lw
         b.tris(ctx, dim_rgb, t);
     }
     if b.opts.text {
-        let sh = aad_fonts::Shaped {
-            strokes: g.text.clone(),
-            glyphs: g.text_glyphs.clone(),
-            width: 0.0,
-            ..Default::default()
-        };
+        let sh = aad_fonts::Shaped { strokes: g.text.clone(), glyphs: g.text_glyphs.clone(), width: 0.0, ..Default::default() };
         b.shaped(ctx, txt_rgb, lw, &sh);
     }
 }

@@ -636,13 +636,7 @@ fn remember_mesh_contours(key: GlyphMeshKey, contours: &[Vec<Vec2>]) {
 }
 
 fn mesh_key_for(face: &Face, glyph_id: u32, band: i32) -> GlyphMeshKey {
-    GlyphMeshKey {
-        font_ptr: face.bytes.as_ptr() as usize,
-        font_len: face.bytes.len(),
-        face: face.index,
-        glyph_id,
-        band,
-    }
+    GlyphMeshKey { font_ptr: face.bytes.as_ptr() as usize, font_len: face.bytes.len(), face: face.index, glyph_id, band }
 }
 
 struct Pen {
@@ -749,13 +743,7 @@ pub(crate) fn glyph(face: &Face, c: char, font_tol: f64) -> Arc<GlyphOutline> {
         pen.flush();
     }
     let advance = f64::from(f.glyph_metrics(Size::new(UPEM), LocationRef::default()).advance_width(gid).unwrap_or(UPEM * 0.5));
-    let g = Arc::new(GlyphOutline {
-        contours: pen.contours,
-        advance,
-        cap: cap_height(&f),
-        mapped: mapped.is_some(),
-        glyph_id,
-    });
+    let g = Arc::new(GlyphOutline { contours: pen.contours, advance, cap: cap_height(&f), mapped: mapped.is_some(), glyph_id });
     remember_mesh_contours(mesh_key_for(face, glyph_id, band), &g.contours);
     let mut cache = glyph_cache().lock().unwrap_or_else(PoisonError::into_inner);
     if cache.len() > MAX_CACHED_GLYPHS {
@@ -826,13 +814,7 @@ pub fn shape(face: &Face, s: &str, height: f64, width_factor: f64, oblique: f64)
             if !contours.is_empty() {
                 out.glyphs.push(contours);
                 out.glyph_keys.push(Some(mesh_key_for(&src, g.glyph_id, band)));
-                out.glyph_places.push(Some(GlyphPlace {
-                    x,
-                    height: h,
-                    width_factor: wf,
-                    shear,
-                    cap: g.cap,
-                }));
+                out.glyph_places.push(Some(GlyphPlace { x, height: h, width_factor: wf, shear, cap: g.cap }));
             }
         }
         let adv = g.advance * h / g.cap * wf;
