@@ -6,10 +6,12 @@
 //! opening schedule and the door and window blocks placed in the drawing, and the saved take-off
 //! results for walls, columns, lintels and slabs, and the rooms. Rows carry a `ref` made from the
 //! entity handle they were measured from, so it is the same on every run. Take-off sections that
-//! were never run are reported, not guessed. Brick take-off walls carry the nominal
-//! `thickness_mm` the measure layer implies (230 / 115) with a row note; walls committed from the
-//! parametric graph (`param.commit`) carry the graph's measured `thickness_mm` and a `ref` made
-//! from their instance id.
+//! were never run are reported, not guessed. Brick take-off walls carry `thickness_mm` measured from
+//! parallel `A-WALL` face spacing when faces are present; otherwise the nominal layer value (230 /
+//! 115) with a row note. Walls committed from the parametric graph (`param.commit`) carry the
+//! graph's measured `thickness_mm` and a `ref` made from their instance id. Openings prefer
+//! `wall_ref` from their `MEASURE-DEDUCT`↔measure-wall match (same as `takeoff.brick`); nearest
+//! insert-point proximity is only a fallback and is flagged with `_note`.
 //!
 //! `bridge.import` reads AQC's file. It never changes geometry. Without `apply` it only reports what
 //! would change; with `apply` it updates the project data. A project field already filled in is
@@ -473,7 +475,9 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     root.insert("openings".into(), Value::Array(opening_rows.clone()));
 
     // Walls from the brick take-off.
+    let space = s.space();
     let mut walls = Vec::new();
+    let mut nominal_thickness = 0usize;
     if let Some(t) = saved(d, "Bricks") {
         let (lf, _) = factors(&t);
         for it in t["items"].as_array().into_iter().flatten() {
@@ -481,12 +485,17 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             let layer = if it["group"].as_str().is_some_and(|g| g.starts_with("HB")) { "MEASURE-HALFBRICK" } else { "MEASURE-FULLBRICK" };
             let handle = stable_handle(it);
             let wall_ref = handle.map_or_else(|| mark.to_string(), |h| format!("W{}", h.hex()));
-            let thickness = if layer == "MEASURE-HALFBRICK" { HALF_BRICK_MM } else { FULL_BRICK_MM };
-            let row = json!({
+            let nominal = if layer == "MEASURE-HALFBRICK" { HALF_BRICK_MM } else { FULL_BRICK_MM };
+            let measured = handle.and_then(|h| super::takeoff::thickness_from_faces_mm(d, &space, h, unit_mm));
+            let mut row = json!({
                 "ref": wall_ref, "level": level, "length_mm": mm(len * lf), "height_mm": mm(ceiling_mm),
-                "thickness_mm": thickness, "layer": layer,
-                "_note": format!("thickness {thickness} mm is the nominal value the measure layer implies, not a measured thickness; check it"),
+                "thickness_mm": measured.unwrap_or(nominal), "layer": layer,
             });
+            if measured.is_none() {
+                nominal_thickness += 1;
+                row["_note"] =
+                    json!(format!("thickness {nominal} mm is the nominal value the measure layer implies, not a measured thickness; check it"));
+            }
             if let Some(h) = handle {
                 items.push(Item { kind: KIND_WALL, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
             } else {
@@ -512,20 +521,32 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
         items.push(Item { kind: KIND_WALL, n: number_of(*first), row: w.row.clone(), bbox: bbox.unwrap_or([0.0; 4]) });
         walls.push(w.row);
     }
-    if !walls.is_empty() {
-        warnings.push(format!("wall thickness is the nominal one the measure layer implies (full brick {FULL_BRICK_MM} mm, half brick {HALF_BRICK_MM} mm), not a measured value"));
+    if nominal_thickness > 0 {
+        warnings.push(format!(
+            "{nominal_thickness} brick wall(s) use the nominal thickness the measure layer implies (full brick {FULL_BRICK_MM} mm, half brick {HALF_BRICK_MM} mm); no A-WALL face spacing was measured"
+        ));
     }
     root.insert("walls".into(), Value::Array(walls.clone()));
 
-    // Which measured wall each opening sits in: the nearest wall within half its thickness and 150 mm of the opening's insertion point.
+    // Which measured wall each opening sits in: prefer MEASURE-DEDUCT↔wall (brick take-off), else nearest insert point.
     {
         let wall_list: Vec<(String, aad_doc::Handle, f64)> = items
             .iter()
             .filter(|i| i.kind == KIND_WALL)
             .filter_map(|i| Some((i.row["ref"].as_str()?.to_string(), aad_doc::Handle(i.n), i.row["thickness_mm"].as_f64().unwrap_or(FULL_BRICK_MM))))
             .collect();
+        let wall_handles: Vec<_> = wall_list.iter().map(|(_, h, _)| *h).collect();
+        let tol = 10.0; // drawing units — same default as takeoff.brick
+        let by_deduct = super::takeoff::opening_wall_by_deduct(d, &space, &wall_handles, tol);
         let mut unplaced = 0usize;
+        let mut proximity = 0usize;
         for it in items.iter_mut().filter(|i| i.kind == KIND_OPENING) {
+            if let Some(wh) = by_deduct.get(&it.n) {
+                if let Some((r, _, _)) = wall_list.iter().find(|(_, h, _)| *h == *wh) {
+                    it.row["wall_ref"] = json!(r);
+                    continue;
+                }
+            }
             let Some(EntityKind::Insert(ins)) = d.entity(aad_doc::Handle(it.n)).map(|e| &e.kind) else { continue };
             let at = aad_geom::Vec2::new(ins.insert.x, ins.insert.y);
             let best = wall_list
@@ -534,9 +555,16 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 .filter(|(dist, _, t)| *dist <= t / 2.0 + 150.0)
                 .min_by(|a, b| a.0.total_cmp(&b.0));
             match best {
-                Some((_, r, _)) => it.row["wall_ref"] = json!(r),
+                Some((_, r, _)) => {
+                    it.row["wall_ref"] = json!(r);
+                    it.row["_note"] = json!("wall chosen by nearest measured line (opening has no MEASURE-DEDUCT match); check it");
+                    proximity += 1;
+                }
                 None => unplaced += 1,
             }
+        }
+        if proximity > 0 {
+            warnings.push(format!("{proximity} opening(s) got wall_ref from insert-point proximity (no MEASURE-DEDUCT match); check them"));
         }
         if unplaced > 0 {
             warnings.push(format!(

@@ -112,8 +112,8 @@ with `shilpid --bind 127.0.0.1:7430 --data x.vdb`).
 After reading a database O-Draft wrote, O-CoreOp asked for four changes (`HANDOFF-O-DRAFT-TAKEOFF.md` section 8). All four are in `bridge.export` and therefore in `takeoff.record`:
 
 - **Rooms** carry `level`, `length_mm` and `breadth_mm`, and `rectangular`: the exact sides of a rectangular `ROOM-RECT` outline, else the sides of the outline's box with `"rectangular": false`. A room with no drawn outline sends its area only and the export warns.
-- **Openings** carry `wall_ref`: the measured wall nearest to the opening's insertion point, within half the wall's thickness plus 150 mm. An opening that is on no measured wall gets none and the export warns.
-- **Walls** carry `thickness_mm`: 230 mm on `MEASURE-FULLBRICK` and 115 mm on `MEASURE-HALFBRICK`. This is the nominal thickness the layer implies, not a measured value, and the export says so in a warning.
+- **Openings** carry `wall_ref`: preferred from the opening's `MEASURE-DEDUCT` line matched to a measured wall (same rule as `takeoff.brick`); otherwise the measured wall nearest to the insertion point within half thickness plus 150 mm, with a row `_note` that the link is a proximity guess. An opening on no measured wall gets none and the export warns.
+- **Walls** carry `thickness_mm`: when parallel `A-WALL` faces sit beside the MEASURE centre line, the face spacing is measured; otherwise 230 mm on `MEASURE-FULLBRICK` / 115 mm on `MEASURE-HALFBRICK` with a nominal `_note` and export warning.
 - A ventilator is written as `Window`; `source.drawing` is `(unsaved)` for a drawing that has not been saved.
 
 Checked: `rows_carry_what_o_coreop_needs_to_use_them_without_guessing`; the failure test `a_recording_that_dies_half_way_leaves_the_drawing_recording_and_the_next_one_completes_it`; and `apps/aad-cli/tests/takeoff_pdf.rs`, which uses the real plotter: the PDF is stored in chunks that reassemble to the bytes and SHA-256 the header names, and an ignored test run against a real `shilpid` recorded two drawings with their PDFs.
@@ -127,8 +127,11 @@ Checked: `rows_carry_what_o_coreop_needs_to_use_them_without_guessing`; the fail
 - No menu entry yet in the WinUI shell other than the engine registry's (the commands appear under
   Architecture > Take-off from the registry).
 - Selecting a measured item from its ShilpiDB box (highlight / zoom to the recorded bounds) is not built yet.
-- A check for two drawings that measure the same floor (the double-count risk) is built on the
-  O-CoreOp import preview (warns, does not block). O-Draft does not warn at record time yet.
+- A check for two drawings that measure the same floor (the double-count risk): O-CoreOp warns on
+  import; O-Draft also warns at `takeoff.record` when another complete slot in the same database
+  already has measured rows on the same company-file `project_ref` and stamped floor (warns, does
+  not block). Without a company-file link there is no strong project match, so record-time overlap
+  is not reported.
 
 ## Floor regions (single drawing)
 
