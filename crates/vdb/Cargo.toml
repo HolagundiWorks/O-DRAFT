@@ -12,8 +12,8 @@ workspace = true
 # Pinned to one ShilpiDB commit so the embedded engine and the client share one type.
 # To bump: set the same `rev` on both crates, refresh Cargo.lock, then
 # `cargo test -p aad-vdb` (see docs/architecture/aadt-shilpidb-architecture.md).
-shilpidb = { git = "https://github.com/HolagundiWorks/shilpidb", rev = "0797da6bb10954aff8dce604451c92d73374946e" }
-shilpi-client = { git = "https://github.com/HolagundiWorks/shilpidb", rev = "0797da6bb10954aff8dce604451c92d73374946e" }
+shilpidb = { git = "https://github.com/HolagundiWorks/shilpidb", tag = "v0.2.1" }
+shilpi-client = { git = "https://github.com/HolagundiWorks/shilpidb", tag = "v0.2.1" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
