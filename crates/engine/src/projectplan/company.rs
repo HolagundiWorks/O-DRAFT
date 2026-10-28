@@ -2,12 +2,46 @@
 //! architect, the logo, the default nameplate). A profile is kept in the application data folder as
 //! `companies/<id>/company.json` with its logo under `assets/`; a project stores only the profile id.
 //! Optional fields may be empty and are left out of the nameplate rather than printed as blanks.
+//!
+//! This local store is for offline / unlinked Draft only. When the suite company file is present
+//! (`OSAS_COMPANY`), writes are refused: firm identity is owned by Studio and refreshed into the
+//! drawing with `companyfile`. This path never writes the company file SoR.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use super::{Address, Issue, is_code};
+
+/// True when Draft was started with a suite company path (Studio / Cards / ticket launch).
+pub fn suite_company_env() -> bool {
+    #[cfg(test)]
+    {
+        if let Some(v) = SUITE_LINKED_FOR_TEST.with(std::cell::Cell::get) {
+            return v;
+        }
+    }
+    std::env::var_os("OSAS_COMPANY").is_some_and(|v| !v.is_empty())
+}
+
+#[cfg(test)]
+thread_local! {
+    static SUITE_LINKED_FOR_TEST: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Test helper: force the suite-link write gate without mutating process environment.
+#[cfg(test)]
+pub fn set_suite_linked_for_test(linked: Option<bool>) {
+    SUITE_LINKED_FOR_TEST.with(|c| c.set(linked));
+}
+
+fn refuse_suite_write(action: &str) -> Result<(), String> {
+    if suite_company_env() {
+        Err(format!("cannot {action} a local company profile while linked to Studio: change company details in Studio and refresh with companyfile"))
+    } else {
+        Ok(())
+    }
+}
 
 pub const SCHEMA_VERSION: u32 = 1;
 const MAX_PROFILE_BYTES: u64 = 1_000_000;
@@ -141,7 +175,9 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// Save a profile (after validating it). Returns the profile folder.
+/// Refused when `OSAS_COMPANY` is set (suite-linked): local profiles are offline-only.
 pub fn save(base: &Path, profile: &CompanyProfile) -> Result<PathBuf, String> {
+    refuse_suite_write("save")?;
     let issues = profile.validate();
     if let Some(i) = issues.first() {
         return Err(format!("{}: {}", i.path, i.message));
@@ -184,7 +220,9 @@ pub fn list(base: &Path) -> Vec<(String, String)> {
 
 /// Copy a logo into the profile as its managed asset (`assets/logo.<ext>`) and record it. Only
 /// PNG, JPEG and SVG files up to 5 MB are accepted; the file is checked by extension and size.
+/// Refused when suite-linked (`OSAS_COMPANY`): logos belong with Studio company details.
 pub fn set_logo(base: &Path, profile: &mut CompanyProfile, source: &Path) -> Result<(), String> {
+    refuse_suite_write("set the logo on")?;
     let ext = source.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
     if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "svg") {
         return Err("the logo must be a PNG, JPEG or SVG file".into());

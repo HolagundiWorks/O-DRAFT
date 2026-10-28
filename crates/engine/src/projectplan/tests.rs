@@ -286,3 +286,28 @@ fn a_recorded_logo_must_exist_and_the_nameplate_text_does_not_need_it() {
     assert_eq!(p.nameplate_lines(), ["Studio", "A. Architect"], "storing the logo changes no text line");
     let _ = std::fs::remove_dir_all(&base);
 }
+
+#[test]
+fn local_company_profile_writes_are_refused_when_suite_linked() {
+    struct Clear;
+    impl Drop for Clear {
+        fn drop(&mut self) {
+            company::set_suite_linked_for_test(None);
+        }
+    }
+    let _clear = Clear;
+    company::set_suite_linked_for_test(Some(true));
+    let base = temp_base();
+    let mut p = CompanyProfile::new("Studio");
+    let save_err = company::save(&base, &p).unwrap_err();
+    assert!(save_err.contains("Studio"), "{save_err}");
+    std::fs::create_dir_all(&base).unwrap();
+    let png = base.join("mark.png");
+    std::fs::write(&png, [0x89, b'P', b'N', b'G']).unwrap();
+    let logo_err = company::set_logo(&base, &mut p, &png).unwrap_err();
+    assert!(logo_err.contains("Studio"), "{logo_err}");
+    drop(_clear);
+    // Offline again: save works.
+    company::save(&base, &p).unwrap();
+    let _ = std::fs::remove_dir_all(&base);
+}
