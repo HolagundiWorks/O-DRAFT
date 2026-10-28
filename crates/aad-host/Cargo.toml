@@ -35,6 +35,7 @@ aad-io = { workspace = true }
 aad-dwg = { workspace = true }
 aad-geom = { workspace = true }
 aad-render = { workspace = true }
+aad-vello = { workspace = true }
 aad-agent = { workspace = true }
 aad-llm = { workspace = true }
 serde = { workspace = true }

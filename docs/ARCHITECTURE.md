@@ -28,6 +28,7 @@ shape (layering, never-crash, everything-is-a-command, clean-room) are in [CLAUD
 | L5 | `mcp` | MCP server (JSON-RPC 2.0 over stdio) on a headless session or bridged to a running app |
 | L5 | `agent` | Tool layer for a local language model: registry, validation, confirmation, loop limits, audit log ([ai-agent.md](ai-agent.md)) |
 | L5 | `auditor` | Auditor v0 detect-only: drawing audit/validate wrappers, command/menu parity, WinUI token scan, combined JSON report ([ai-agent.md](ai-agent.md), [TESTING.md](TESTING.md)) |
+| L5 | `vello` | Optional Phase E quality spike: `vello_cpu` (Apache-2.0 OR MIT) PNG path for control/`ui.render` when `AAD_CANVAS=vello`. Not the interactive canvas; must not move into `aad-render` ([canvas-smoothness.md](canvas-smoothness.md), [PERFORMANCE.md](PERFORMANCE.md)) |
 | app | `aad` | Desktop app. On Windows the default binary only launches `aad-winui` (no eframe). Optional `aad --features egui -- --egui` keeps the eframe window; macOS/Linux/BSD always link egui/eframe |
 | app | `aad-winui` | Unpackaged WinUI 3 shell over `aad-host`: registry menus, command line, dynamic input, grips, snaps, form dialogs, file pickers, plot preview (nameplate PDF), calculator, Pomodoro, panel pin and float, Project / Properties / Layer / Blocks side tabs, and resizable Classic/Pro panels around the child drawing window |
 | app | `aad-cli` | `info`, `convert`, `run` (scripts), `commands`, `sample`, `mcp`, `auditor` |
@@ -73,8 +74,11 @@ draw order); mesh packing may remesh only dirty spatial tiles (Phase B). Filled 
 reuse a process-wide font-unit triangulated mesh cache (`aad_render::glyph_mesh`); hatch pattern
 sweeps reuse a capped expansion cache (Phase D). The R-tree (`spatial.rs`) is patched per changed
 store chunk, so picking stays fast on large drawings. PNG, PDF, SVG and plot preview reuse the same
-display list through the CPU rasteriser or vector writers. The drawing-area background is black in
-the dark theme and white in the light theme; colour 7 is drawn white or black to contrast.
+display list through the CPU rasteriser or vector writers. An optional L5 `aad-vello` path
+(`AAD_CANVAS=vello`) can rasterise the same display list with Linebender `vello_cpu` for
+paper/plot PNG compare; default remains tiny-skia, and the interactive mesh/wgpu canvas never
+switches. The drawing-area background is black in the dark theme and white in the light theme;
+colour 7 is drawn white or black to contrast.
 
 ## Files
 

@@ -215,7 +215,8 @@ impl Backend for Headless {
                     let v = st.view();
                     aad_render::raster::View { center: v.center, scale: f64::from(h) / v.height.max(1e-12), width: w, height: h }
                 };
-                let png = aad_render::raster::render_png(&list, &view, &aad_render::raster::RasterOptions::default()).ok_or("render failed")?;
+                // Optional Phase E spike: AAD_CANVAS=vello uses vello_cpu for this PNG only.
+                let png = aad_vello::preview_png(&list, &view, &aad_render::raster::RasterOptions::default()).ok_or("render failed")?;
                 if let Some(path) = str_p("path") {
                     std::fs::write(&path, &png).map_err(|e| format!("{path}: {e}"))?;
                 }

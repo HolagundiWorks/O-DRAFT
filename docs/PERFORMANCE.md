@@ -220,7 +220,20 @@ before micro-optimising.
   (R8 coverage) and Loop–Blinn filled TTF remain **proposed** — pick after a measured prototype on
   a 705k-prim class drawing.
 - **Not claimed here:** absolute text-heavy `perf_probe` before/after on a reference machine;
-  GPU atlas / Loop–Blinn; Vello (Phase E).
+  GPU atlas / Loop–Blinn.
+
+## Update: optional Vello paper/plot PNG spike (Phase E)
+
+- **Implemented (prototype wiring only):** L5 crate `aad-vello` rasterises a `DisplayList` with
+  Linebender `vello_cpu` (Apache-2.0 OR MIT). Host / egui / MCP `ui.render` call
+  `aad_vello::preview_png`, which uses `vello_cpu` only when `AAD_CANVAS=vello` (case-insensitive);
+  unset or any other value keeps `aad_render::raster` (tiny-skia). The interactive mesh/wgpu canvas
+  never reads this flag. `aad-render` stays wgpu/Vello-free (L2). Regressions: `aad-vello` lib tests
+  (flag parse defaults to custom; custom dispatch equals tiny-skia; vello path emits PNG).
+- **Proposed / unmeasured:** sheet quality win vs tiny-skia on nameplates; GPU `vello` for live
+  paper-space; replacing any Phase A–D custom path. Evaluate by exporting the same layout with the
+  flag off and on, then comparing AA on arcs, text and hatches. **Verdict gate:** keep the spike
+  only if measured quality beats the custom path without pan regression or layering breaks.
 
 ## Update: file I/O path
 

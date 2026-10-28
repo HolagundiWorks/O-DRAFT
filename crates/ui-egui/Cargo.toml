@@ -16,6 +16,7 @@ aad-color = { workspace = true }
 aad-doc = { workspace = true }
 aad-fonts = { workspace = true }
 aad-render = { workspace = true }
+aad-vello = { workspace = true }
 aad-engine = { workspace = true }
 egui = { workspace = true }
 # GPU canvas paint callback (same egui-wgpu/wgpu eframe uses with its "wgpu" feature).

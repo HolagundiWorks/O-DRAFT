@@ -31,6 +31,7 @@ aad-auditor = { path = "crates/auditor" }
 aad-llm = { path = "crates/llm" }
 aad-vdb = { path = "crates/vdb" }
 aad-param = { path = "crates/param" }
+aad-vello = { path = "crates/vello" }
 
 # foundation
 thiserror = "2"

@@ -442,7 +442,9 @@ pub fn handle(app: &mut CadApp, ctx: &egui::Context, req: &ControlRequest) -> Ou
             let v = st.view();
             let fit = p.get("fit").and_then(Value::as_bool).unwrap_or(true);
             let view = render_view(&list.bounds, v.center, v.height, fit, w, h);
-            let Some(png) = aad_render::raster::render_png(&list, &view, &aad_render::raster::RasterOptions::default()) else {
+            // Optional Phase E spike: AAD_CANVAS=vello uses vello_cpu for this PNG only.
+            // Interactive mesh/wgpu canvas is unchanged.
+            let Some(png) = aad_vello::preview_png(&list, &view, &aad_render::raster::RasterOptions::default()) else {
                 return err("render failed");
             };
             #[cfg(not(target_arch = "wasm32"))]
