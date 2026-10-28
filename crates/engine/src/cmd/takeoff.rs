@@ -391,7 +391,7 @@ fn opening_block_deductions(d: &Drawing, space: &Space) -> Vec<(Handle, Vec2)> {
 pub(crate) fn opening_wall_by_deduct(d: &Drawing, space: &Space, wall_handles: &[Handle], tol: f64) -> std::collections::HashMap<u64, Handle> {
     let layers = [L_FULL, L_HALF];
     let all = walls(d, space, &layers);
-    let ws: Vec<Wall> = all.into_iter().filter(|w| wall_handles.iter().any(|h| *h == w.handle)).collect();
+    let ws: Vec<Wall> = all.into_iter().filter(|w| wall_handles.contains(&w.handle)).collect();
     let mut out = std::collections::HashMap::new();
     for (ins, mid) in opening_block_deductions(d, space) {
         if out.contains_key(&ins.0) {
@@ -432,7 +432,7 @@ pub(crate) fn thickness_from_faces_mm(d: &Drawing, space: &Space, measure: Handl
     // Search band ≈ half a metre each side of the centre line.
     let reach = 500.0 / unit_mm;
     let mut offsets: Vec<f64> = Vec::new();
-    let Some(store) = d.space(space) else { return None };
+    let store = d.space(space)?;
     for face in store.iter().filter(|e| d.is_visible(e) && on_layer(e, super::walls::WALL)) {
         for seg in segments_of(&face.kind) {
             if seg.len() < 1e-9 {
