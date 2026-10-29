@@ -153,6 +153,7 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) =>
         {
             ActiveProjectPointer.Set(null);
+            ProjectServer.StopNow();
             TearDownShell();
         };
         Activated += (_, _) =>
@@ -1924,6 +1925,33 @@ public sealed partial class MainWindow : Window
     {
         _docPaths[System.IO.Path.GetFileNameWithoutExtension(path)] = path;
         _docPaths[System.IO.Path.GetFileName(path)] = path;
+    }
+
+    private string? _servedDrawing;
+
+    /// <summary>
+    /// Publish the active drawing and serve its ShilpiDB file (<see cref="ProjectServer"/>) so take-off recording and O-CoreOp share it live. The pointer is
+    /// written at once without the server and again, with the gateway address, when the server answers.
+    /// </summary>
+    private void PublishActiveProject(string? drawing)
+    {
+        var db = drawing is null ? null : ActiveProjectPointer.ShilpiDbFor(drawing);
+        ActiveProjectPointer.Set(drawing, ProjectServer.UrlFor(db));
+        if (drawing == _servedDrawing)
+        {
+            return;
+        }
+        _servedDrawing = drawing;
+        _ = ServeAsync(drawing, db);
+    }
+
+    private async Task ServeAsync(string? drawing, string? db)
+    {
+        var up = await ProjectServer.EnsureAsync(db);
+        if (drawing == _servedDrawing)
+        {
+            ActiveProjectPointer.Set(drawing, up ? ProjectServer.UrlFor(db) : null);
+        }
     }
 
     private string? ActiveDrawingPath(DocTab? active) =>
@@ -5832,7 +5860,7 @@ public sealed partial class MainWindow : Window
         _documents.AddRange(state.Documents);
         var active = _documents.FirstOrDefault(doc => doc.Active);
         Title = active == null || active.Title.Length == 0 ? "O-Draft" : "O-Draft \u2014 " + active.Title;
-        ActiveProjectPointer.Set(ActiveDrawingPath(active));
+        PublishActiveProject(ActiveDrawingPath(active));
         var key = string.Join("\n", _documents.Select(doc => doc.Index + ":" + doc.Title + ":" + doc.Dirty + ":" + doc.Active));
         if (key == _docKey)
         {

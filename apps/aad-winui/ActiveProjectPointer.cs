@@ -7,7 +7,9 @@ namespace Aad.WinUi;
 /// <c>%LOCALAPPDATA%\OSAS\active-project.json</c> current: written when the active drawing changes (opened, saved under a new name, another tab
 /// chosen), deleted when no saved drawing is active or the app closes. The ShilpiDB file is the one <c>takeoff.record</c> writes with
 /// <c>file: true</c>, <c>&lt;drawing&gt;.takeoff.vdb</c> beside the drawing (the drawing's extension replaced).
-/// <code>{ "format": "osas-active-project", "version": 1, "app": "O-Draft", "drawing": "C:\p\house.dwg", "shilpidb": "C:\p\house.takeoff.vdb", "updated_utc": "…" }</code>
+/// <c>server</c> is the shilpi-http gateway (<see cref="ProjectServer"/>) while this app is serving that file, else null; O-CoreOp then reads and saves through it
+/// instead of touching the file.
+/// <code>{ "format": "osas-active-project", "version": 1, "app": "O-Draft", "drawing": "C:\p\house.dwg", "shilpidb": "C:\p\house.takeoff.vdb", "server": "http://127.0.0.1:7421", "updated_utc": "…" }</code>
 /// </summary>
 internal static class ActiveProjectPointer
 {
@@ -20,9 +22,10 @@ internal static class ActiveProjectPointer
     internal static string ShilpiDbFor(string drawingPath) => System.IO.Path.ChangeExtension(drawingPath, "takeoff.vdb");
 
     /// <summary>Point at <paramref name="drawingPath"/>, or clear the pointer when it is null or empty. A write that changes nothing is skipped.</summary>
-    internal static void Set(string? drawingPath)
+    internal static void Set(string? drawingPath, string? serverUrl = null)
     {
-        var key = string.IsNullOrWhiteSpace(drawingPath) ? null : System.IO.Path.GetFullPath(drawingPath);
+        var path = string.IsNullOrWhiteSpace(drawingPath) ? null : System.IO.Path.GetFullPath(drawingPath);
+        var key = path is null ? null : path + "|" + serverUrl;
         if (key == _last)
         {
             return;
@@ -41,8 +44,9 @@ internal static class ActiveProjectPointer
                 ["format"] = "osas-active-project",
                 ["version"] = 1,
                 ["app"] = "O-Draft",
-                ["drawing"] = key,
-                ["shilpidb"] = ShilpiDbFor(key),
+                ["drawing"] = path,
+                ["shilpidb"] = ShilpiDbFor(path!),
+                ["server"] = serverUrl,
                 ["updated_utc"] = DateTime.UtcNow.ToString("o"),
             });
             // write beside, then move over, so a reader never sees half a file
