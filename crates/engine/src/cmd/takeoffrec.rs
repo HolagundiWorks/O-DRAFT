@@ -26,6 +26,9 @@ use crate::{Result, Session};
 
 const FORMAT: &str = "hcw-takeoff-shilpi";
 const KIND_HEADER: u8 = 1;
+/// O-CoreOp's project document, stored in the same file (its own kind, never read or written here). A file that holds only this is not an
+/// entity store: O-CoreOp may have made it before any take-off was recorded.
+const KIND_COREOP_PROJECT: u8 = 0x60;
 /// An annotated-PDF chunk.
 pub(crate) const KIND_PDF: u8 = 9;
 /// The kinds this version writes. Records of any other kind belong to a later version and are left alone.
@@ -313,7 +316,8 @@ impl FileSink {
                 serde_json::from_slice::<Value>(&r.payload).ok().and_then(|v| v.get("format").and_then(Value::as_str).map(str::to_string)).as_deref()
                     != Some(format)
             });
-            if !store.is_empty() && (headers.is_empty() || foreign) {
+            let entity_records = store.records().iter().filter(|r| kind_of(r.id) != KIND_COREOP_PROJECT).count();
+            if entity_records > 0 && (headers.is_empty() || foreign) {
                 return Err(bad(
                     cmd,
                     format!("{} is not a {what} database (its header records are missing or of another format); choose another file", path.display()),
@@ -788,6 +792,41 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A ShilpiDB file (version 1) of the given records, as O-CoreOp writes it.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn vdb_bytes(records: &[(u64, &[u8])]) -> Vec<u8> {
+        let mut b = b"SHILPIDB".to_vec();
+        b.extend(1u32.to_le_bytes());
+        b.extend((records.len() as u32).to_le_bytes());
+        for (id, payload) in records {
+            b.extend(id.to_le_bytes());
+            for _ in 0..4 {
+                b.extend(0f64.to_le_bytes());
+            }
+            b.extend((payload.len() as u32).to_le_bytes());
+            b.extend(*payload);
+        }
+        b
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_file_holding_only_the_coreop_project_is_a_take_off_file_that_can_be_recorded_into() {
+        let dir = std::env::temp_dir().join(format!("aad-takeoff-coreop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let only_project = dir.join("a.takeoff.vdb");
+        std::fs::write(&only_project, vdb_bytes(&[(record_id(KIND_COREOP_PROJECT, 0, 0), br#"{"project":{}}"#)])).unwrap();
+        let sink = FileSink::open(&only_project).expect("a project-only file is accepted");
+        // and what O-CoreOp wrote is kept when the take-off is saved
+        assert!(sink.records.contains_key(&record_id(KIND_COREOP_PROJECT, 0, 0)));
+
+        // an entity store (a record that is not a header, no header at all) is still refused
+        let entity = dir.join("b.vdb");
+        std::fs::write(&entity, vdb_bytes(&[(record_id(2, 0, 1), b"{}"), (record_id(KIND_COREOP_PROJECT, 0, 0), b"{}")])).unwrap();
+        assert!(FileSink::open(&entity).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn slots_follow_the_contract_test_vectors() {

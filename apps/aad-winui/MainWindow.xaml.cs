@@ -150,7 +150,11 @@ public sealed partial class MainWindow : Window
                 PlaceCommandBar();
             }
         };
-        Closed += (_, _) => TearDownShell();
+        Closed += (_, _) =>
+        {
+            ActiveProjectPointer.Set(null);
+            TearDownShell();
+        };
         Activated += (_, _) =>
         {
             PlaceChild();
@@ -1872,6 +1876,10 @@ public sealed partial class MainWindow : Window
             {
                 await Task.Delay(30);
             }
+            if (state == 2)
+            {
+                RememberDrawing(path);
+            }
             return state == 2;
         }
         finally
@@ -1897,6 +1905,10 @@ public sealed partial class MainWindow : Window
             {
                 await Task.Delay(30);
             }
+            if (state == 2 && !string.IsNullOrEmpty(path))
+            {
+                RememberDrawing(path);
+            }
             return state == 2;
         }
         finally
@@ -1904,6 +1916,18 @@ public sealed partial class MainWindow : Window
             HideBusy();
         }
     }
+
+    // The saved file behind each open drawing, by the name its tab shows, so the active one can be published to O-CoreOp.
+    private readonly Dictionary<string, string> _docPaths = new(StringComparer.OrdinalIgnoreCase);
+
+    private void RememberDrawing(string path)
+    {
+        _docPaths[System.IO.Path.GetFileNameWithoutExtension(path)] = path;
+        _docPaths[System.IO.Path.GetFileName(path)] = path;
+    }
+
+    private string? ActiveDrawingPath(DocTab? active) =>
+        active is not null && _docPaths.TryGetValue(active.Title, out var path) && System.IO.File.Exists(path) ? path : null;
 
     private async Task<bool> PickFileCore(string id)
     {
@@ -5808,6 +5832,7 @@ public sealed partial class MainWindow : Window
         _documents.AddRange(state.Documents);
         var active = _documents.FirstOrDefault(doc => doc.Active);
         Title = active == null || active.Title.Length == 0 ? "O-Draft" : "O-Draft \u2014 " + active.Title;
+        ActiveProjectPointer.Set(ActiveDrawingPath(active));
         var key = string.Join("\n", _documents.Select(doc => doc.Index + ":" + doc.Title + ":" + doc.Dirty + ":" + doc.Active));
         if (key == _docKey)
         {

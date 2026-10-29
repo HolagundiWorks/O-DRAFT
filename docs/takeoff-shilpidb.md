@@ -21,6 +21,8 @@ also reachable from scripts, the control channel and MCP).
   host format **version 1** (same record layout `shilpid` uses) so the
   `.takeoff.vdb` can be opened with `shilpid --data`; entity `.vdb`
   exports stay on host version 2.
+**O-CoreOp project file (2026-10-29).** O-CoreOp keeps its project in the same `<drawing>.takeoff.vdb` as record kind `0x60` (the project JSON, chunked). `takeoff.record` treats a file that holds only those records as empty and keeps them when it writes. The WinUI shell publishes the active saved drawing to `%LOCALAPPDATA%\OSASctive-project.json` (`format` `osas-active-project`, `drawing`, `shilpidb`) so O-CoreOp can open the same file; it deletes the pointer when no saved drawing is active or the app closes. See O-CoreOp `docs/PROJECT-FILE.md`.
+
 - **Protocol** (the contract has no transactions, so the header is the completion marker): claim the slot by
   writing the header with `"state": "recording"` and reading it back; write every row; delete this slot's rows
   that are no longer measured; delete the old annotated-PDF chunks and write the new ones; write the header
