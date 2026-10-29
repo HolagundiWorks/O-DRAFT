@@ -116,9 +116,87 @@ internal static class ProjectServer
         }
     }
 
-    private static Process Start(string exe, string args) =>
-        Process.Start(new ProcessStartInfo(exe, args) { CreateNoWindow = true, UseShellExecute = false })
-        ?? throw new InvalidOperationException("could not start " + System.IO.Path.GetFileName(exe));
+    private static Process Start(string exe, string args)
+    {
+        var p = Process.Start(new ProcessStartInfo(exe, args) { CreateNoWindow = true, UseShellExecute = false })
+            ?? throw new InvalidOperationException("could not start " + System.IO.Path.GetFileName(exe));
+        Job.Attach(p);                                       // both programs end with this app, even if it crashes
+        return p;
+    }
+
+    /// <summary>A Windows job that kills what is in it when this app's last handle to it closes (the app ends).</summary>
+    private static class Job
+    {
+        private static readonly IntPtr Handle = Create();
+
+        private static IntPtr Create()
+        {
+            try
+            {
+                var job = CreateJobObject(IntPtr.Zero, null);
+                var info = new ExtendedLimits();
+                info.Basic.LimitFlags = 0x2000;              // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                var size = System.Runtime.InteropServices.Marshal.SizeOf(info);
+                var ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+                try
+                {
+                    System.Runtime.InteropServices.Marshal.StructureToPtr(info, ptr, false);
+                    SetInformationJobObject(job, 9, ptr, (uint)size);
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr);
+                }
+                return job;
+            }
+            catch (Exception)
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        internal static void Attach(Process p)
+        {
+            if (Handle != IntPtr.Zero)
+            {
+                AssignProcessToJobObject(Handle, p.Handle);
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern IntPtr CreateJobObject(IntPtr attrs, string? name);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern bool SetInformationJobObject(IntPtr job, int cls, IntPtr info, uint size);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct BasicLimits
+        {
+            public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass, SchedulingClass;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct IoCounters
+        {
+            public ulong A, B, C, D, E, F;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct ExtendedLimits
+        {
+            public BasicLimits Basic;
+            public IoCounters Io;
+            public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+        }
+    }
 
     /// <summary>The folder holding shilpid and shilpi-http: beside the app, SHILPIDB_BIN, %LOCALAPPDATA%\ShilpiDB\bin, then PATH.</summary>
     private static string? FindBin()
