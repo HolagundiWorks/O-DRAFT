@@ -1,3 +1,5 @@
+> **2026-10-19** wall vertical slice hand-off to O-CoreOp. Suite naming updated for `.osp` on **2026-10-30**. O-CoreOp side: `HolagundiWorks/O-COREOP` — [HANDOFF-O-COREOP.md](HANDOFF-O-COREOP.md), [PROJECT-FILE.md](PROJECT-FILE.md) (in that repo).
+
 # Hand-off to O-CoreOp: parametric take-off modellers (walls)
 
 Date: 2026-10-19  
@@ -5,16 +7,14 @@ From: O-Draft (AADT)
 To: O-CoreOp  
 Subject: What O-Draft now emits for parametric walls, and what O-CoreOp must own
 
-This is the O-Draft side of the wall vertical slice. Copy or link this file into the O-CoreOp
-repository next to `docs/TAKEOFF-SHILPIDB.md` and `docs/HANDOFF-O-DRAFT-TAKEOFF.md`. O-Draft
-implementation notes: [parametric.md](parametric.md), [takeoff-shilpidb.md](takeoff-shilpidb.md).
+This is the O-Draft side of the wall vertical slice. Contract: [PROJECT-FILE.md](PROJECT-FILE.md). Implementation: [parametric.md](parametric.md).
 
 ## 1. Ownership (unchanged)
 
 | Concern | System |
 |---|---|
 | Drawing geometry, graph, undo, commit | O-Draft |
-| Measured facts (length, height, thickness, level, layer) | O-Draft → ShilpiDB / bridge |
+| Measured facts (length, height, thickness, level, layer) | O-Draft → project file (`.osp`) / bridge |
 | Gross/net areas, finishes (plaster, paint), shuttering, rates, costs | **O-CoreOp only** |
 | Component library as a hosted store | Not built; schemas are code in O-Draft (`osas.wall` v1) |
 
@@ -28,12 +28,11 @@ Same path as today's take-off. No new wire protocol.
 1. User (or script) commits parametric walls in O-Draft (`param.commit`).
 2. `takeoff.record` (or `bridge.export`) runs `bridge.collect`.
 3. Linked, current parametric walls are merged into the `walls` array with brick take-off walls.
-4. ShilpiDB records: kind `3` (wall), id `(3 << 56) | n` where `n` is the low 56 bits of the **first
-   face-line handle**; payload = the bridge wall row; bbox = union of face-line boxes in mm.
+4. Project-file take-off records: kind `3` (wall), id `(3 << 56) | slot << 32 | n` where `n` is the low 32 bits of the row index; payload = the bridge wall row; bbox = union of face-line boxes in mm.
 
-File default: `<drawing>.takeoff.vdb`. Server: `takeoff.record { server: "host:port" }`.
+Take-off is written with `takeoff.record` into the open `.osp` (and optionally `bridge.export` beside the drawing).
 
-Contract version remains **hcw-takeoff-shilpi / 1** and bridge format **hcw-aqc-bridge / 1**.
+Wire header `format` remains **hcw-takeoff-shilpi / 1** (historical name) and bridge format **hcw-aqc-bridge / 1**.
 
 ## 3. Wall row shapes O-CoreOp will see
 
@@ -78,10 +77,10 @@ ceiling when the brick take-off was saved.
 
 A drawing may contain **both** kinds in one `walls` array.
 
-## 4. What is not in the ShilpiDB / bridge payload
+## 4. What is not in the take-off / bridge payload
 
 O-Draft keeps the following for its own UI and for `param.takeoff` (engine JSON). They are **not**
-copied into the bridge wall row or the ShilpiDB wall record today:
+copied into the bridge wall row or the take-off wall record today:
 
 | Field | Where it lives in O-Draft |
 |---|---|
@@ -134,9 +133,7 @@ Meaning for O-CoreOp (proposed mapping; confirm in CoreOp docs):
 3. **BOQ:** when `thickness_mm` is present, use it; when absent, keep today's brick/half-brick
    thickness assumption from `layer`.
 4. **Optional:** request material/finish on the row (section 4B) if CoreOp cannot infer finishes.
-5. **Smoke test:** open a `.takeoff.vdb` produced by O-Draft after `param.commit` + `takeoff.record`
-   and confirm header + kind-3 records round-trip. O-Draft has not yet run CoreOp's reader against
-   a file it wrote (known gap in [takeoff-shilpidb.md](takeoff-shilpidb.md)).
+5. **Smoke test:** open the project's `.osp` after `param.commit` + `takeoff.record` in O-Draft and import take-off in O-CoreOp.
 
 ### Minimal reproduction on O-Draft
 
@@ -144,7 +141,7 @@ Meaning for O-CoreOp (proposed mapping; confirm in CoreOp docs):
 # metric drawing; then via control channel or aad-cli:
 param.wall.new { "points": [[0,0],[5000,0]], "height": "3 m", "thickness": 230 }
 param.commit {}
-takeoff.record {}          # → <drawing>.takeoff.vdb
+takeoff.record {}
 # or: bridge.export { "write": true }
 ```
 
@@ -154,15 +151,14 @@ Engine tests that lock the row shape: `cargo test -p aad-engine --test param`.
 
 - Node-graph editor UI (WinUI / egui).
 - Columns, beams, slabs as parametric components.
-- ShilpiDB-hosted component library.
+- Hosted component library (schemas stay in code).
 - PDF underlay take-off.
-- Provenance fields inside the ShilpiDB wall payload (section 4).
-  (`wall_ref` on openings is written by `takeoff.record` / `bridge.collect` when the insert sits on a measured wall.)
+- `wall_ref` on openings.
+- Provenance fields inside the take-off wall payload (section 4).
 
 ## 9. Questions for O-CoreOp
 
 1. Confirm optional `thickness_mm` on wall kind 3 is accepted without a contract version bump.
 2. Prefer section 4A (infer finishes) or 4B (add `material` / `finish` to the wall row)?
 3. Should `PW-*` refs be reserved in the CoreOp contract text, or is "any string `ref`" enough?
-4. After CoreOp reads an O-Draft `.takeoff.vdb` with a parametric wall, paste any schema mismatch
-   back here so O-Draft can adjust the emitter.
+4. After CoreOp reads parametric walls from `.osp`, paste any schema mismatch back to O-Draft so the emitter can adjust.

@@ -8,7 +8,7 @@ drawing and undo; O-CoreOp owns finishes, net areas and costing.
 
 | Piece | Owner |
 |---|---|
-| Component type schemas (`osas.wall` v1) and node library | Code in `aad-param` (not a ShilpiDB-hosted library yet) |
+| Component type schemas (`osas.wall` v1) and node library | Code in `aad-param` (hosted library not built yet) |
 | Graph evaluation, units, formulas, cycle detection, cache | `crates/param` (`aad-param`) |
 | Drawing geometry, project data, undo, commit | O-Draft engine (`param.*` in `crates/engine/src/cmd/param.rs`) |
 | Quantity take-off and costing from measured facts | O-CoreOp (via `bridge.export` / `takeoff.record`) |
@@ -114,7 +114,7 @@ take-off.
 - WinUI (or egui) node-graph editor for `param.*` walls (companion Graph window is separate; see
   [architecture/DYNAMO_INTEGRATION.md](architecture/DYNAMO_INTEGRATION.md)).
 - Async C ABI for long evaluations.
-- ShilpiDB-hosted component library (schemas are in code).
+- Hosted component library (schemas are in code).
 - An O-CoreOp `measure(component, rule, revision)` API (the published contract is measured-fact rows
   through the bridge / `takeoff.record`; derived finishes must not be sent from O-Draft).
 - Columns, beams, slabs and other component types beyond `osas.wall` in `aad-param` (companion

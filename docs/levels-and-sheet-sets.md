@@ -222,8 +222,8 @@ Nothing changes in an existing drawing until a second level or a sheet set is ad
 as before. They open as one level named after `floor.current`, else "Level 1". `floors` / `levels`
 project data stay the source of names and elevations (`level.new` and `level.set` keep them in step).
 Floor projects (one file per floor with Xrefs) stay supported through `level.import`, `level.export`
-and `project.merge`. Drawing spaces keep working; a sheet set points at one. Take-off and ShilpiDB
-rows gain the level id in their slot; single-level rows keep their ids. Viewports without level data
+and `project.merge`. Drawing spaces keep working; a sheet set points at one. Take-off rows in the project file
+use the drawing slot in each id; single-level rows keep their ids. Viewports without level data
 show the first level.
 
 ## Decisions (from the plan's open questions)
@@ -449,8 +449,8 @@ Implemented and tested (`crates/engine/tests/migrate.rs`, `levels.rs`):
 
 Not built, and why:
 
-- **Take-off and ShilpiDB rows do not carry a level id.** The record format (`(kind << 56) | (slot <<
-  32) | n`, [takeoff-shilpidb.md](takeoff-shilpidb.md)) is a contract with O-CoreOp; giving each level
+- **Take-off rows do not carry a level id.** The record format (`(kind << 56) | (slot <<
+  32) | n`, [PROJECT-FILE.md](PROJECT-FILE.md) / O-CoreOp `docs/PROJECT-FILE.md`) is a contract with O-CoreOp; giving each level
   its own slot or header changes what that program reads, so it needs agreement there first.
   Take-off acts on the store being edited, so a recording covers one level at a time.
 - The shell: the Layer manager dropdown, the new-drawing dialog's "Levels in this drawing" option

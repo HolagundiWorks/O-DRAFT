@@ -1,9 +1,9 @@
 # Suite integration: what O-Draft has, what the contracts need
 
 This page maps O-Draft onto the OSAS suite (O-Draft drawing, O-Studio office
-management, O-CoreOp quantities and costing, ShilpiDB drawing database) with one
+management, O-CoreOp quantities and costing) with one
 shared project identity in the **company file**. It describes O-Draft's side
-only. Where it names O-Studio / O-CoreOp / ShilpiDB behaviour beyond what
+only. Where it names O-Studio / O-CoreOp behaviour beyond what
 O-Draft code proves, the statement is marked.
 
 Nothing here is a claim that a full cross-application click-through has been
@@ -18,7 +18,7 @@ missing and what the first milestone needs.
 | Company details (name, address, registrations) | Studio (OSAS company file) | Reads them (`companyfile`), prints them in the title block; never writes; when linked, refuses free typing of firm identity via `project` / wizard |
 | Project name, site, client | Studio / O-Studio, in the company file | Reads them (`companyfile`); when `project_ref` is set, those detail keys are refresh-only in Draft |
 | Quantities and costs | O-CoreOp | Produces measured quantities (`takeoff.*`) and a hand-off file (`bridge.export`); does not price |
-| Reusable details and spatial records | ShilpiDB | Exports a drawing's entities to `.vdb`, queries it, imports it, and can push to or pull from a running `shilpid` (`vdb.*`); `takeoff.record` writes take-off rows |
+| Reusable details and spatial records | (planned) | Component library in code today; not a separate spatial server |
 | AI conversation, tool permissions, audit | Shared AI runtime (not built) | O-Draft has its own tool registry and audit log (`aad-agent`) for its own tools |
 
 Rules O-Draft already follows and the suite should keep: a hand-off file never changes the drawing it
@@ -38,7 +38,7 @@ OSS suite apps do **not** ship an AORMS / portal connector. Company file is SoR.
 | Quantity take-off from drawn geometry, rates, bill, opening schedule | `takeoff.*`, `schedule`, `openings.*` ([hcw-kit-port.md](../hcw-kit-port.md)) | Implemented; reads `MEASURE-*` layers |
 | Parametric wall graph → measured facts | `aad-param`, `param.*` ([parametric.md](../parametric.md)) | Implemented (Rust evaluate/commit/undo; no node editor UI). Committed walls feed `bridge.export` / `takeoff.record` |
 | Hand-off to and from O-CoreOp | `bridge.export`, `bridge.import`; file `hcw-aqc-bridge` version 1, millimetres, beside the drawing as `name.aqc.json` | Implemented. Import previews first and never changes geometry. Wall rows may come from brick take-off and/or parametric commit. CoreOp parses `source.project_ref` when present |
-| Take-off in ShilpiDB | `takeoff.record` / `takeoff.annotate` | Implemented; header carries company-file `project_ref` when linked ([takeoff-shilpidb.md](../takeoff-shilpidb.md)) |
+| Take-off in project file | `takeoff.record` / `takeoff.annotate` | Implemented; header carries company-file `project_ref` when linked ([PROJECT-FILE.md](../PROJECT-FILE.md)) |
 | Spatial AI tools (overview, window, nearest, describe) | `crates/agent` | Implemented |
 | Drawing-level change record (revision, checksum) | `revision.rs`, `drawing.revision`, `<file>.aadrev.json` | Implemented |
 | Stable cross-application project and artifact references | `project_ref` from the company file in take-off / bridge headers | Partial: OSAS `ProjectRef` when linked via `companyfile`; no portal office-id key |
@@ -101,5 +101,5 @@ Milestone 1 is "drawing to draft estimate". O-Draft's side, step by step:
 
 The shared repository layout, the IPC protocol between applications, the shared identity and role
 model, the indexing service and the installer coordination belong to a specification that covers all
-suite repositories. Signing certs, ShilpiDB public release pin, and counsel review of dual licences
+suite repositories. Signing certs, release pins, and counsel review of dual licences
 on AGPL apps are suite ops — not O-Draft licence changes (O-Draft stays MIT OR Apache-2.0).

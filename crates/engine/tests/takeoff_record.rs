@@ -1,5 +1,5 @@
-//! `takeoff.record`: the take-off as records in the project file (contract: `TAKEOFF-SHILPIDB.md` in the O-CoreOp
-//! repository, version 1). The tests follow the hand-off's list: the records match the bridge rows, recording
+//! `takeoff.record`: the take-off as records in the project file (layout shared with O-CoreOp `OspTakeoff`, version 1).
+//! The tests follow the hand-off list: the records match the bridge rows, recording
 //! again replaces, a removed item is deleted, ids carry the kind, everything is in millimetres, a rectangular slab
 //! has its spans, and refs survive a rebuilt take-off.
 

@@ -1,13 +1,13 @@
-# Component library in ShilpiDB: proposal
+# Component library (hosted store): proposal
 
 Status: **option B chosen by the owner, 2026-10-19. The store (`library.publish`, `library.list`) is built; the bridge from `aad-param`'s component types and the O-Draft merge on load (section 5) are not.** It needs the owner's decision (section 6) because it adds
-record kinds to the shared take-off database, and the kind numbers belong to the contract in the O-CoreOp
-repository (`TAKEOFF-SHILPIDB.md`: kinds 0, 2 and 10 to 255 are reserved; "adding a kind or an optional field is
+record kinds to the shared take-off store, and the kind numbers belong to the contract in the O-CoreOp
+repository (`docs/PROJECT-FILE.md` / bridge docs: kinds 0, 2 and 10 to 255 are reserved; "adding a kind or an optional field is
 not a new version").
 
 It answers one gap in the parametric specification (section 6, milestone M3): component types, parameter
 schemas, materials and finishes are today **code** in `crates/param/src/schema.rs` (`osas.wall` schema 1, four
-materials and three finishes hard-coded). The spec wants them as reusable, versioned definitions in ShilpiDB that
+materials and three finishes hard-coded). The spec wants them as reusable, versioned definitions in a hosted library that
 O-Draft instances reference.
 
 ## 1. What exists
@@ -17,7 +17,7 @@ O-Draft instances reference.
 | `ComponentType` (id, label, `schema_version`, `spec_version`, params, `measurement_rule`) | In code, `osas.wall` v1 only |
 | `ParamDef` (type, required, default, min, max, unit, choices, `affects` geometry / takeoff / specification) | In code |
 | A graph pins `type@schema_version`; an unknown version is refused, never reinterpreted | Built |
-| ShilpiDB storage of take-off records (kinds 1, 3 to 9 with a drawing slot) | Built (`takeoff.record`) |
+| Take-off in the project file (kinds 1, 3 to 9 with a drawing slot) | Built (`takeoff.record`) |
 | A hosted library, materials and finishes as data, presets | **Not built** |
 
 ## 2. Principles
@@ -151,8 +151,7 @@ never by editing.
   write (kind, id shape, revision of at least 1, payload version 1, size limits); a bad request writes nothing.
 - Tests: `crates/engine/tests/library.rs` (publish, list, immutability, new revision, refusal of other databases,
   hostile input, nothing written on a bad request) and unit tests in `cmd/library.rs` (validation, immutability,
-  the probe). One ignored test runs against a real `shilpid`
-  (`AAD_SHILPID_ADDR=127.0.0.1:7432 cargo test -p aad-engine --test library -- --ignored`); it passed.
+  the probe). The former `shilpid` integration test was removed with ShilpiDB; library merge tests remain in `cargo test -p aad-engine --test library`.
 - Not built: serialising `aad-param`'s `component_types()` to kind 2 records (`aad-param` is not yet committed to
   the main line), O-Draft reading the library on load and merging it with the built-ins, materials and finishes
   taken from records by the component selector, and O-CoreOp reading definitions.

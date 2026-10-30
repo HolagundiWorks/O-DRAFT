@@ -8,6 +8,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -19,7 +20,7 @@
             Background="{ThemeResource SurfaceBrush}"
             FontSize="{StaticResource FontSizeBody}"
             AutomationProperties.Name="Menu" />
-        <!-- All tools on one line under the menu: drawing tools, a divider, architecture tools. -->
+        <!-- Standard tools: layer, draw/modify/annotate, architecture (one row under the menu). -->
         <Border x:Name="ToolStripHost" Grid.Row="1" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,0,1" AutomationProperties.Name="Drawing and architecture tools" AutomationProperties.LandmarkType="Navigation">
             <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" Margin="{StaticResource PaddingSm}">
@@ -39,16 +40,19 @@
                     <StackPanel x:Name="ToolStrip" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}" />
                     <Border x:Name="ArchToolsDivider" Style="{StaticResource ArchBarDividerStyle}" Margin="{StaticResource PaddingSm}" Visibility="Collapsed" />
                     <StackPanel x:Name="ArchBar" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center" Height="{StaticResource IconButtonSize}" />
-                    <Border x:Name="TakeoffToolsDivider" Style="{StaticResource ArchBarDividerStyle}" Margin="{StaticResource PaddingSm}" Visibility="Collapsed" />
-                    <StackPanel x:Name="TakeoffBar" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center" Height="{StaticResource IconButtonSize}" />
                 </StackPanel>
             </ScrollViewer>
         </Border>
-        <Grid Grid.Row="2">
-            <!-- Sheet-set rail | (unused tool column) | canvas | splitter | properties (right). -->
+        <!-- Take-off tools on their own row (Classic take-off mode). -->
+        <Border x:Name="TakeoffToolStripHost" Grid.Row="2" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,0,1" Visibility="Collapsed" AutomationProperties.Name="Take-off tools" AutomationProperties.LandmarkType="Navigation">
+            <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
+                <StackPanel x:Name="TakeoffBar" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center" Height="{StaticResource IconButtonSize}" Margin="{StaticResource PaddingSm}" />
+            </ScrollViewer>
+        </Border>
+        <Grid Grid.Row="3">
+            <!-- Sheet-set rail | canvas | splitter | properties (right). -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="RailColumn" Width="Auto" />
-                <ColumnDefinition x:Name="ToolColumn" Width="Auto" />
                 <ColumnDefinition Width="*" MinWidth="{StaticResource FieldWidth}" />
                 <ColumnDefinition x:Name="LeftSplitterColumn" Width="Auto" />
                 <ColumnDefinition x:Name="PropertiesColumn" Width="{StaticResource SidePanelColumnWidth}" MinWidth="0" />
@@ -59,15 +63,9 @@
                     <StackPanel x:Name="SheetRail" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="{StaticResource PaddingSm}" />
                 </ScrollViewer>
             </Border>
-            <!-- Draw, Modify and Annotate tools: two vertical bars on the left (Classic). The top strip keeps the layer box and the architecture tools. -->
-            <Border x:Name="LeftToolHost" Grid.Column="1" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,1,0" AutomationProperties.Name="Draw and modify tools" AutomationProperties.LandmarkType="Navigation">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="LeftToolStack" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="{StaticResource PaddingSm}" />
-                </ScrollViewer>
-            </Border>
-            <Border x:Name="CanvasHost" Grid.Column="2" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
-            <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="3" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
-            <Border x:Name="SideHost" Grid.Column="4" Style="{StaticResource SidePanelChromeStyle}" BorderThickness="1,0,0,0" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited">
+            <Border x:Name="CanvasHost" Grid.Column="1" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
+            <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="2" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
+            <Border x:Name="SideHost" Grid.Column="3" Style="{StaticResource SidePanelChromeStyle}" BorderThickness="1,0,0,0" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited">
             <!-- The open panel, then a rail of panel titles that is always visible (open or collapsed). -->
             <Grid>
             <Grid.ColumnDefinitions>
@@ -273,10 +271,11 @@
             </StackPanel>
         </Border>
         <!-- Level tabs under the drawing; the bar is a row of its own because the canvas is a native child window. -->
-        <Border x:Name="LevelBarHost" Grid.Row="3" Background="{ThemeResource SurfaceStatusBrush}" BorderThickness="0" Padding="{StaticResource PaddingSm}" AutomationProperties.Name="Levels">
+        <Border x:Name="LevelBarHost" Grid.Row="4" Background="{ThemeResource SurfaceStatusBrush}" BorderThickness="0" Padding="{StaticResource PaddingSm}" AutomationProperties.Name="Levels">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
                     <StackPanel x:Name="LevelTabs" Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" AutomationProperties.Name="Level tabs" />
+                    <Button x:Name="MoveToLevelButton" Click="OnMoveToLevel" Content="Move to level…" MinHeight="{StaticResource ControlHeight}" FontSize="{StaticResource FontSizeCaption}" Padding="{StaticResource PaddingControl}" AutomationProperties.Name="Move selection to level" ToolTipService.ToolTip="Move the selection to another level: pick a base point on the drawing, then the matching point (Enter for site origin)" />
                     <Button x:Name="AddLevelButton" Click="OnAddLevel" AutomationProperties.Name="Add level" ToolTipService.ToolTip="Add a level" Style="{StaticResource IconButtonStyle}">
                         <local:DrawnIcon Kind="plus" />
                     </Button>
@@ -284,7 +283,7 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
-        <Border Grid.Row="4" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}">
+        <Border Grid.Row="5" Background="{ThemeResource SurfaceStatusBrush}" BorderBrush="{ThemeResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="{StaticResource PaddingStatus}">
         <Grid x:Name="StatusRow" Style="{StaticResource StatusBarStyle}" ColumnSpacing="{StaticResource SpaceSm}" AutomationProperties.Name="Status">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -399,7 +398,7 @@
         <!-- Welcome: shown after splash until New / Open / Project Wizard (or a launch file opens). -->
         <Grid
             x:Name="WelcomeOverlay"
-            Grid.Row="2"
+            Grid.Row="3"
             Visibility="Collapsed"
             Background="{ThemeResource AppBackgroundBrush}"
             Canvas.ZIndex="400"
@@ -470,7 +469,7 @@
         <!-- Open / save progress over the canvas (worker-thread file IO). -->
         <Grid
             x:Name="BusyOverlay"
-            Grid.Row="2"
+            Grid.Row="3"
             Visibility="Collapsed"
             Background="#99000000"
             Canvas.ZIndex="500"
@@ -512,7 +511,7 @@
             </Border>
         </Grid>
         <!-- In-window splash (avoids a second top-level window fighting the command chrome). -->
-        <Grid x:Name="SplashOverlay" Grid.RowSpan="5" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
+        <Grid x:Name="SplashOverlay" Grid.RowSpan="6" Background="{ThemeResource SplashBackgroundBrush}" Canvas.ZIndex="1000" AutomationProperties.Name="Splash">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">
                 <Image x:Name="SplashLogo" Width="{StaticResource LogoSplash}" Height="{StaticResource LogoSplash}" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
                 <TextBlock Text="O-Draft" FontSize="{StaticResource FontSizeSplashTitle}" FontWeight="SemiBold" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />

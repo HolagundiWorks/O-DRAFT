@@ -2651,9 +2651,12 @@ public sealed partial class MainWindow : Window
         void ShowCommands() => CommandList.Show(this, Native.ReadText(_host, Native.TextMenu));
         commands.Click += (_, _) => ShowCommands();
         BindAccel(commands, "F1", ShowCommands, mapId: "");
+        var updates = new MenuFlyoutItem { Text = "Check for updates?", Tag = "shell.updates", FontSize = Density.FontBody };
+        updates.Click += async (_, _) => await ShowUpdateCheckAsync();
         var about = new MenuFlyoutItem { Text = "About O-Draft", Tag = "shell.about", FontSize = Density.FontBody };
         about.Click += (_, _) => AboutWindow.Show(this, VersionText());
         help.Items.Add(commands);
+        help.Items.Add(updates);
         help.Items.Add(about);
         EnsureShellMenus();
     }
@@ -2672,6 +2675,28 @@ public sealed partial class MainWindow : Window
         {
         }
         return "";
+    }
+
+    private async Task ShowUpdateCheckAsync()
+    {
+        var fromHost = VersionText();
+        var fromAsm = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var current = fromHost.Length > 0 ? fromHost : fromAsm;
+        var result = await UpdateCheck.CheckAsync(current);
+        var body = new StackPanel { Spacing = Density.SpaceSm, MaxWidth = 400 };
+        body.Children.Add(new TextBlock { Text = result.Message, TextWrapping = TextWrapping.WrapWholeWords, FontSize = Density.FontBody });
+        body.Children.Add(Density.Secondary(
+            "Updates are not installed automatically. See the suite packaging notes for signing and the shared channel JSON.",
+            TextWrapping.WrapWholeWords));
+        var dlg = new ContentDialog
+        {
+            Title = result.UpdateAvailable ? "Update available" : "Check for updates",
+            Content = body,
+            CloseButtonText = "Close",
+            XamlRoot = Content.XamlRoot,
+            DefaultButton = ContentDialogButton.Close,
+        };
+        await dlg.ShowAsync();
     }
 
     private MenuFlyoutItemBase MakeItem(MenuNode node, int depth)
@@ -5463,8 +5488,7 @@ public sealed partial class MainWindow : Window
     private void BuildTools()
     {
         ToolStrip.Children.Clear();
-        LeftToolStack.Children.Clear();
-        // Draw · Modify · Annotate — thin dividers between sections (suite icon tile 36 / glyph 20).
+        // Draw · Modify · Annotate on the top tool strip (horizontal groups).
         string[][] groups =
         [
             ["line", "pline", "circle", "arc", "rectang"],
@@ -5481,7 +5505,7 @@ public sealed partial class MainWindow : Window
             }
             if (!first)
             {
-                LeftToolStack.Children.Add(MakeToolRule());
+                ToolStrip.Children.Add(MakeToolDivider());
             }
             first = false;
             foreach (var id in visible)
@@ -5490,9 +5514,10 @@ public sealed partial class MainWindow : Window
                 var command = id;
                 var button = MakeToolTile(ToolIcons.For(id, _dark), label);
                 button.Click += (_, _) => StartCommand(command);
-                LeftToolStack.Children.Add(button);
+                ToolStrip.Children.Add(button);
             }
         }
+        ToolStrip.Children.Add(MakeToolDivider());
         var gear = MakeToolTile(ToolIcons.For("gear", _dark), "Customize tool bar");
         gear.Click += (_, _) => OpenTools();
         ToolStrip.Children.Add(gear);
@@ -5607,6 +5632,70 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Run a take-off engine command with JSON parameters and show counts in the status strip.</summary>
+    private void RunTakeoffCommand(string id, string json = "{}", bool remapForce = false)
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        if (remapForce)
+        {
+            json = "{\"force\":true}";
+        }
+        if (Native.Execute(_host, id, json) != 0)
+        {
+            History.Text = Native.LastError(_host);
+            return;
+        }
+        History.Text = SummarizeTakeoffResult(id, Native.ReadResult(_host));
+        AfterCommand();
+    }
+
+    private static string SummarizeTakeoffResult(string id, string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return id + " finished.";
+        }
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (id == "takeoff.maplayers")
+            {
+                var tagged = root.TryGetProperty("tagged", out var t) ? t.GetInt32() : 0;
+                var skipped = root.TryGetProperty("skipped", out var s) ? s.GetInt32() : 0;
+                if (tagged == 0 && skipped > 0)
+                {
+                    return $"Map layers: 0 new ( {skipped} already had take-off metadata). Hold Shift and click Map layers to re-stamp, or draw with Ext/Int wall tools.";
+                }
+                return $"Map layers: {tagged} stamped, {skipped} skipped.";
+            }
+            if (root.TryGetProperty("written", out var w))
+            {
+                return $"Take-off recorded ({w.GetInt32()} records).";
+            }
+            if (root.TryGetProperty("totals", out _))
+            {
+                return id + " finished ? see command log for totals.";
+            }
+        }
+        catch (JsonException)
+        {
+        }
+        return id + " finished.";
+    }
+
+    private void SyncTakeoffToProject()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        RunTakeoffCommand("takeoff.record", "{\"annotate\":false}");
+    }
+
     private void RebuildTakeoffBar()
     {
         TakeoffBar.Children.Clear();
@@ -5629,6 +5718,7 @@ public sealed partial class MainWindow : Window
                 ("column.deduct", "Col deduct", null, "column.deduct"),
             ],
             [
+                ("takeoff.sync", "Sync take-off", null, "__takeoff_sync__"),
                 ("takeoff.record", "Record", null, "takeoff.record"),
                 ("takeoff.maplayers", "Map layers", null, "takeoff.maplayers"),
             ],
@@ -5646,7 +5736,7 @@ public sealed partial class MainWindow : Window
                 var button = MakeTextTool(label);
                 var k = kind;
                 var cmd = command;
-                button.Click += (_, _) =>
+                button.Click += (_, e) =>
                 {
                     if (k != null)
                     {
@@ -5654,7 +5744,14 @@ public sealed partial class MainWindow : Window
                     }
                     else if (cmd != null)
                     {
-                        StartCommand(cmd);
+                        if (cmd == "__takeoff_sync__")
+                        {
+                            SyncTakeoffToProject();
+                            return;
+                        }
+                        var forceRemap = cmd == "takeoff.maplayers" && (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
+                            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down));
+                        RunTakeoffCommand(cmd, remapForce: forceRemap);
                     }
                 };
                 TakeoffBar.Children.Add(button);
@@ -5900,8 +5997,6 @@ public sealed partial class MainWindow : Window
     {
         // Pro hides the tool strip; Classic honours the per-mode toolbar switch.
         var tools = _classic && _showTools;
-        ToolColumn.Width = tools ? GridLength.Auto : new GridLength(0);
-        LeftToolHost.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
         var takeoff = tools && _takeoffMode;
         TakeoffModeButton.IsChecked = _takeoffMode;
         ToolStripHost.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
@@ -5913,15 +6008,14 @@ public sealed partial class MainWindow : Window
         {
             RebuildTakeoffBar();
         }
-        // The tool strip (drawing and architecture tools) is Classic only.
         if (ArchToolsDivider != null)
         {
             ArchToolsDivider.Visibility = tools && ArchBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         ArchBar.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
-        if (TakeoffToolsDivider != null)
+        if (TakeoffToolStripHost != null)
         {
-            TakeoffToolsDivider.Visibility = takeoff && TakeoffBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            TakeoffToolStripHost.Visibility = takeoff && TakeoffBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         TakeoffBar.Visibility = takeoff ? Visibility.Visible : Visibility.Collapsed;
         // A panel is open until its title is clicked again (or, unpinned, until the pointer has been
@@ -6106,15 +6200,15 @@ public sealed partial class MainWindow : Window
 
     private void CheckItem(MenuBarItem menu, string label, Func<bool> read, Action<bool> write)
     {
-        var item = new MenuFlyoutItem
+        var item = new ToggleMenuFlyoutItem
         {
-            Text = (read() ? "? " : "") + label,
+            Text = label,
             Tag = "shell.toggle." + label,
+            IsChecked = read(),
         };
         item.Click += (_, _) =>
         {
-            write(!read());
-            item.Text = (read() ? "? " : "") + label;
+            write(item.IsChecked);
             ApplyChrome();
             SaveShell();
         };

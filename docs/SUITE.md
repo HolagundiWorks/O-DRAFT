@@ -20,13 +20,12 @@ Other names:
 | Term | Meaning |
 |---|---|
 | **Company file** | One file per practice, `.osas` (earlier `.adms` opens too). SQLite, optionally encrypted (`AOSENC1`). Chosen and created only in OSAS; opened read-write by O-Studio, read-only for details by O-CoreOp and O-Draft |
-| **Project file** | `.osp`. One SQLite file per project holding the drawing, the take-off and the project record. Format name `osas-project`, version 1. Replaces ShilpiDB for projects. (`.odp` was the working name and clashed with LibreOffice Impress; it is not used) |
+| **Project file** | `.osp`. One SQLite file per project holding the drawing, the take-off and the project record. Format name `osas-project`, version 1. (`.odp` was the working name and clashed with LibreOffice Impress; it is not used) |
 | **Take-off** | Quantities measured from a drawing. Recorded by O-Draft into the project file; read by O-CoreOp |
 | **Revision** | The counter inside a project file (`meta.revision`). Every save by any program is one revision. Apps compare revisions to know someone else wrote |
 | **Active-project pointer** | `%LOCALAPPDATA%\OSAS\active-project.json`, written by O-Draft: which project file is open there, so O-CoreOp can open the same one |
 | **Ticket** | One-time sign-in token OSAS gives an app it starts: 32 random bytes, two minutes, one use. The password is never passed on |
 | **Persona** | In O-CoreOp, Project Manager/PMC or Contractor: each has its own letterhead and numbering |
-| **ShilpiDB** | The old spatial store (`.vdb`, `shilpid`). **Retired and removed** from O-Draft, O-CoreOp, OSAS and the installers. No conversion exists or is needed: no production project was ever created in it. Its record layout survives as the take-off tables of the `.osp` |
 
 ## 2. Hierarchy
 
@@ -49,7 +48,7 @@ OSAS (launcher, company sign-in)                          <- which company, who 
  +-- Viewer (planned: tablet/phone)  views and marks up the synced project
 ```
 
-Rule: **a project's data lives in its `.osp`; the practice's data lives in the company file; nothing else is a source of truth.** Cloud (Supabase) is a master copy that O-Studio syncs; the apps never hold cloud keys.
+Rule: **a project's data lives in its `.osp`; the practice's data lives in the company file; nothing else is a source of truth.** Cloud (**Neon** — Lakebase Postgres and Object Storage) is a master copy that O-Studio syncs; the apps never hold cloud keys.
 
 ## 3. Roles
 
@@ -72,8 +71,8 @@ Users are added, re-roled and re-passworded in OSAS (Company > Users), each chan
 | Region | Contents |
 |---|---|
 | Menu bar | File, Edit, View, Insert, Format, Tools, Draw, Dimension, Modify, Architecture, Window, Help |
-| Left tool stack | Draw, Modify, Annotate toolbars (vertical) |
-| Top strip | Layer box, architecture tools, gear (View > Customize Top Bar). **Take-off tools (Ext wall, Int wall, Beam, Floor, Ceiling, Column, Deduct, Paint, Openings, Record, Map layers) show only while Take-off is on** |
+| Top tool strip (row 1) | Layer box, **Draw / Modify / Annotate** (horizontal), architecture tools, gear (View > Customize Top Bar) |
+| Take-off strip (row 2) | **Take-off tools only** (Ext wall, Int wall, Beam, … Record, Map layers, phase pickers) while **Take-off** is on in Classic workspace |
 | Right | Layers / Properties / Blocks tabbed stack |
 | Bottom bar | Snap/ortho/polar toggles, coordinates, units, **Take-off toggle** (next to Nameplate) |
 | File | Open/Save as `.dwg`, `.dxf` or **`.osp`** (Project: drawing and take-off) |
@@ -114,7 +113,7 @@ Cards for each installed app with version and Open; Company section (choose/crea
 | O-Draft -> O-CoreOp | Both open the **same `.osp`**. O-Draft's `takeoff.record` writes headers/rows/annotated PDF in one revision; O-CoreOp polls `meta.revision` every 2 s and notifies | about 2 s, no server |
 | O-Draft -> O-CoreOp (which file) | Active-project pointer: `{format:"osas-active-project", app, drawing, project, updated_utc}` | on drawing change |
 | Two programs, one file | SQLite WAL, immediate write transactions, 5 s busy timeout: writers take turns, every commit is exactly one revision, readers never block (tested with 4 writers x 40 commits) | immediate |
-| Machine -> machine | O-Studio syncs `.osp` with Supabase by revision (**planned**); a viewer on tablet/phone reads what Studio pushed and sends markups back | realtime via Supabase |
+| Machine -> machine | O-Studio syncs `.osp` with **Neon** by revision (**planned**); a viewer on tablet/phone reads what Studio pushed and sends markups back | Postgres revision + Object Storage |
 
 Both apps share one format library: Rust `aad-odp` (O-Draft) and .NET `Office.Shared.OdpFile` (O-CoreOp), kept compatible by tests that read each other's files.
 
@@ -129,6 +128,7 @@ Saving: O-Draft writes the drawing back into the `.osp` only when its bytes chan
 | Company file ABI | O-Studio `docs/office-abi.md` |
 | O-Draft UI, commands, performance | O-Draft `docs/UI_UX.md`, `docs/PERFORMANCE.md`, `docs/PERFORMANCE-AUDIT-2026-10-30.md` |
 | O-CoreOp shell, model, take-off | O-CoreOp `docs/WINUI-SHELL.md`, `docs/LOCAL-MODEL.md`, `docs/PROJECT-FILE.md` |
+| ShilpiDB → `.osp` migration checklist | Each app repo `docs/MIGRATION-OSP.md` |
 | Installers | O-Studio `installer/suite/README.md`; O-CoreOp `docs/PACKAGING.md`, `docs/SUITE-PACKAGING.md` |
 
 ## 7. Conventions

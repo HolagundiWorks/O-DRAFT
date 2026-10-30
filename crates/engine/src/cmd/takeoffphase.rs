@@ -4,7 +4,7 @@
 //! phase is a name from a list the project keeps (`takeoff.phases`). The *current* phase is stamped on every
 //! dimension drawn or tagged afterwards, and `takeoff.phase` changes it on dimensions already measured. The
 //! phases travel on the take-off mark (`phase`, `billPhase`) and on every exported row (`phase`, `bill_phase`);
-//! see `docs/takeoff-shilpidb.md`.
+//! Phase lists on take-off rows; O-CoreOp may show them as columns when imported.
 
 use aad_doc::{Drawing, Handle};
 use serde_json::{Value, json};

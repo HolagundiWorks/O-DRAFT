@@ -1,8 +1,10 @@
-# O-Draft WinUI screen inventory
+﻿# O-Draft WinUI screen inventory
 
 Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` `CommandSpec::menu()` (via `crates/aad-host/src/chrome.rs` → host `TextMenu` JSON).
 
 **Testing status:** all rows default to `not_tested` (no pass/fail claimed). **Evidence:** — until linked from the QA campaign.
+
+**Retired (2026-10):** ShilpiDB / `vdb.*` UI rows were removed from this inventory when take-off moved into `.osp`.
 
 | ID | Surface | Type | Source file | How opened | Testing status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -34,7 +36,6 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | main.status.workspace | Classic / Pro workspace | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (WorkspaceButton) | Status bar; Ctrl+F11 toggle | not_tested | — |
 | main.status.theme | Light / dark theme | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (ThemeButton) | Status bar | not_tested | — |
 | main.status.ai-chip | AI assistant chip | status | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (AiChip) | Focus Ask bar (CommandChrome host window) | not_tested | — |
-| main.status.shilpi-chip | ShilpiDB connection chip + flyout | menu | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs OnShilpiChip | Status bar when visible; MenuFlyout for vdb.* commands | not_tested | — |
 | main.ask-bar | Ask pill / AI prompt (hosted in separate HWND) | overlay | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/CommandChrome.cs; MainWindow.xaml (CommandBar, AskInputPill) | Ctrl+9 toggle command line area; AI chip; assistant mode | not_tested | — |
 | main.ask-history | Command history list (Ask bar) | overlay | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (HistoryList) | F2 toggles command history open state | not_tested | — |
 | main.ask-assistant | Allow / Decline assistant tools | overlay | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml (AssistantButtons) | When host reports pending assistant action | not_tested | — |
@@ -120,8 +121,6 @@ Scope: `apps/aad-winui` (WinUI 3 shell). Engine menu paths from `crates/engine` 
 | picker.save | File Save | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | Menu File ▸ Save; Ctrl+S | not_tested | — |
 | picker.save-as | File Save As | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | Menu File ▸ Save As | not_tested | — |
 | picker.plot-pdf | Plot PDF save | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | Plot/exportpdf flow → FileSavePicker `.pdf` | not_tested | — |
-| picker.vdb-import | ShilpiDB import .vdb | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | Menu / `vdb.import` | not_tested | — |
-| picker.vdb-export | ShilpiDB export .vdb | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | Menu / `vdb.export` | not_tested | — |
 | picker.pdf-open | Open PDF from preview | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/MainWindow.xaml.cs | PDF preview toolbar | not_tested | — |
 | form.project | Form dialog: Project Settings | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id project) | Command project (or alias) when engine returns form JSON | not_tested | — |
 | form.floors | Form dialog: Floors | dialog | D:/Work Development/Repos/O-DRAFT/apps/aad-winui/FormDialog.cs; crates/engine/src/forms.rs (id floors) | Command floors (or alias) when engine returns form JSON | not_tested | — |
@@ -266,7 +265,7 @@ Populated at runtime from host menu JSON (`BuildMenus()`). Top-level order: File
 | menu.takeoff.list | Architecture > Take-off > List | menu | crates/engine/src/cmd/takeoff.rs (+ host chrome) | Menu bar path; command id takeoff.list via StartCommand / accelerator | not_tested | — |
 | menu.underlay.list | Architecture > Take-off > List PDF Underlays | menu | crates/engine/src/cmd/underlay.rs (+ host chrome) | Menu bar path; command id underlay.list via StartCommand / accelerator | not_tested | — |
 | menu.takeoff.rates | Architecture > Take-off > Rates | menu | crates/engine/src/cmd/schedule.rs (+ host chrome) | Menu bar path; command id takeoff.rates via StartCommand / accelerator | not_tested | — |
-| menu.takeoff.record | Architecture > Take-off > Record in ShilpiDB | menu | crates/engine/src/cmd/takeoffrec.rs (+ host chrome) | Menu bar path; command id takeoff.record via StartCommand / accelerator | not_tested | — |
+| menu.takeoff.record | Architecture > Take-off > Record in project file (.osp) | menu | crates/engine/src/cmd/takeoffrec.rs (+ host chrome) | Menu bar path; command id takeoff.record via StartCommand / accelerator | not_tested | — |
 | menu.takeoff.rects | Architecture > Take-off > Rectangles | menu | crates/engine/src/cmd/takeoff.rs (+ host chrome) | Menu bar path; command id takeoff.rects via StartCommand / accelerator | not_tested | — |
 | menu.underlay.remove | Architecture > Take-off > Remove PDF Underlay | menu | crates/engine/src/cmd/underlay.rs (+ host chrome) | Menu bar path; command id underlay.remove via StartCommand / accelerator | not_tested | — |
 | menu.takeoff.restore | Architecture > Take-off > Restore Tables | menu | crates/engine/src/cmd/takeoff.rs (+ host chrome) | Menu bar path; command id takeoff.restore via StartCommand / accelerator | not_tested | — |
@@ -372,10 +371,8 @@ Populated at runtime from host menu JSON (`BuildMenus()`). Top-level order: File
 | menu.drawing.revision | File > Close All | menu | crates/engine/src/cmd/file.rs (+ host chrome) | Menu bar path; command id drawing.revision via StartCommand / accelerator | not_tested | — |
 | menu.audit | File > Drawing Utilities > Audit | menu | crates/engine/src/cmd/audit.rs (+ host chrome) | Menu bar path; command id audit via StartCommand / accelerator | not_tested | — |
 | menu.recover | File > Drawing Utilities > Recover... | menu | crates/engine/src/cmd/audit.rs (+ host chrome) | Menu bar path; command id recover via StartCommand / accelerator | not_tested | — |
-| menu.vdb.export | File > Export > ShilpiDB (.vdb)… | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.export via StartCommand / accelerator | not_tested | — |
 | menu.exportpdf | File > Export to PDF... | menu | crates/engine/src/cmd/layout.rs (+ host chrome) | Menu bar path; command id exportpdf via StartCommand / accelerator | not_tested | — |
 | menu.export | File > Export... | menu | crates/engine/src/cmd/extract.rs (+ host chrome) | Menu bar path; command id export via StartCommand / accelerator | not_tested | — |
-| menu.vdb.import | File > Import > ShilpiDB (.vdb)… | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.import via StartCommand / accelerator | not_tested | — |
 | menu.new | File > New Drawing... | menu | crates/engine/src/cmd/file.rs (+ host chrome) | Menu bar path; command id new via StartCommand / accelerator | not_tested | — |
 | menu.project.setup | File > New Project | menu | crates/engine/src/cmd/projfile.rs (+ host chrome) | Menu bar path; command id project.setup via StartCommand / accelerator | not_tested | — |
 | menu.project.open | File > Open Project | menu | crates/engine/src/cmd/projfile.rs (+ host chrome) | Menu bar path; command id project.open via StartCommand / accelerator | not_tested | — |
@@ -385,13 +382,6 @@ Populated at runtime from host menu JSON (`BuildMenus()`). Top-level order: File
 | menu.plot.window | File > Print... | menu | crates/engine/src/cmd/layout.rs (+ host chrome) | Menu bar path; command id plot.window via StartCommand / accelerator | not_tested | — |
 | menu.qsave | File > Save | menu | crates/engine/src/cmd/file.rs (+ host chrome) | Menu bar path; command id qsave via StartCommand / accelerator | not_tested | — |
 | menu.saveas | File > Save As... | menu | crates/engine/src/cmd/file.rs (+ host chrome) | Menu bar path; command id saveas via StartCommand / accelerator | not_tested | — |
-| menu.vdb.info | File > ShilpiDB > Connect… | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.info via StartCommand / accelerator | not_tested | — |
-| menu.vdb.convert | File > ShilpiDB > Convert / Push to ShilpiDB | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.convert via StartCommand / accelerator | not_tested | — |
-| menu.vdb.disconnect | File > ShilpiDB > Disconnect | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.disconnect via StartCommand / accelerator | not_tested | — |
-| menu.vdb.pull | File > ShilpiDB > Pull into drawing | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.pull via StartCommand / accelerator | not_tested | — |
-| menu.vdb.push | File > ShilpiDB > Push drawing | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.push via StartCommand / accelerator | not_tested | — |
-| menu.vdb.sidecar | File > ShilpiDB > Sidecar on save | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.sidecar via StartCommand / accelerator | not_tested | — |
-| menu.vdb.status | File > ShilpiDB > Status | menu | crates/engine/src/cmd/vdb.rs (+ host chrome) | Menu bar path; command id vdb.status via StartCommand / accelerator | not_tested | — |
 | menu.hcwlayers | Format > Architectural Layer Set | menu | crates/engine/src/cmd/hcw.rs (+ host chrome) | Menu bar path; command id hcwlayers via StartCommand / accelerator | not_tested | — |
 | menu.color | Format > Color... | menu | crates/engine/src/cmd/props.rs (+ host chrome) | Menu bar path; command id color via StartCommand / accelerator | not_tested | — |
 | menu.style.list | Format > Dimension Style... | menu | crates/engine/src/cmd/props.rs (+ host chrome) | Menu bar path; command id style.list via StartCommand / accelerator | not_tested | — |

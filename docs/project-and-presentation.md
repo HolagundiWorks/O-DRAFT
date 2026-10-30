@@ -38,7 +38,7 @@ profile loader that only mirrors Studio.
 | Other vector files | DXF and DWG open, and `underlay.attach` reads a PDF page as paths. SVG import does not exist |
 | Mood boards | Depends on raster images in layouts |
 | Tables from CSV or spreadsheets | `EntityKind::Table` exists and is drawn, but nothing creates one from a file |
-| Tables linked to ShilpiDB so a parameter change updates them | Not designed. `vdb.*` exchanges drawing entities, not table values. Needs a decision on what a table cell links to |
+| Tables linked to project parameters so a parameter change updates them | Not designed. Needs a decision on what a table cell links to |
 
 Open questions for the owner: which image formats and decoder crate (licence and wasm check), whether
-images are embedded in the file or referenced by path, and what a ShilpiDB-linked cell refers to.
+images are embedded in the file or referenced by path, and what a linked table cell refers to.

@@ -52,6 +52,7 @@ public sealed partial class MainWindow
 
     private string _levelKey = "";
     private string _sheetKey = "";
+    private List<LevelTab> _cachedLevels = new();
 
     private void ShowLevelBars(ChromeState state)
     {
@@ -68,6 +69,7 @@ public sealed partial class MainWindow
             return;
         }
         _levelKey = key;
+        _cachedLevels = state.Levels.ToList();
         LevelTabs.Children.Clear();
         foreach (var level in state.Levels.ToList())
         {
@@ -347,6 +349,8 @@ public sealed partial class MainWindow
         FormDialog.Show(this, _host, form, AfterCommand);
     }
 
+    private void OnMoveToLevel(object sender, RoutedEventArgs e) => BeginMoveSelectionToLevel();
+
     /// <summary>Open the engine form <paramref name="id"/> for one level.</summary>
     private void StartLevelForm(string id, LevelTab level)
     {
@@ -423,5 +427,46 @@ public sealed partial class MainWindow
             return;
         }
         AfterCommand();
+    }
+
+    /// <summary>Pick a target level, then base and match points on the drawing (<c>level.moveto</c> form).</summary>
+    private void BeginMoveSelectionToLevel()
+    {
+        if (_host == IntPtr.Zero)
+        {
+            return;
+        }
+        var targets = _cachedLevels.Where(l => !l.Active).ToList();
+        if (targets.Count == 0)
+        {
+            History.Text = "Add another level first, or right-click a level tab and choose Send selection here.";
+            return;
+        }
+        var menu = new MenuFlyout { Placement = FlyoutPlacementMode.TopEdgeAlignedLeft };
+        foreach (var level in targets)
+        {
+            var item = new MenuFlyoutItem { Text = level.Name };
+            var id = level.Id;
+            item.Click += (_, _) => StartLevelSend("level.moveto", id);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new MenuFlyoutSeparator());
+        var copy = new MenuFlyoutItem { Text = "Copy selection to level…" };
+        copy.Click += (_, _) => ShowCopyToLevelMenu(targets);
+        menu.Items.Add(copy);
+        menu.ShowAt(MoveToLevelButton, new FlyoutShowOptions { Placement = FlyoutPlacementMode.Top });
+    }
+
+    private void ShowCopyToLevelMenu(List<LevelTab> targets)
+    {
+        var menu = new MenuFlyout();
+        foreach (var level in targets)
+        {
+            var item = new MenuFlyoutItem { Text = level.Name };
+            var id = level.Id;
+            item.Click += (_, _) => StartLevelSend("level.copyto", id);
+            menu.Items.Add(item);
+        }
+        menu.ShowAt(MoveToLevelButton, new FlyoutShowOptions { Placement = FlyoutPlacementMode.Top });
     }
 }

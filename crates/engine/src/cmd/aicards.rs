@@ -130,7 +130,7 @@ pub fn context_cards(s: &Session, p: &Value) -> Result<Value> {
     Ok(out)
 }
 
-/// One compact card for prompts / Shilpi-style reasoning.
+/// One compact card for prompts / structured reasoning.
 pub fn context_card(d: &Drawing, e: &Entity) -> Value {
     let b = aad_doc::entity_bounds(d, e, 0);
     let mut card = json!({

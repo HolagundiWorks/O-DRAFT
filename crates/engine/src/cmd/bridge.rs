@@ -144,7 +144,7 @@ pub(crate) struct Collected {
     pub counts: Value,
 }
 
-/// The kinds of take-off record ([TAKEOFF-SHILPIDB.md] in the O-CoreOp repository holds the layout).
+/// The kinds of take-off record (O-CoreOp `OspTakeoff` / `.osp` takeoff rows).
 pub(crate) const KIND_WALL: u8 = 3;
 pub(crate) const KIND_OPENING: u8 = 4;
 pub(crate) const KIND_COLUMN: u8 = 5;

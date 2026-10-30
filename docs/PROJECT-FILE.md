@@ -1,6 +1,6 @@
 # The project file (.osp) in O-Draft
 
-A project file is one SQLite file with the drawing, the take-off and the project record (format `osas-project` v1). O-Draft and O-CoreOp open the same file. Suite-wide names, roles and links: [SUITE.md](SUITE.md). Format and sync plan: O-Studio repository `docs/ODP-PROJECT-FILE-AND-SYNC.md`.
+A project file is one SQLite file with the drawing, the take-off and the project record (format `osas-project` v1). O-Draft and O-CoreOp open the same file. **Migration from ShilpiDB / `.vdb`:** [MIGRATION-OSP.md](MIGRATION-OSP.md). Suite-wide names, roles and links: [SUITE.md](SUITE.md). Format and sync plan: O-Studio repository `docs/ODP-PROJECT-FILE-AND-SYNC.md`.
 
 | Part | Where |
 |---|---|

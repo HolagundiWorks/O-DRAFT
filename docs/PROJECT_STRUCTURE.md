@@ -44,7 +44,7 @@ Generated and ignored (see `.gitignore`): `target/` (Cargo build output), `dist/
 | `aad-host` | C ABI, registry menu, command line, pointer input, and Win32 child window for the WinUI shell. `apps/aad-winui` is the C# project and is excluded from the Cargo workspace |
 | `mcp`, `agent`, `auditor`, `llm` | MCP server, allow-listed tool layer, Auditor v0 detect-only checks, model runtime facade |
 | `office` | Loads the OSAS `office.dll` at run time (Windows) and reads the company file; the `companyfile` command uses it |
-| `vdb` (`aad-vdb`) | `.vdb` store on ShilpiDB: `file.rs` (embedded codec and `SpatialGrid`), `client.rs` (`VdbClient` for a running `shilpid`). A library, not a program; the engine commands `vdb.export`, `vdb.info` and `vdb.query` use it |
+| `odp` (`aad-odp`) | Project file (`.osp`): drawing, take-off, history, assets; `takeoff.record` writes take-off rows here ([PROJECT-FILE.md](PROJECT-FILE.md)) |
 | `param` (`aad-param`) | Parametric graph engine: `graph.rs`, `nodes.rs`, `schema.rs`, `units.rs`, `formula.rs`, `eval.rs`, `template.rs`; no drawing I/O. Engine `param.*` commands commit walls and take-off facts ([parametric.md](parametric.md)) |
 
 ## Entry points
@@ -52,7 +52,7 @@ Generated and ignored (see `.gitignore`): `target/` (Cargo build output), `dist/
 | Binary | File |
 |---|---|
 | `aad` (shipped as `o-draft.exe`) | `apps/aad/src/main.rs` (the DWG worker mode is handled first in `main`). On Windows the default binary only starts `ODraft.WinUi.exe` (or the older `Aad.WinUi.exe`) beside it or under `target/aad-winui`, and does not link eframe; `--features egui` plus `--egui` is the optional egui shell. Non-Windows always links egui/eframe |
-| `aad-vdb` | `crates/vdb` — ShilpiDB-backed `.vdb` file (format v2) + `VdbClient`; engine commands `vdb.export` / `import` / `info` / `query` / `connect` / `disconnect` / `push` / `pull` / `sidecar` / `status` |
+| `aad-odp` | `crates/odp` — `.osp` project file; take-off and drawing bundle; engine commands `takeoff.record` / project open-save |
 | `aad-param` | `crates/param` — parametric graph library; engine commands `param.*` ([parametric.md](parametric.md)) |
 | `ODraft.WinUi.exe` | `apps/aad-winui` (C#, not a Cargo member; assembly `ODraft.WinUi`, namespace `Aad.WinUi`) |
 | `aad-cli` | `apps/aad-cli/src/main.rs` |

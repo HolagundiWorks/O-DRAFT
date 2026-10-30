@@ -232,7 +232,7 @@ internal static class GraphWindow
 #if ODRAFT_GRAPH
             _graphStatus.Text = "Nodes: edit cards, Evaluate (ghost on canvas), then Commit.";
 #else
-            _graphStatus.Text = "Rebuild with sibling O-Dynamo for in-process evaluate, or Connect Companion.";
+            _graphStatus.Text = "Evaluate runs through the engine (companion.evaluate). Optional: rebuild with sibling O-Dynamo for in-process GraphEngine.";
 #endif
         }
 

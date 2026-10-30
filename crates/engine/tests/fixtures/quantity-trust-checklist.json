@@ -1,6 +1,6 @@
 {
   "name": "quantity-trust-checklist",
-  "description": "Known wall/opening numbers for Draft→ShilpiDB→CoreOp quantity trust. Asserted by crates/engine/tests/quantity_trust.rs and mirrored in O-CoreOp CadImport.Tests.",
+  "description": "Known wall/opening numbers for Draft→.osp→CoreOp quantity trust. Asserted by crates/engine/tests/quantity_trust.rs and mirrored in O-CoreOp CadImport.Tests.",
   "project_ref": { "v": 1, "company_uuid": "quantity-trust-co", "project_id": 42 },
   "level": "Ground",
   "walls": [

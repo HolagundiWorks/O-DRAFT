@@ -1,0 +1,11 @@
+---
+description: Planned .osp cloud sync uses Neon (Lakebase Postgres), not Supabase. O-Studio owns the connector; Draft and CoreOp stay offline-first.
+alwaysApply: true
+---
+
+# Cloud sync (Neon)
+
+- **Backend:** [Neon](https://neon.tech) — **Lakebase Postgres**, **Object Storage** (`.osp` snapshots and large assets), **Neon Auth** or the existing company sign-in for the viewer (decide in O-Studio before shipping).
+- **Owner:** Only **O-Studio** talks to Neon. **O-Draft** and **O-CoreOp** open the local `.osp` only; they never hold cloud keys.
+- **Spec:** O-Studio `docs/ODP-PROJECT-FILE-AND-SYNC.md`. Canonical suite terms: `docs/SUITE.md` (keep copies in all app repos in sync).
+- **Agents:** Use the **neon-postgres** Cursor plugin (Neon MCP + skills) for schema, branches, and Postgres work on the sync service.

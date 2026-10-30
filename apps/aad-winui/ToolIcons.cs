@@ -306,7 +306,6 @@ internal static partial class ToolIcons
                 pen.Arc(11, 12, 7, 70, 290, pen.BaseBrush);
                 pen.Arc(14, 12, 5.5, 100, 260, pen.BaseBrush);
                 break;
-            case "shilpi":
             case "db":
                 // Cylinder (distinct from the concentric AI agent mark).
                 pen.Box(5, 7, 14, 10, pen.BaseBrush);

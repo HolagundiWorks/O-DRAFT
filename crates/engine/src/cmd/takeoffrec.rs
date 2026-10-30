@@ -1,6 +1,6 @@
 //! `takeoff.record`: the take-off as records in the project file, for O-CoreOp to read.
 //!
-//! The record layout is `TAKEOFF-SHILPIDB.md` in the O-CoreOp repository, version 1 (revised 2026-10-19). One project file
+//! The record layout matches O-CoreOp `OspTakeoff` / `.osp` `takeoff_*` tables, version 1 (revised 2026-10-19). One project file
 //! holds many drawings, so every record id is `(kind << 56) | (slot << 32) | n`: the kind (1 header, 3 wall,
 //! 4 opening, 5 column, 6 lintel, 7 room, 8 slab, 9 annotated-PDF chunk), the drawing's slot and the item's
 //! number. The slot comes from the drawing id (`slot_for`), is probed past a slot another drawing holds, and is
@@ -22,7 +22,7 @@ use super::bridge::{
 use super::*;
 use crate::{Result, Session};
 
-const FORMAT: &str = "hcw-takeoff-shilpi";
+const HEADER_FORMAT_WIRE: &str = "hcw-takeoff-shilpi";
 const KIND_HEADER: u8 = 1;
 /// An annotated-PDF chunk.
 pub(crate) const KIND_PDF: u8 = 9;
@@ -72,7 +72,7 @@ pub(crate) fn load_tables(s: &Session, p: &Value) -> Result<Value> {
             }
             let Some(p) = sink.payload(id)? else { continue };
             let Ok(v) = serde_json::from_slice::<Value>(&p) else { continue };
-            if v.get("format").and_then(Value::as_str) == Some(FORMAT) && v.get("state").and_then(Value::as_str) == Some("complete") {
+            if v.get("format").and_then(Value::as_str) == Some(HEADER_FORMAT_WIRE) && v.get("state").and_then(Value::as_str) == Some("complete") {
                 found = Some(slot_of(id));
                 break;
             }
@@ -201,7 +201,7 @@ pub(crate) fn header(root: &Map<String, Value>, complete: bool, pdf: Option<&Val
         }
     }
     let mut h = Map::new();
-    h.insert("format".into(), json!(FORMAT));
+    h.insert("format".into(), json!(HEADER_FORMAT_WIRE));
     h.insert("version".into(), json!(1));
     h.insert("units".into(), json!("mm"));
     h.insert("state".into(), json!(if complete { "complete" } else { "recording" }));
@@ -386,7 +386,7 @@ fn warn_record_overlap(sink: &mut dyn Sink, our_slot: u32, root: &Map<String, Va
         }
         let Some(p) = sink.payload(id)? else { continue };
         let Ok(header) = serde_json::from_slice::<Value>(&p) else { continue };
-        if header.get("format").and_then(Value::as_str) != Some(FORMAT) {
+        if header.get("format").and_then(Value::as_str) != Some(HEADER_FORMAT_WIRE) {
             continue;
         }
         if header.get("state").and_then(Value::as_str) != Some("complete") {

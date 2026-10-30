@@ -1,0 +1,12 @@
+takeoff.start {}
+openings.deduct {}
+takeoff.brick {"table":false}
+takeoff.beams {"table":false}
+takeoff.columns {"table":false}
+takeoff.rects {"table":false}
+takeoff.paint {"table":false}
+takeoff.ceiling {"table":false}
+takeoff.floor {"table":false}
+takeoff.area {"table":false}
+takeoff.slab {"table":false}
+column.deduct {}

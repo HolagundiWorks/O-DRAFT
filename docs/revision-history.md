@@ -1,12 +1,12 @@
 # Version history and revision register
 
-O-Draft keeps a **version history** of drawing stores (levels and sheet-set annotation) in a ShilpiDB sidecar beside the drawing, and a **revision register** in the drawing’s project data so sheets and the DXF/DWG carry issued codes even when the history file is missing.
+O-Draft keeps a **version history** of drawing stores (levels and sheet-set annotation) in the project file (or a sidecar `.history.osp` when the drawing is not a project), and a **revision register** in the drawing’s project data so sheets and the DXF/DWG carry issued codes even when history is missing.
 
 ## Files
 
 | Item | Location |
 | --- | --- |
-| History database | `<drawing>.history.vdb` (for example `house.dxf.history.vdb`) |
+| History database | `history_record` table in the open `.osp`, or `<drawing>.history.osp` beside a standalone drawing |
 | Drawing identity | Project key `history` → `{ "drawingId": "…" }` |
 | Revision register | Project key `revisions` → codes style, next counter, `entries[]` |
 | Revision table ownership | Project key `revisionTableOwned` (per-layout handle lists) |
@@ -45,7 +45,7 @@ Programmatic `engine.execute` never opens those panels.
 
 ## Not in this release
 
-- Office `shilpid` mirroring of history or take-off tags per revision (`history.mirror` refuses with a clear message).
+- Office mirroring of history or take-off tags per revision (`history.mirror` refuses with a clear message).
 - Delta tag blocks on revision clouds; per-proposal accept/drop UI (API supports propose then `accept`; the panel accepts all proposals in one step).
 
 ## Tests
