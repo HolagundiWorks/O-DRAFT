@@ -39,7 +39,6 @@ OSS suite apps do **not** ship an AORMS / portal connector. Company file is SoR.
 | Parametric wall graph → measured facts | `aad-param`, `param.*` ([parametric.md](../parametric.md)) | Implemented (Rust evaluate/commit/undo; no node editor UI). Committed walls feed `bridge.export` / `takeoff.record` |
 | Hand-off to and from O-CoreOp | `bridge.export`, `bridge.import`; file `hcw-aqc-bridge` version 1, millimetres, beside the drawing as `name.aqc.json` | Implemented. Import previews first and never changes geometry. Wall rows may come from brick take-off and/or parametric commit. CoreOp parses `source.project_ref` when present |
 | Take-off in ShilpiDB | `takeoff.record` / `takeoff.annotate` | Implemented; header carries company-file `project_ref` when linked ([takeoff-shilpidb.md](../takeoff-shilpidb.md)) |
-| Spatial index and ShilpiDB exchange | `aad-vdb`, `vdb.*` | Implemented; see [aadt-shilpidb-architecture.md](aadt-shilpidb-architecture.md) |
 | Spatial AI tools (overview, window, nearest, describe) | `crates/agent` | Implemented |
 | Drawing-level change record (revision, checksum) | `revision.rs`, `drawing.revision`, `<file>.aadrev.json` | Implemented |
 | Stable cross-application project and artifact references | `project_ref` from the company file in take-off / bridge headers | Partial: OSAS `ProjectRef` when linked via `companyfile`; no portal office-id key |
