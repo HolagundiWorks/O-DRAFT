@@ -531,7 +531,7 @@ fn save_reporting(s: &mut Session, p: &Value, run: fn(&mut Session, &Value) -> R
     Ok(r)
 }
 
-/// The reports that follow a saved drawing file: what the file couldn't keep, and the ShilpiDB sidecar.
+/// The reports that follow a saved drawing file: what the file couldn't keep, and the take-off record.
 fn after_save(s: &mut Session, r: &mut Value, lost: &std::collections::BTreeMap<String, usize>) {
     if r.get("path").and_then(Value::as_str).is_some_and(is_container) {
         // A project file has no sidecar and no server to push to: say what could not be kept, and record the take-off into the same file.
@@ -541,21 +541,6 @@ fn after_save(s: &mut Session, r: &mut Value, lost: &std::collections::BTreeMap<
     }
     if r.get("path").and_then(Value::as_str).is_some_and(is_drawing_file) {
         report_not_saved(s, r, lost);
-        if let Some(path) = r.get("path").and_then(Value::as_str) {
-            match super::vdb::write_sidecar_if_enabled(s, std::path::Path::new(path)) {
-                Ok(Some(vdb)) => s.echo(format!("ShilpiDB: {}", vdb.display())),
-                Ok(None) => {}
-                Err(e) => s.echo(format!("ShilpiDB sidecar: {e}")),
-            }
-        }
-        match super::vdb::push_if_connected(s) {
-            Ok(Some(info)) => {
-                let n = info.get("count").and_then(Value::as_u64).unwrap_or(0);
-                s.echo(format!("ShilpiDB auto-push: {n} records"));
-            }
-            Ok(None) => {}
-            Err(e) => s.echo(format!("ShilpiDB auto-push: {e}")),
-        }
         record_takeoff_if_any(s);
     }
 }

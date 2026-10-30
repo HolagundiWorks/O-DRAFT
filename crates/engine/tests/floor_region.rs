@@ -1,4 +1,4 @@
-//! Floor region declare / export / restore of take-off tables from ShilpiDB.
+//! Floor region declare / export / restore of take-off tables from the project file.
 
 use std::sync::Once;
 
@@ -49,7 +49,7 @@ fn declare_assigns_entities_in_window_and_export_writes_them() {
 }
 
 #[test]
-fn takeoff_tables_round_trip_through_shilpidb() {
+fn takeoff_tables_round_trip_through_the_project_file() {
     let mut s = session();
     s.execute("takeoff.start", &json!({})).unwrap();
     s.execute("layer.current", &json!({"name": "MEASURE-FULLBRICK"})).unwrap();
@@ -58,17 +58,17 @@ fn takeoff_tables_round_trip_through_shilpidb() {
 
     let dir = std::env::temp_dir().join(format!("aad-takeoff-restore-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let vdb = dir.join("house.takeoff.vdb");
-    s.execute("takeoff.record", &json!({"path": vdb.to_string_lossy(), "annotate": false})).unwrap();
+    let project = dir.join("house.osp");
+    s.execute("takeoff.record", &json!({"path": project.to_string_lossy(), "annotate": false})).unwrap();
 
     s.execute("takeoff.clear", &json!({})).unwrap();
-    // Drop the project takeoff entry so restore must reload from the VDB.
+    // Drop the project takeoff entry so restore must reload from the project file.
     {
         let d = s.doc_mut().unwrap();
         d.project.remove("takeoff:Bricks");
     }
-    let r = s.execute("takeoff.restore", &json!({"path": vdb.to_string_lossy(), "clear": true})).unwrap();
-    assert_eq!(r["source"], "shilpidb");
+    let r = s.execute("takeoff.restore", &json!({"path": project.to_string_lossy(), "clear": true})).unwrap();
+    assert_eq!(r["source"], "project");
     assert!(r["restored"].as_array().unwrap().iter().any(|n| n.as_str() == Some("Bricks")));
     let listed = s.execute("takeoff.list", &json!({})).unwrap();
     assert!(listed["takeoffs"].as_array().unwrap().iter().any(|n| n.as_str() == Some("Bricks")));

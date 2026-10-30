@@ -10,4 +10,4 @@ A project file is one SQLite file with the drawing, the take-off and the project
 | UI | File > Open / Save As offer `.osp` ("Project (drawing and take-off)"); the Take-off toggle in the bottom bar shows the take-off tools |
 | Pointer | `apps/aad-winui/ActiveProjectPointer.cs` writes `%LOCALAPPDATA%\OSAS\active-project.json` with `project` = the open `.osp` |
 
-Not yet moved off ShilpiDB: `library.*`, `vdb.connect/push/pull/convert`, the history sidecar, the agent's ShilpiDB tools, and `shilpid` bundling in `packaging/windows/package.ps1`.
+ShilpiDB is gone from O-Draft: the `library.*` and `vdb.*` commands, the `.vdb` sidecar, the status chip, the agent's ShilpiDB tools and the `shilpid` bundling were removed. The drawing history now lives in the project file (`history_record` table; `<drawing>.history.osp` beside a drawing that is not one) and does not count as a revision.

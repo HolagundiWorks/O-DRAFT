@@ -1,4 +1,4 @@
-//! Compact ShilpiDB-style context for OLMo: digests and capped ContextCards.
+//! Compact context for OLMo: digests and capped ContextCards.
 //!
 //! Prefer these over dumping full `/drawing` / `/view` JSON into the prompt.
 
@@ -82,10 +82,6 @@ pub fn drawing_digest(s: &Session) -> Result<Value> {
         "rooms": rooms,
         "openingsInSchedule": openings,
         "selection": s.selection().len(),
-        "shilpi": match &s.vdb_addr {
-            Some(addr) => json!({ "connected": true, "addr": addr }),
-            None => json!({ "connected": false }),
-        },
         "note": "Use ai.cards or spatial/query tools for local detail; do not invent geometry.",
     }))
 }

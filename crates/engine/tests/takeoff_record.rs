@@ -1,4 +1,4 @@
-//! `takeoff.record`: the take-off as ShilpiDB records (contract: `TAKEOFF-SHILPIDB.md` in the O-CoreOp
+//! `takeoff.record`: the take-off as records in the project file (contract: `TAKEOFF-SHILPIDB.md` in the O-CoreOp
 //! repository, version 1). The tests follow the hand-off's list: the records match the bridge rows, recording
 //! again replaces, a removed item is deleted, ids carry the kind, everything is in millimetres, a rectangular slab
 //! has its spans, and refs survive a rebuilt take-off.
@@ -65,24 +65,21 @@ fn measure(s: &mut Session) {
 fn temp(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("aad-takeoff-record-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    dir.join("house.takeoff.vdb")
+    dir.join("house.osp")
 }
 
 fn record(s: &mut Session, path: &std::path::Path) -> Value {
     s.execute("takeoff.record", &json!({"path": path.to_string_lossy(), "annotate": false})).unwrap()
 }
 
-/// The records of a database: id → (payload as JSON, box).
+/// The take-off records of a project file: id -> (payload as JSON, box). The project file keeps no boxes, so they read as zero.
 fn read(path: &std::path::Path) -> std::collections::BTreeMap<u64, (Value, [f64; 4])> {
-    let store = aad_vdb::load_path(path).unwrap();
-    store
-        .records()
-        .iter()
-        .map(|r| {
-            let b = r.bbox;
-            (r.id, (serde_json::from_slice(&r.payload).unwrap_or(Value::Null), [b.min.x, b.min.y, b.max.x, b.max.y]))
-        })
-        .collect()
+    records(path).into_iter().map(|(id, payload)| (id, (serde_json::from_slice(&payload).unwrap_or(Value::Null), [0.0; 4]))).collect()
+}
+
+/// The raw records `(id, payload)` of a project file's take-off.
+fn records(path: &std::path::Path) -> Vec<(u64, Vec<u8>)> {
+    aad_odp::Odp::open(path).unwrap().takeoff_as_records().unwrap()
 }
 
 fn kind(id: u64) -> u64 {
@@ -253,10 +250,9 @@ fn everything_is_in_millimetres_whatever_the_drawing_units() {
     record(&mut s, &path);
     let db = read(&path);
     assert_eq!(db[&header_id(&db)].0["units"], "mm");
-    let (_, (wall, bbox)) = db.iter().find(|(id, _)| kind(**id) == 3).unwrap();
+    let (_, (wall, _)) = db.iter().find(|(id, _)| kind(**id) == 3).unwrap();
     let len = wall["length_mm"].as_f64().unwrap();
     assert!((len - 3048.0).abs() < 0.5, "length {len}");
-    assert!((bbox[2] - 3048.0).abs() < 0.5 && bbox[0].abs() < 0.5, "box {bbox:?}");
     cleanup(&path);
 }
 
@@ -286,26 +282,29 @@ fn a_rectangular_slab_carries_its_spans_and_an_l_shaped_one_does_not() {
 }
 
 #[test]
-fn the_default_file_sits_beside_the_drawing_and_an_entity_store_is_never_overwritten() {
+fn the_default_file_is_the_open_project_and_nothing_else_takes_a_take_off() {
     let mut s = session("mm");
     scene(&mut s);
     let dir = std::env::temp_dir().join(format!("aad-takeoff-record-{}-beside", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     // No path and no saved drawing: an error that says what to do.
-    assert!(s.execute("takeoff.record", &json!({"file": true})).is_err());
+    assert!(s.execute("takeoff.record", &json!({})).is_err());
+    // A drawing that is not a project file has nowhere to record into.
     s.state_mut().unwrap().path = Some(dir.join("house.dxf").to_string_lossy().to_string());
-    let r = s.execute("takeoff.record", &json!({"file": true, "annotate": false})).unwrap();
-    assert!(r["path"].as_str().unwrap().ends_with("house.takeoff.vdb"), "{r}");
-    assert!(dir.join("house.takeoff.vdb").exists());
-    // A .vdb that holds entities, not a take-off, is refused.
+    let err = s.execute("takeoff.record", &json!({"annotate": false})).unwrap_err().to_string();
+    assert!(err.contains(".osp"), "{err}");
+    // A project file is where it goes.
+    let project = dir.join("house.osp");
+    s.state_mut().unwrap().path = Some(project.to_string_lossy().to_string());
+    let r = s.execute("takeoff.record", &json!({"annotate": false})).unwrap();
+    assert!(r["path"].as_str().unwrap().ends_with("house.osp"), "{r}");
+    assert!(project.exists());
+    // A file that is not a project file is refused and left alone.
     let other = dir.join("entities.vdb");
-    s.execute("vdb.export", &json!({"path": other.to_string_lossy()})).unwrap();
-    let before = std::fs::read(&other).unwrap();
+    std::fs::write(&other, b"not a project").unwrap();
     let err = s.execute("takeoff.record", &json!({"path": other.to_string_lossy()})).unwrap_err().to_string();
-    assert!(err.contains("not a take-off database"), "{err}");
-    assert_eq!(std::fs::read(&other).unwrap(), before, "the file was not touched");
-    // A server that is not there is an error, not a hang or a panic.
-    assert!(s.execute("takeoff.record", &json!({"server": "127.0.0.1:1"})).is_err());
+    assert!(err.contains(".osp"), "{err}");
+    assert_eq!(std::fs::read(&other).unwrap(), b"not a project", "the file was not touched");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -347,33 +346,6 @@ fn the_slot_is_kept_in_the_drawing_and_two_drawings_share_a_database_without_tou
     assert_eq!(db2.keys().filter(|id| slot(**id) == sa).count(), rows_of_a);
     assert_eq!(db2.keys().filter(|id| slot(**id) == sb).count(), db.keys().filter(|id| slot(**id) == sb).count());
     cleanup(&path);
-}
-
-/// Against a real `shilpid`: `AAD_SHILPID_ADDR=127.0.0.1:7430 cargo test -p aad-engine --test takeoff_record -- --ignored`
-/// (start it with `shilpid --bind 127.0.0.1:7430 --data x.vdb`). Not part of CI: it needs the server program.
-#[test]
-#[ignore = "needs a running shilpid; see the doc comment"]
-fn a_running_shilpid_ends_up_with_the_take_off_and_loses_removed_rows() {
-    let Ok(addr) = std::env::var("AAD_SHILPID_ADDR") else { return };
-    let mut s = session("mm");
-    let scene = scene(&mut s);
-    let first = s.execute("takeoff.record", &json!({"server": addr, "annotate": false})).unwrap();
-    let mut client = aad_vdb::VdbClient::connect(addr.as_str()).unwrap();
-    let ids = client.list().unwrap();
-    assert_eq!(ids.len() as u64, first["written"].as_u64().unwrap());
-    let hid = first["headerId"].as_u64().unwrap();
-    assert!(ids.contains(&hid));
-    let again = s.execute("takeoff.record", &json!({"server": addr, "annotate": false})).unwrap();
-    assert_eq!(again["added"], 0, "recording again replaces by id: {again}");
-    assert_eq!(client.list().unwrap().len(), ids.len(), "no duplicates");
-    s.execute("erase", &json!({"handles": [scene.wall_b.hex()]})).unwrap();
-    measure(&mut s);
-    let third = s.execute("takeoff.record", &json!({"server": addr, "annotate": false})).unwrap();
-    assert_eq!(third["deleted"], 1, "{third}");
-    assert_eq!(client.list().unwrap().len(), ids.len() - 1);
-    let wall_a = client.get(item_id(3, slot(hid), scene.wall_a.0)).unwrap().expect("the remaining wall");
-    let payload: Value = serde_json::from_slice(&wall_a.payload).unwrap();
-    assert_eq!(payload["length_mm"], 9000.0);
 }
 
 /// A plotter that keeps what it was asked to plot and returns a PDF-looking buffer of known size.
@@ -419,10 +391,10 @@ fn the_annotated_drawing_marks_what_was_measured_and_is_stored_in_chunks() {
     assert_eq!(p["bytes"], 1_200_000);
     assert_eq!(p["pages"], 1);
     let mut chunks: Vec<(u64, usize)> = Vec::new();
+    let raw = records(&path);
     for (id, _) in db.iter().filter(|(id, _)| kind(**id) == 9) {
-        let rec = aad_vdb::load_path(&path).unwrap();
-        let r = rec.records().iter().find(|r| r.id == *id).unwrap();
-        chunks.push((*id & 0xFFFF_FFFF, r.payload.len()));
+        let (_, payload) = raw.iter().find(|(rid, _)| rid == id).unwrap();
+        chunks.push((*id & 0xFFFF_FFFF, payload.len()));
     }
     chunks.sort();
     assert_eq!(p["chunks"].as_u64(), Some(chunks.len() as u64));
@@ -600,22 +572,6 @@ fn the_header_names_the_company_file_project_so_o_coreop_can_match_the_take_off(
 fn path_after(s: &mut Session, path: &std::path::Path) -> std::path::PathBuf {
     record(s, path);
     path.to_path_buf()
-}
-
-#[test]
-fn takeoff_file_is_shilpid_format_version_1() {
-    let mut s = session("mm");
-    scene(&mut s);
-    let path = temp("v1");
-    record(&mut s, &path);
-    let store = aad_vdb::load_path(&path).unwrap();
-    assert_eq!(store.format_version(), aad_vdb::SHILPID_COMPAT_VERSION);
-    // On-disk u32 after MAGIC must be 1 so an older `shilpid` can open the file.
-    let bytes = std::fs::read(&path).unwrap();
-    assert_eq!(&bytes[..8], b"SHILPIDB");
-    let ver = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
-    assert_eq!(ver, 1);
-    cleanup(&path);
 }
 
 #[test]

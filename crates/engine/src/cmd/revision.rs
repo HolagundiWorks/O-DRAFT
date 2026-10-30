@@ -1,6 +1,6 @@
 //! Revision register in project data (`AAD_PROJECT` key `revisions`) and sheet revision tables.
 //!
-//! Snapshot data lives in `<drawing>.history.vdb`; the register round-trips with the DXF/DWG.
+//! Snapshot data lives in the project file (`.osp`) or `<drawing>.history.osp`; the register round-trips with the DXF/DWG.
 
 use std::collections::BTreeMap;
 

@@ -29,7 +29,6 @@ aad-mcp = { path = "crates/mcp" }
 aad-agent = { path = "crates/agent" }
 aad-auditor = { path = "crates/auditor" }
 aad-llm = { path = "crates/llm" }
-aad-vdb = { path = "crates/vdb" }
 aad-odp = { path = "crates/odp" }
 aad-param = { path = "crates/param" }
 aad-vello = { path = "crates/vello" }

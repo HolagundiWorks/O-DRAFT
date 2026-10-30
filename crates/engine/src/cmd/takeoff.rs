@@ -101,8 +101,8 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["mrestore"])
             .params(
                 "{name?: one take-off (default every saved take-off), at?: [x,y], clear?: bool (default true; erase MEASURE-TABLE first), \
-                 path?: .vdb from takeoff.record, server?: \"host:port\", file?: true for <drawing>.takeoff.vdb} \
-                 → {restored: [name], tables, source: drawing|shilpidb}",
+                 path?: project file (.osp) from takeoff.record, project?: true for the open project} \
+                 → {restored: [name], tables, source: drawing|project}",
             ),
         CommandSpec::new("takeoff.draw", "Draw Take-off", run_draw).menu(&["Architecture", "Take-off", "Draw"]).alias(&["mdraw"]).params(
             "{kind: extWall|intWall|beam|lintel|linear|floorArea|ceilingArea|area|column|count|deduct|slab|slabDeduct, \
@@ -1284,7 +1284,7 @@ fn run_clear(s: &mut Session, _p: &Value) -> Result<Value> {
     Ok(json!({ "erased": hs.len() }))
 }
 
-/// Snapshot of every `takeoff:*` project entry (tables for ShilpiDB / restore).
+/// Snapshot of every `takeoff:*` project entry (tables for the project file / restore).
 pub(crate) fn snapshot_tables(d: &Drawing) -> Value {
     let mut m = serde_json::Map::new();
     for k in d.project.keys() {
@@ -1358,17 +1358,17 @@ pub(crate) fn redraw_tables(s: &mut Session, p: &Value, names: &[String]) -> Res
 }
 
 fn run_restore(s: &mut Session, p: &Value) -> Result<Value> {
-    let from_db = p.get("path").is_some() || p.get("server").is_some() || p.get("file").and_then(Value::as_bool).unwrap_or(false);
+    let from_db = p.get("path").is_some() || p.get("project").and_then(Value::as_bool).unwrap_or(false);
     let source = if from_db {
         let tables = super::takeoffrec::load_tables(s, p)?;
         let n = apply_tables(s.doc_mut()?, &tables);
         if n == 0 {
             return Err(bad(
                 "takeoff.restore",
-                "the ShilpiDB header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored",
+                "the project file's take-off header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored",
             ));
         }
-        "shilpidb"
+        "project"
     } else {
         "drawing"
     };

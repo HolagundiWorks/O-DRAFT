@@ -308,7 +308,7 @@ internal static partial class ToolIcons
                 break;
             case "shilpi":
             case "db":
-                // Cylinder — ShilpiDB (distinct from the concentric AI agent mark).
+                // Cylinder (distinct from the concentric AI agent mark).
                 pen.Box(5, 7, 14, 10, pen.BaseBrush);
                 pen.Circle(12, 7, 7, pen.BaseBrush);
                 pen.Circle(12, 17, 7, pen.BaseBrush);

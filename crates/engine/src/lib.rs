@@ -341,8 +341,6 @@ pub struct Settings {
     pub polar_flags: u32,
     /// POLARADDANG: additional polar tracking angles (radians), used with POLARMODE bit 4.
     pub polaraddang: Vec<f64>,
-    /// When true, a successful DXF/DWG save also writes `<stem>.vdb` beside the drawing.
-    pub vdb_sidecar: bool,
 }
 
 impl Default for Settings {
@@ -373,8 +371,6 @@ impl Default for Settings {
             qpmode: false,
             polar_flags: 0,
             polaraddang: Vec::new(),
-            // Always keep a ShilpiDB `.vdb` beside the DWG/DXF on save (OLMo / spatial index).
-            vdb_sidecar: true,
         }
     }
 }
@@ -522,8 +518,6 @@ pub struct Session {
     /// A plot window chosen by `plot.window` for the application to finish (it asks where to save,
     /// then calls `plot`). Taken with [`Session::take_plot_request`].
     pub plot_request: Option<PlotRequest>,
-    /// Address of a connected `shilpid` (`vdb.connect`), e.g. `127.0.0.1:7420`.
-    pub vdb_addr: Option<String>,
     /// Node results of the last parametric evaluation (`param.*`); disposable, never saved.
     pub param_cache: aad_param::Cache,
     /// O-Dynamo companion pipe state (`companion.*`); disposable, never saved.
@@ -572,7 +566,6 @@ impl Session {
             clipboard_source: None,
             office: None,
             plot_request: None,
-            vdb_addr: None,
             param_cache: aad_param::Cache::default(),
             companion: cmd::companion::CompanionState::default(),
             history_preview: None,

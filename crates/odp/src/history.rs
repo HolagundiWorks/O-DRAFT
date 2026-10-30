@@ -1,4 +1,4 @@
-//! Drawing version history in a sidecar `.history.vdb` (ShilpiDB).
+//! Drawing version history, kept in the project file (`.osp`) or, for a drawing that is not one, in a sidecar `<drawing>.history.osp`.
 //!
 //! Opaque payloads only: the engine supplies entity / definition / layout JSON bytes.
 //! Ids use kinds `0x40`–`0x45` so they never clash with take-off kinds 1–9.
@@ -8,10 +8,25 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use shilpidb::Bbox;
 
-use crate::file::{self, VdbRecord, VdbStore};
-use crate::{MAX_PAYLOAD, MAX_RECORDS};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::Odp;
+
+/// At most this many records in one history.
+pub const MAX_RECORDS: usize = 1_000_000;
+/// The largest payload one record may hold.
+pub const MAX_PAYLOAD: usize = 16 * 1024 * 1024;
+
+type Bbox = [f64; 4];
+
+/// One stored record: an id and its bytes (the box is kept for the callers that supply one).
+#[derive(Clone)]
+struct VdbRecord {
+    #[allow(dead_code)]
+    id: u64,
+    bbox: Bbox,
+    payload: Vec<u8>,
+}
 
 /// History header (one per file).
 pub const KIND_HEADER: u8 = 0x40;
@@ -41,8 +56,9 @@ const ZERO_BOX: [f64; 4] = [0.0, 0.0, 0.0, 0.0];
 pub enum Error {
     #[error("{0}")]
     Msg(String),
+    #[cfg(not(target_arch = "wasm32"))]
     #[error(transparent)]
-    Vdb(#[from] file::Error),
+    Odp(#[from] crate::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
@@ -88,7 +104,7 @@ fn bbox_from(corners: [f64; 4]) -> Result<Bbox, Error> {
     if ![a, b, c, d].iter().all(|v| v.is_finite()) {
         return Err(Error::msg("non-finite bbox"));
     }
-    Ok(Bbox::from_corners(a, b, c, d))
+    Ok([a, b, c, d])
 }
 
 fn union_box(boxes: &[[f64; 4]]) -> [f64; 4] {
@@ -200,18 +216,24 @@ pub struct HistoryDb {
 
 impl HistoryDb {
     /// Open or create `<path>`. Refuses a non-empty file that is not this format or another drawing.
+    #[cfg_attr(target_arch = "wasm32", allow(unreachable_code, unused_mut))]
     pub fn open(path: &Path, drawing_id: &str) -> Result<Self, Error> {
         if drawing_id.is_empty() || drawing_id.len() > 128 {
             return Err(Error::msg("drawing_id must be 1..128 characters"));
         }
-        let mut records = BTreeMap::new();
+        let mut records: BTreeMap<u64, VdbRecord> = BTreeMap::new();
         let header = if path.exists() {
-            let store = file::load_path(path)?;
-            if store.len() > MAX_RECORDS {
-                return Err(Error::msg(format!("history file has too many records (limit {MAX_RECORDS})")));
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let odp = Odp::open(path)?;
+                for (id, payload) in odp.history_records()? {
+                    records.insert(id, VdbRecord { id, bbox: ZERO_BOX, payload });
+                }
             }
-            for r in store.records() {
-                records.insert(r.id, r.clone());
+            #[cfg(target_arch = "wasm32")]
+            return Err(Error::msg("drawing history is not available on the web"));
+            if records.len() > MAX_RECORDS {
+                return Err(Error::msg(format!("history has too many records (limit {MAX_RECORDS})")));
             }
             if records.is_empty() {
                 empty_header(drawing_id)
@@ -594,16 +616,15 @@ impl HistoryDb {
         if self.records.len() > MAX_RECORDS {
             return Err(Error::msg(format!("too many records ({})", self.records.len())));
         }
-        let store = VdbStore::from_records(self.records.values().cloned().collect())?;
-        let bytes = file::save_bytes(&store)?;
-        let dir = self.path.parent().unwrap_or_else(|| Path::new("."));
-        std::fs::create_dir_all(dir)?;
-        let tmp = self.path.with_extension("history-tmp");
-        std::fs::write(&tmp, &bytes)?;
-        std::fs::rename(&tmp, &self.path).map_err(|e| {
-            let _ = std::fs::remove_file(&tmp);
-            Error::Io(e)
-        })?;
+        if self.records.values().any(|r| r.payload.len() > MAX_PAYLOAD) {
+            return Err(Error::msg("a history record is larger than the limit"));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut odp = if self.path.exists() { Odp::open(&self.path)? } else { Odp::create(&self.path, "History")? };
+            let all: BTreeMap<u64, Vec<u8>> = self.records.iter().map(|(id, r)| (*id, r.payload.clone())).collect();
+            odp.history_store(&all)?;
+        }
         Ok(())
     }
 }
@@ -666,10 +687,13 @@ fn decode_member_ids(payload: &[u8]) -> Vec<u64> {
     out
 }
 
-/// Path of the history sidecar for a drawing file.
+/// Where the history of a drawing is kept: in the project file itself, else beside the drawing as `<drawing>.history.osp`.
 pub fn sidecar_path(drawing_path: &Path) -> PathBuf {
+    if drawing_path.extension().is_some_and(|e| e.eq_ignore_ascii_case("osp")) {
+        return drawing_path.to_path_buf();
+    }
     let mut s = drawing_path.as_os_str().to_os_string();
-    s.push(".history.vdb");
+    s.push(".history.osp");
     PathBuf::from(s)
 }
 
@@ -699,7 +723,7 @@ mod tests {
     #[test]
     fn save_restore_round_trip_and_share_rows() {
         let dir = tempfile::tempdir().expect("temp");
-        let path = dir.path().join("d.dxf.history.vdb");
+        let path = dir.path().join("d.dxf.history.osp");
         let mut db = HistoryDb::open(&path, "draw-1").expect("open");
         let a = row(br#"{"h":1}"#, [0.0, 0.0, 1.0, 1.0]);
         let b = row(br#"{"h":2}"#, [2.0, 2.0, 3.0, 3.0]);
@@ -746,7 +770,7 @@ mod tests {
     #[test]
     fn refuses_foreign_drawing_id() {
         let dir = tempfile::tempdir().expect("temp");
-        let path = dir.path().join("d.history.vdb");
+        let path = dir.path().join("d.history.osp");
         let mut db = HistoryDb::open(&path, "a").expect("open");
         db.save_milestone(MilestoneIn {
             name: "x".into(),
@@ -768,7 +792,7 @@ mod tests {
     #[test]
     fn hash_collision_probes() {
         let dir = tempfile::tempdir().expect("temp");
-        let path = dir.path().join("c.history.vdb");
+        let path = dir.path().join("c.history.osp");
         let mut db = HistoryDb::open(&path, "d").expect("open");
         // Force two different payloads into the same n by inserting manually then putting.
         let n = 42u64;
@@ -782,7 +806,7 @@ mod tests {
     #[test]
     fn prune_keeps_recent_autos() {
         let dir = tempfile::tempdir().expect("temp");
-        let path = dir.path().join("p.history.vdb");
+        let path = dir.path().join("p.history.osp");
         let mut db = HistoryDb::open(&path, "d").expect("open");
         for i in 0..5 {
             db.save_milestone(MilestoneIn {
@@ -817,7 +841,7 @@ mod tests {
     #[test]
     fn revision_cannot_be_deleted() {
         let dir = tempfile::tempdir().expect("temp");
-        let path = dir.path().join("r.history.vdb");
+        let path = dir.path().join("r.history.osp");
         let mut db = HistoryDb::open(&path, "d").expect("open");
         let id = db
             .save_milestone(MilestoneIn {
@@ -836,6 +860,6 @@ mod tests {
 
     #[test]
     fn sidecar_path_appends_suffix() {
-        assert_eq!(sidecar_path(Path::new("C:/a/house.dxf")), PathBuf::from("C:/a/house.dxf.history.vdb"));
+        assert_eq!(sidecar_path(Path::new("C:/a/house.dxf")), PathBuf::from("C:/a/house.dxf.history.osp"));
     }
 }

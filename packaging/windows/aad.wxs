@@ -75,9 +75,6 @@
       <?ifdef WinUiDir?>
       <ComponentGroupRef Id="AadWinUi" />
       <?endif?>
-      <?ifdef ShilpiDir?>
-      <ComponentGroupRef Id="AadShilpi" />
-      <?endif?>
       <?ifdef FontsDir?>
       <ComponentGroupRef Id="AadFonts" />
       <?endif?>
@@ -128,21 +125,6 @@
       </Component>
     </ComponentGroup>
   </Fragment>
-
-  <?ifdef ShilpiDir?>
-  <Fragment>
-    <!-- ShilpiDB engine binaries (sibling process auto-started by O-Draft; not a separate product). -->
-    <ComponentGroup Id="AadShilpi" Directory="INSTALLFOLDER">
-      <Component Id="AadShilpid" Guid="6E4F2A91-8C3B-4D7E-9A12-5B6C7D8E9F01">
-        <File Id="ShilpidExe" Source="$(var.ShilpiDir)\shilpid.exe" KeyPath="yes" />
-      </Component>
-      <Component Id="AadShilpiHttp" Guid="7F5A3B02-9D4C-4E8F-AB23-6C7D8E9F0A12">
-        <File Id="ShilpiHttpExe" Source="$(var.ShilpiDir)\shilpi-http.exe" KeyPath="yes" />
-      </Component>
-    </ComponentGroup>
-  </Fragment>
-  <?endif?>
-
   <?ifdef WinUiDir?>
   <Fragment>
     <!-- Unpackaged WinUI shell + self-contained Windows App SDK, beside o-draft.exe. -->

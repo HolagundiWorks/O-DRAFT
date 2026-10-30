@@ -1,6 +1,6 @@
-//! `takeoff.record`: the take-off as ShilpiDB records, for O-CoreOp to read.
+//! `takeoff.record`: the take-off as records in the project file, for O-CoreOp to read.
 //!
-//! The contract is `TAKEOFF-SHILPIDB.md` in the O-CoreOp repository, version 1 (revised 2026-10-19). One database
+//! The record layout is `TAKEOFF-SHILPIDB.md` in the O-CoreOp repository, version 1 (revised 2026-10-19). One project file
 //! holds many drawings, so every record id is `(kind << 56) | (slot << 32) | n`: the kind (1 header, 3 wall,
 //! 4 opening, 5 column, 6 lintel, 7 room, 8 slab, 9 annotated-PDF chunk), the drawing's slot and the item's
 //! number. The slot comes from the drawing id (`slot_for`), is probed past a slot another drawing holds, and is
@@ -12,9 +12,7 @@
 //! then the header again with `"state": "complete"`, then the database is saved. A reader refuses a drawing that
 //! is still `recording`.
 //!
-//! By default the take-off goes to the shared `shilpid` (`127.0.0.1:7420`, started when nothing answers), where
-//! O-CoreOp reads it within seconds. `server` names another one; `path` or `file: true` writes a `.vdb` file
-//! instead (`file: true` puts it beside the drawing).
+//! The take-off goes into the open project file (`.osp`), where O-CoreOp reads it within seconds. `path` names another project file.
 
 use serde_json::{Map, Value, json};
 
@@ -26,9 +24,6 @@ use crate::{Result, Session};
 
 const FORMAT: &str = "hcw-takeoff-shilpi";
 const KIND_HEADER: u8 = 1;
-/// O-CoreOp's project document, stored in the same file (its own kind, never read or written here). A file that holds only this is not an
-/// entity store: O-CoreOp may have made it before any take-off was recorded.
-const KIND_COREOP_PROJECT: u8 = 0x60;
 /// An annotated-PDF chunk.
 pub(crate) const KIND_PDF: u8 = 9;
 /// The kinds this version writes. Records of any other kind belong to a later version and are left alone.
@@ -39,47 +34,29 @@ const MAX_ROWS: usize = 500_000;
 /// Largest PDF chunk, and the most a stored PDF may hold (contract section 6).
 const CHUNK: usize = 512 * 1024;
 const MAX_PDF: usize = 64 * 1024 * 1024;
-/// The shared server's address and where it keeps its data.
-pub(crate) const SHARED_ADDR: &str = "127.0.0.1:7420";
-#[cfg(not(target_arch = "wasm32"))]
-const GATEWAY_ADDR: &str = "127.0.0.1:7421";
-#[cfg(not(target_arch = "wasm32"))]
-const BATCH: usize = 500;
 /// The project-store key that keeps the drawing's slot.
 const SLOT_KEY: &str = "takeoffSlot";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("takeoff.record", "Record Take-off in ShilpiDB", run_record)
-            .menu(&["Architecture", "Take-off", "Record in ShilpiDB"])
-            .params("{server?: \"host:port\" of a shilpid (default: the shared one on 127.0.0.1:7420, started if nothing answers), path?: .vdb file written instead of a server, file?: true for <drawing>.takeoff.vdb beside the saved drawing, annotate?: draw and store the annotated PDF (default true), paper?: \"A3\", level?, bearing?} → {server | path, headerId, slot, state, counts, written, added, changed?, unchanged?, deleted, pdf?, skipped, warnings}")
+        CommandSpec::new("takeoff.record", "Record Take-off", run_record)
+            .menu(&["Architecture", "Take-off", "Record in project"])
+            .params("{path?: another project file (.osp) to record into (default: the open one), annotate?: draw and store the annotated PDF (default true), paper?: \"A3\", level?, bearing?} → {path, headerId, slot, state, counts, written, added, changed?, unchanged?, deleted, pdf?, skipped, warnings}")
             .noundo(),
     ]
 }
 
-/// Load the `takeoff_tables` snapshot from a ShilpiDB file or server (for `takeoff.restore`).
+/// Load the `takeoff_tables` snapshot from the project file (for `takeoff.restore`).
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn load_tables(s: &Session, p: &Value) -> Result<Value> {
-    let file_path = match (str_param(p, "path"), p.get("file").and_then(Value::as_bool).unwrap_or(false)) {
-        (Some(t), _) => Some(std::path::PathBuf::from(t)),
-        (None, true) => match s.state()?.path.as_ref() {
-            Some(drawing) => Some(std::path::Path::new(drawing).with_extension("takeoff.vdb")),
-            None => return Err(bad("takeoff.restore", "save the drawing first, or give `path` or `server`")),
-        },
-        (None, false) => project_file_of(s, p),
+    let file_path = match str_param(p, "path") {
+        Some(t) => Some(std::path::PathBuf::from(t)),
+        None => project_file_of(s, p),
     };
-    let mut sink: Box<dyn Sink> = match (&file_path, str_param(p, "server")) {
-        (Some(path), _) => open_file_sink(path)?,
-        (None, server) => {
-            let addr = server.unwrap_or(SHARED_ADDR).to_string();
-            if server.is_none() {
-                ensure_shared_server()?;
-            }
-            let client = aad_vdb::VdbClient::connect_with_timeout(addr.as_str(), Some(std::time::Duration::from_secs(10)))
-                .map_err(|e| bad("takeoff.restore", format!("{addr}: {e}")))?;
-            Box::new(ServerSink { addr, client })
-        }
+    let Some(path) = &file_path else {
+        return Err(bad("takeoff.restore", "open or save the drawing as a project (.osp) first, or give `path`"));
     };
+    let mut sink: Box<dyn Sink> = open_file_sink(path)?;
     let kept = {
         let v = project::get(s.doc()?, SLOT_KEY);
         v.get("slot").and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
@@ -111,12 +88,12 @@ pub(crate) fn load_tables(s: &Session, p: &Value) -> Result<Value> {
         .get("takeoff_tables")
         .cloned()
         .filter(|t| t.as_object().is_some_and(|o| !o.is_empty()))
-        .ok_or_else(|| bad("takeoff.restore", "the ShilpiDB header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored"))
+        .ok_or_else(|| bad("takeoff.restore", "the project's take-off header has no `takeoff_tables`; re-run takeoff then takeoff.record so tables are stored"))
 }
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn load_tables(_s: &Session, _p: &Value) -> Result<Value> {
-    Err(bad("takeoff.restore", "ShilpiDB files cannot be read on the web"))
+    Err(bad("takeoff.restore", "project files cannot be read on the web"))
 }
 
 // ---------------- ids ----------------
@@ -184,7 +161,6 @@ fn kind_name(kind: u8) -> &'static str {
 #[derive(Clone)]
 pub(crate) struct Rec {
     pub id: u64,
-    pub bbox: [f64; 4],
     pub payload: Vec<u8>,
 }
 
@@ -202,7 +178,7 @@ pub(crate) fn chunk_pdf(bytes: &[u8], slot: u32, pages: u32, generated: &str) ->
     let mut chunks = Vec::new();
     for (i, part) in bytes.chunks(CHUNK).enumerate() {
         let n = u32::try_from(i).map_err(|_| bad("takeoff.record", "too many chunks"))?;
-        chunks.push(Rec { id: record_id(KIND_PDF, slot, n), bbox: [0.0; 4], payload: part.to_vec() });
+        chunks.push(Rec { id: record_id(KIND_PDF, slot, n), payload: part.to_vec() });
     }
     let meta =
         json!({ "sha256": crate::revision::sha256_hex(bytes), "bytes": bytes.len(), "chunks": chunks.len(), "pages": pages, "generated": generated });
@@ -255,7 +231,7 @@ pub(crate) fn build(c: &Collected, slot: u32) -> Result<Built> {
     let mut rows: Vec<Rec> = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut cut = false;
-    for Item { kind, n, row, bbox } in &c.items {
+    for Item { kind, n, row, .. } in &c.items {
         if rows.len() >= MAX_ROWS {
             cut = true;
             break;
@@ -268,7 +244,7 @@ pub(crate) fn build(c: &Collected, slot: u32) -> Result<Built> {
         }
         let payload = serde_json::to_vec(row).map_err(|e| bad("takeoff.record", e.to_string()))?;
         *counts.entry(kind_name(*kind)).or_insert(0usize) += 1;
-        rows.push(Rec { id, bbox: *bbox, payload });
+        rows.push(Rec { id, payload });
     }
     if cut {
         warnings.push(format!("more than {MAX_ROWS} rows: the rest were not recorded"));
@@ -279,7 +255,7 @@ pub(crate) fn build(c: &Collected, slot: u32) -> Result<Built> {
 
 // ---------------- the database ----------------
 
-/// A ShilpiDB database, a file held in memory or a running server.
+/// Where the take-off records go: a project file, or memory in tests.
 pub(crate) trait Sink {
     fn ids(&mut self) -> Result<Vec<u64>>;
     fn payload(&mut self, id: u64) -> Result<Option<Vec<u8>>>;
@@ -288,92 +264,23 @@ pub(crate) trait Sink {
     fn save(&mut self) -> Result<()>;
 }
 
-pub(crate) fn vdb_bbox(b: [f64; 4]) -> aad_vdb::Bbox {
-    aad_vdb::Bbox::from_corners(b[0], b[1], b[2], b[3])
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) struct FileSink {
-    path: std::path::PathBuf,
-    records: std::collections::BTreeMap<u64, aad_vdb::VdbRecord>,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FileSink {
-    /// Open a take-off database file. An existing file must be a take-off database (some record is a header) or be
-    /// empty, so an entity store is never overwritten by mistake.
-    pub(crate) fn open(path: &std::path::Path) -> Result<FileSink> {
-        FileSink::open_as(path, FORMAT, "take-off", "takeoff.record")
-    }
-
-    /// Open a database file whose header records carry `format`; `what` and `cmd` name it in errors.
-    pub(crate) fn open_as(path: &std::path::Path, format: &str, what: &str, cmd: &str) -> Result<FileSink> {
-        let mut records = std::collections::BTreeMap::new();
-        if path.exists() {
-            let store = aad_vdb::load_path(path).map_err(|e| bad(cmd, format!("{}: {e}", path.display())))?;
-            let headers: Vec<_> = store.records().iter().filter(|r| kind_of(r.id) == KIND_HEADER).collect();
-            let foreign = headers.iter().any(|r| {
-                serde_json::from_slice::<Value>(&r.payload).ok().and_then(|v| v.get("format").and_then(Value::as_str).map(str::to_string)).as_deref()
-                    != Some(format)
-            });
-            let entity_records = store.records().iter().filter(|r| kind_of(r.id) != KIND_COREOP_PROJECT).count();
-            if entity_records > 0 && (headers.is_empty() || foreign) {
-                return Err(bad(
-                    cmd,
-                    format!("{} is not a {what} database (its header records are missing or of another format); choose another file", path.display()),
-                ));
-            }
-            records.extend(store.records().iter().map(|r| (r.id, r.clone())));
-        }
-        Ok(FileSink { path: path.to_path_buf(), records })
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl Sink for FileSink {
-    fn ids(&mut self) -> Result<Vec<u64>> {
-        Ok(self.records.keys().copied().collect())
-    }
-    fn payload(&mut self, id: u64) -> Result<Option<Vec<u8>>> {
-        Ok(self.records.get(&id).map(|r| r.payload.clone()))
-    }
-    fn put(&mut self, recs: &[Rec]) -> Result<()> {
-        for r in recs {
-            self.records.insert(r.id, aad_vdb::VdbRecord { id: r.id, bbox: vdb_bbox(r.bbox), payload: r.payload.clone() });
-        }
-        Ok(())
-    }
-    fn delete(&mut self, id: u64) -> Result<bool> {
-        Ok(self.records.remove(&id).is_some())
-    }
-    fn save(&mut self) -> Result<()> {
-        // Version 1 matches `shilpid`'s on-disk format so a take-off file can be
-        // opened with `--data` or served; entity stores stay on host version 2.
-        let store = aad_vdb::VdbStore::from_records_version(self.records.values().cloned().collect(), aad_vdb::SHILPID_COMPAT_VERSION)
-            .map_err(|e| bad("takeoff.record", e.to_string()))?;
-        aad_vdb::save_path(&self.path, &store).map_err(|e| bad("takeoff.record", format!("{}: {e}", self.path.display())))
-    }
-}
-
-/// The project file (`.osp`) the open drawing came from, when no `path` or `server` was asked for: the take-off then goes into the same file.
+/// The project file (`.osp`) the open drawing came from, when no `path` was asked for: the take-off then goes into the same file.
 #[cfg(not(target_arch = "wasm32"))]
 fn project_file_of(s: &Session, p: &Value) -> Option<std::path::PathBuf> {
-    if str_param(p, "server").is_some() {
-        return None;
-    }
+    let _ = p;
     s.state().ok()?.path.as_deref().filter(|d| super::file::is_container(d)).map(std::path::PathBuf::from)
 }
 
-/// The sink for a file: a project file (`.osp`) or a ShilpiDB take-off file.
+/// The sink for a project file (`.osp`); the take-off is recorded nowhere else.
 #[cfg(not(target_arch = "wasm32"))]
 fn open_file_sink(path: &std::path::Path) -> Result<Box<dyn Sink>> {
     if super::file::is_container(&path.to_string_lossy()) {
         return Ok(Box::new(OdpSink::open(path)?));
     }
-    Ok(Box::new(FileSink::open(path)?))
+    Err(bad("takeoff.record", format!("{}: the take-off is recorded into a project file (.osp)", path.display())))
 }
 
-/// A project file as a take-off store. The records are held in memory in the same shape the ShilpiDB sinks use and written back in one revision on
+/// A project file as a take-off store. The records are held in memory in the shape the recorder works in and written back in one revision on
 /// `save` (only what changed), so the recorder's steps (claim the slot, write the rows, delete what is gone, write the header again) are unchanged.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) struct OdpSink {
@@ -415,52 +322,7 @@ impl Sink for OdpSink {
     }
     fn save(&mut self) -> Result<()> {
         let all: Vec<(u64, Vec<u8>)> = self.records.iter().map(|(k, v)| (*k, v.clone())).collect();
-        self.osp.replace_takeoff(&all).map(|_| ()).map_err(|e| bad("takeoff.record", e.to_string()))
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) struct ServerSink {
-    addr: String,
-    client: aad_vdb::VdbClient,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl ServerSink {
-    pub(crate) fn connect(addr: &str, cmd: &str) -> Result<ServerSink> {
-        let client =
-            aad_vdb::VdbClient::connect_with_timeout(addr, Some(std::time::Duration::from_secs(10))).map_err(|e| bad(cmd, format!("{addr}: {e}")))?;
-        Ok(ServerSink { addr: addr.to_string(), client })
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl ServerSink {
-    fn fail(&self, e: aad_vdb::ClientError) -> crate::EngineError {
-        bad("takeoff.record", format!("{}: {e}", self.addr))
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl Sink for ServerSink {
-    fn ids(&mut self) -> Result<Vec<u64>> {
-        self.client.list().map_err(|e| bad("takeoff.record", format!("{}: {e}", self.addr)))
-    }
-    fn payload(&mut self, id: u64) -> Result<Option<Vec<u8>>> {
-        self.client.get(id).map(|r| r.map(|r| r.payload)).map_err(|e| self.fail(e))
-    }
-    fn put(&mut self, recs: &[Rec]) -> Result<()> {
-        for chunk in recs.chunks(BATCH) {
-            let batch = chunk.iter().map(|r| (r.id, vdb_bbox(r.bbox), r.payload.clone())).collect();
-            self.client.insert_many(batch).map_err(|e| bad("takeoff.record", format!("{}: {e}", self.addr)))?;
-        }
-        Ok(())
-    }
-    fn delete(&mut self, id: u64) -> Result<bool> {
-        self.client.delete(id).map_err(|e| bad("takeoff.record", format!("{}: {e}", self.addr)))
-    }
-    fn save(&mut self) -> Result<()> {
-        self.client.save().map_err(|e| bad("takeoff.record", format!("{}: {e}", self.addr)))
+        self.odp.replace_takeoff(&all).map(|_| ()).map_err(|e| bad("takeoff.record", e.to_string()))
     }
 }
 
@@ -590,7 +452,7 @@ fn write_slot(
     loop {
         let rec = |slot: u32| -> Result<Rec> {
             let payload = serde_json::to_vec(&header(root, false, None)).map_err(|e| bad("takeoff.record", e.to_string()))?;
-            Ok(Rec { id: header_id(slot), bbox: [0.0; 4], payload })
+            Ok(Rec { id: header_id(slot), payload })
         };
         sink.put(&[rec(slot)?])?;
         match sink.payload(header_id(slot))? {
@@ -646,112 +508,9 @@ fn write_slot(
         meta = Some(p.meta);
     }
     let done = serde_json::to_vec(&header(root, true, meta.as_ref())).map_err(|e| bad("takeoff.record", e.to_string()))?;
-    sink.put(&[Rec { id: header_id(slot), bbox: [0.0; 4], payload: done }])?;
+    sink.put(&[Rec { id: header_id(slot), payload: done }])?;
     sink.save()?;
     Ok(Outcome { slot, added, changed: compare.then_some(changed), unchanged: compare.then_some(unchanged), deleted, written: rows.len() + 1 })
-}
-
-// ---------------- the shared server ----------------
-
-/// Folders to search for engine-bundled `shilpid` / `shilpi-http` (beside the running app first).
-#[cfg(not(target_arch = "wasm32"))]
-fn app_bin_dirs() -> Vec<std::path::PathBuf> {
-    let mut dirs = Vec::new();
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
-        dirs.push(dir.to_path_buf());
-        // Some layouts put the shell one folder deeper than the staged binaries.
-        if let Some(parent) = dir.parent() {
-            dirs.push(parent.to_path_buf());
-        }
-    }
-    if let Some(d) = std::env::var_os("LOCALAPPDATA") {
-        let local = std::path::Path::new(&d);
-        // Suite ships the same binaries under Programs\OSAS\shilpidb when present.
-        dirs.push(local.join("Programs").join("OSAS").join("shilpidb"));
-        dirs.push(local.join("Programs").join("O-Draft"));
-        dirs.push(local.join("Programs").join("O-CoreOp"));
-    }
-    dirs
-}
-
-/// Find a ShilpiDB program: beside the app (engine bundle), then `SHILPIDB_BIN`,
-/// `%LocalAppData%\ShilpiDB\bin`, then `PATH`.
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn find_program(name: &str) -> Option<std::path::PathBuf> {
-    let exe = format!("{name}{}", std::env::consts::EXE_SUFFIX);
-    let mut dirs: Vec<std::path::PathBuf> = app_bin_dirs();
-    if let Some(d) = std::env::var_os("SHILPIDB_BIN") {
-        dirs.push(d.into());
-    }
-    if let Some(d) = std::env::var_os("LOCALAPPDATA") {
-        dirs.push(std::path::Path::new(&d).join("ShilpiDB").join("bin"));
-    }
-    if let Some(p) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&p));
-    }
-    dirs.into_iter().map(|d| d.join(&exe)).find(|p| p.is_file())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn answers(addr: &str) -> bool {
-    use std::net::ToSocketAddrs;
-    addr.to_socket_addrs()
-        .ok()
-        .and_then(|mut a| a.next())
-        .is_some_and(|a| std::net::TcpStream::connect_timeout(&a, std::time::Duration::from_millis(400)).is_ok())
-}
-
-/// Make sure the shared take-off server answers (see [`ensure_server`]).
-#[cfg(not(target_arch = "wasm32"))]
-fn ensure_shared_server() -> Result<()> {
-    ensure_server("takeoff.record", SHARED_ADDR, GATEWAY_ADDR, "takeoff", "takeoff.vdb")
-}
-
-/// Make sure the ShilpiDB server at `addr` answers: when nothing does, start `shilpid` on `%LocalAppData%\OSAS\<dir>\<file>`
-/// and `shilpi-http` on `gateway` (they bind fixed ports, so a second starter fails harmlessly and the one that is up is used).
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn ensure_server(cmd: &str, addr: &str, gateway: &str, dir: &str, file: &str) -> Result<()> {
-    if answers(addr) {
-        return Ok(());
-    }
-    let shilpid = find_program("shilpid").ok_or_else(|| {
-        bad(
-            cmd,
-            format!(
-                "no ShilpiDB server answers on {addr} and shilpid was not found beside the app \
-                 (engine bundle). Reinstall O-Draft, or set SHILPIDB_BIN, or pass `server` / `path`"
-            ),
-        )
-    })?;
-    let base = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
-    let dir = base.join("OSAS").join(dir);
-    std::fs::create_dir_all(&dir).map_err(|e| bad(cmd, format!("{}: {e}", dir.display())))?;
-    let data = dir.join(file);
-    let spawn = |c: &mut std::process::Command| {
-        c.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            // No console window, and not part of this process's group.
-            c.creation_flags(0x0800_0000 | 0x0000_0200);
-        }
-        c.spawn()
-    };
-    spawn(std::process::Command::new(&shilpid).args(["--bind", addr, "--data"]).arg(&data).args(["--autosave-secs", "5"]))
-        .map_err(|e| bad(cmd, format!("could not start shilpid: {e}")))?;
-    if let Some(http) = find_program("shilpi-http") {
-        // The gateway is for readers such as O-CoreOp; a failure to start it does not stop the write.
-        let _ = spawn(std::process::Command::new(http).args(["--bind", gateway, "--backend", addr]));
-    }
-    for _ in 0..50 {
-        if answers(addr) {
-            return Ok(());
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    Err(bad(cmd, format!("shilpid was started but did not answer on {addr} within five seconds")))
 }
 
 // ---------------- the command ----------------
@@ -760,12 +519,12 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
     #[cfg(target_arch = "wasm32")]
     {
         let _ = (s, p);
-        Err(bad("takeoff.record", "ShilpiDB files cannot be written on the web"))
+        Err(bad("takeoff.record", "project files cannot be written on the web"))
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
         let mut c = bridge::collect(s, p)?;
-        // Stash MEASURE table snapshots so takeoff.restore can redraw them from ShilpiDB.
+        // Stash MEASURE table snapshots so takeoff.restore can redraw them from the project file.
         let tables = super::takeoff::snapshot_tables(s.doc()?);
         if let Some(obj) = tables.as_object()
             && !obj.is_empty()
@@ -800,26 +559,14 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
         };
         let pdf_ref = pdf.as_ref().map(|(b, n, g)| (b.as_slice(), *n, g.clone()));
 
-        let file_path = match (str_param(p, "path"), p.get("file").and_then(Value::as_bool).unwrap_or(false)) {
-            (Some(t), _) => Some(std::path::PathBuf::from(t)),
-            (None, true) => match s.state()?.path.as_ref() {
-                Some(drawing) => Some(std::path::Path::new(drawing).with_extension("takeoff.vdb")),
-                None => return Err(bad("takeoff.record", "save the drawing first, or give `path` or `server`")),
-            },
-            (None, false) => project_file_of(s, p),
+        let file_path = match str_param(p, "path") {
+            Some(t) => Some(std::path::PathBuf::from(t)),
+            None => project_file_of(s, p),
         };
-        let (target, mut sink): (Value, Box<dyn Sink>) = match (&file_path, str_param(p, "server")) {
-            (Some(path), _) => (json!({ "path": path.display().to_string() }), open_file_sink(path)?),
-            (None, server) => {
-                let addr = server.unwrap_or(SHARED_ADDR).to_string();
-                if server.is_none() {
-                    ensure_shared_server()?;
-                }
-                let client = aad_vdb::VdbClient::connect_with_timeout(addr.as_str(), Some(std::time::Duration::from_secs(10)))
-                    .map_err(|e| bad("takeoff.record", format!("{addr}: {e}")))?;
-                (json!({ "server": addr }), Box::new(ServerSink { addr, client }))
-            }
+        let Some(path) = &file_path else {
+            return Err(bad("takeoff.record", "save the drawing as a project (.osp) first, or give `path`"));
         };
+        let (target, mut sink): (Value, Box<dyn Sink>) = (json!({ "path": path.display().to_string() }), open_file_sink(path)?);
         let probe_slot = find_slot(sink.as_mut(), &c.drawing_id, kept)?;
         let built = build(&c, probe_slot)?;
         let out = write_slot(sink.as_mut(), &c, &built, Some(probe_slot), pdf_ref, file_path.is_some())?;
@@ -857,41 +604,6 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
 mod tests {
     use super::*;
 
-    /// A ShilpiDB file (version 1) of the given records, as O-CoreOp writes it.
-    #[cfg(not(target_arch = "wasm32"))]
-    fn vdb_bytes(records: &[(u64, &[u8])]) -> Vec<u8> {
-        let mut b = b"SHILPIDB".to_vec();
-        b.extend(1u32.to_le_bytes());
-        b.extend((records.len() as u32).to_le_bytes());
-        for (id, payload) in records {
-            b.extend(id.to_le_bytes());
-            for _ in 0..4 {
-                b.extend(0f64.to_le_bytes());
-            }
-            b.extend((payload.len() as u32).to_le_bytes());
-            b.extend(*payload);
-        }
-        b
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn a_file_holding_only_the_coreop_project_is_a_take_off_file_that_can_be_recorded_into() {
-        let dir = std::env::temp_dir().join(format!("aad-takeoff-coreop-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let only_project = dir.join("a.takeoff.vdb");
-        std::fs::write(&only_project, vdb_bytes(&[(record_id(KIND_COREOP_PROJECT, 0, 0), br#"{"project":{}}"#)])).unwrap();
-        let sink = FileSink::open(&only_project).expect("a project-only file is accepted");
-        // and what O-CoreOp wrote is kept when the take-off is saved
-        assert!(sink.records.contains_key(&record_id(KIND_COREOP_PROJECT, 0, 0)));
-
-        // an entity store (a record that is not a header, no header at all) is still refused
-        let entity = dir.join("b.vdb");
-        std::fs::write(&entity, vdb_bytes(&[(record_id(2, 0, 1), b"{}"), (record_id(KIND_COREOP_PROJECT, 0, 0), b"{}")])).unwrap();
-        assert!(FileSink::open(&entity).is_err());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
     #[test]
     fn slots_follow_the_contract_test_vectors() {
         assert_eq!(slot_for("0b7d9c34-1e6f-4f0b-8a13-9b2c7d5e41aa"), 6_389_047);
@@ -919,7 +631,7 @@ mod tests {
         let bytes: Vec<u8> = (0..(CHUNK * 2 + 100)).map(|i| (i % 251) as u8).collect();
         let p = chunk_pdf(&bytes, 7, 1, "2026-10-19T00:00:00Z").unwrap();
         assert_eq!(p.chunks.len(), 3);
-        assert!(p.chunks.iter().all(|c| c.payload.len() <= CHUNK && kind_of(c.id) == KIND_PDF && slot_of(c.id) == 7 && c.bbox == [0.0; 4]));
+        assert!(p.chunks.iter().all(|c| c.payload.len() <= CHUNK && kind_of(c.id) == KIND_PDF && slot_of(c.id) == 7));
         assert_eq!(p.chunks.iter().flat_map(|c| c.payload.clone()).collect::<Vec<u8>>(), bytes);
         assert_eq!(p.meta["bytes"], json!(bytes.len()));
         assert_eq!(p.meta["chunks"], json!(3));
@@ -1005,7 +717,7 @@ mod tests {
     }
 
     fn collected() -> Collected {
-        let item = |kind: u8, n: u64| Item { kind, n, row: json!({ "ref": format!("W{n:X}"), "length_mm": 1000.0 }), bbox: [0.0, 0.0, 1000.0, 0.0] };
+        let item = |kind: u8, n: u64| Item { kind, n, row: json!({ "ref": format!("W{n:X}"), "length_mm": 1000.0 }) };
         let mut root = Map::new();
         root.insert("source".into(), json!({ "drawing": "house.dxf", "drawing_id": "0b7d9c34-1e6f-4f0b-8a13-9b2c7d5e41aa" }));
         Collected {

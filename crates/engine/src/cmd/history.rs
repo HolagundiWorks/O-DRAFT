@@ -1,4 +1,4 @@
-//! Version history: milestones and automatic restore points in `<drawing>.history.vdb`.
+//! Version history: milestones and automatic restore points in the project file (`.osp`), or beside a drawing that is not one in `<drawing>.history.osp`.
 //!
 //! Commands: `history.save`, `history.list`, `history.restore`, `history.rename`, `history.delete`, `history.prune`,
 //! `history.compare`, `history.preview`, `history.mirror`.
@@ -12,7 +12,7 @@ use aad_doc::{
     Block, DimStyle, Drawing, EditTarget, Entity, EntityStore, Handle, Layer, LevelId, Linetype, MAX_BLOCK_DEPTH, SheetSetId, TextStyle,
     entity_bounds,
 };
-use aad_vdb::history::{self as hvdb, HistoryDb, MilestoneIn, MilestoneOut, RowIn, StoreBundle, StoreMeta, StoreOut, sidecar_path};
+use aad_odp::history::{self as hvdb, HistoryDb, MilestoneIn, MilestoneOut, RowIn, StoreBundle, StoreMeta, StoreOut, sidecar_path};
 use serde_json::{Map, Value, json};
 
 use super::project;
@@ -152,7 +152,7 @@ fn fnv(seed: u64, bytes: &[u8]) -> u64 {
 }
 
 fn history_path(s: &Session) -> Result<PathBuf> {
-    let path = s.state()?.path.as_ref().ok_or_else(|| bad("history", "save the drawing first so a history file can sit beside it"))?;
+    let path = s.state()?.path.as_ref().ok_or_else(|| bad("history", "save the drawing first so its history can be kept with it"))?;
     Ok(sidecar_path(Path::new(path)))
 }
 
@@ -329,7 +329,7 @@ fn store_name(d: &Drawing, r: &StoreRef) -> String {
 
 fn entity_row(d: &Drawing, e: &Entity) -> Result<RowIn> {
     let payload = serde_json::to_vec(e).map_err(|err| bad("history.save", err.to_string()))?;
-    if payload.len() > aad_vdb::MAX_PAYLOAD {
+    if payload.len() > aad_odp::history::MAX_PAYLOAD {
         return Err(bad("history.save", format!("object {} is too large to store", e.handle.hex())));
     }
     let b = entity_bounds(d, e, 0);
@@ -433,7 +433,7 @@ fn def_row<T: serde::Serialize>(kind: &str, v: &T) -> Result<RowIn> {
     map.insert("kind".into(), json!(kind));
     map.insert("data".into(), serde_json::to_value(v).map_err(|e| bad("history.save", e.to_string()))?);
     let payload = serde_json::to_vec(&Value::Object(map)).map_err(|e| bad("history.save", e.to_string()))?;
-    if payload.len() > aad_vdb::MAX_PAYLOAD {
+    if payload.len() > aad_odp::history::MAX_PAYLOAD {
         return Err(bad("history.save", format!("{kind} definition too large")));
     }
     Ok(RowIn { bbox: [0.0, 0.0, 0.0, 0.0], payload })
@@ -515,7 +515,7 @@ fn build_layouts(d: &Drawing) -> Result<Vec<RowIn>> {
             "entities": entity_vals,
         }))
         .map_err(|e| bad("history.save", e.to_string()))?;
-        if payload.len() > aad_vdb::MAX_PAYLOAD {
+        if payload.len() > aad_odp::history::MAX_PAYLOAD {
             return Err(bad("history.save", format!("layout `{}` is too large", lay.name)));
         }
         let b = d.extents(&aad_doc::Space::Paper(lay.name.clone()));
@@ -1203,7 +1203,7 @@ fn run_preview(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn run_mirror(_s: &mut Session, _p: &Value) -> Result<Value> {
-    Err(bad("history.mirror", "office shared history is not available yet; history stays in the local <drawing>.history.vdb sidecar"))
+    Err(bad("history.mirror", "office shared history is not available yet; history stays in the local history file"))
 }
 
 /// Diff boxes for revision cloud clustering (`revision.clouds`).

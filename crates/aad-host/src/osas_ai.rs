@@ -59,7 +59,7 @@ pub fn status_label() -> String {
 }
 
 /// Extra system guidance for OLMo (plain OpenAI chat, no native tools API).
-const OLMO_DRAWING_HINT: &str = "\n\n# Local OLMo / ShilpiDB-style context\n\
+const OLMO_DRAWING_HINT: &str = "\n\n# Local OLMo drawing context\n\
 User messages may include a drawing_digest and context_cards JSON — answer from those first.\n\
 Never say you cannot see the drawing when digest/cards are present.\n\
 For more detail call get_drawing_digest, query_context_cards, get_room_log, or spatial tools.\n\

@@ -53,7 +53,7 @@ dependencies = [
  "aad-io",
  "aad-llm",
  "aad-mcp",
- "aad-vdb",
+ "aad-odp",
  "serde_json",
 ]
 
@@ -102,7 +102,6 @@ dependencies = [
  "aad-office",
  "aad-param",
  "aad-render",
- "aad-vdb",
  "criterion",
  "log",
  "proptest",
@@ -196,8 +195,8 @@ dependencies = [
 name = "aad-odp"
 version = "0.6.0"
 dependencies = [
- "aad-vdb",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
@@ -257,18 +256,6 @@ dependencies = [
  "naga",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "aad-vdb"
-version = "0.6.0"
-dependencies = [
- "serde",
- "serde_json",
- "shilpi-client",
- "shilpidb",
- "tempfile",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -4244,28 +4231,6 @@ dependencies = [
  "cpufeatures 0.3.1",
  "digest 0.11.3",
 ]
-
-[[package]]
-name = "shilpi-client"
-version = "0.2.1"
-source = "git+https://github.com/HolagundiWorks/shilpidb?tag=v0.2.1#5be82224e9edcae075fa0b8eb99a6d9eb673e9d9"
-dependencies = [
- "shilpi-protocol",
- "shilpidb",
-]
-
-[[package]]
-name = "shilpi-protocol"
-version = "0.2.1"
-source = "git+https://github.com/HolagundiWorks/shilpidb?tag=v0.2.1#5be82224e9edcae075fa0b8eb99a6d9eb673e9d9"
-dependencies = [
- "shilpidb",
-]
-
-[[package]]
-name = "shilpidb"
-version = "0.2.1"
-source = "git+https://github.com/HolagundiWorks/shilpidb?tag=v0.2.1#5be82224e9edcae075fa0b8eb99a6d9eb673e9d9"
 
 [[package]]
 name = "shlex"

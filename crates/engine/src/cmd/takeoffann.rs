@@ -3,7 +3,7 @@
 //! Each measured item is drawn again on the layer `TAKEOFF-ANNOT` in the colour of its kind (walls red, openings
 //! green, columns blue, lintels magenta, rooms cyan, slabs orange) with its mark and its measure beside it, and a
 //! legend and a title line (drawing, revision, date) stand below the drawing. The work happens on a copy of the
-//! drawing, so the drawing itself is untouched. `takeoff.record` stores the PDF in ShilpiDB in chunks
+//! drawing, so the drawing itself is untouched. `takeoff.record` stores the PDF in the project file in chunks
 //! (`TAKEOFF-SHILPIDB.md`, section 6).
 
 use aad_color::Color;

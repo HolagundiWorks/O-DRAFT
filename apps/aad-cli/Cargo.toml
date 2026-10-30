@@ -26,4 +26,4 @@ aad-llm = { workspace = true }
 assistant = ["aad-llm/llama"]
 
 [dev-dependencies]
-aad-vdb = { workspace = true }
+aad-odp = { workspace = true }

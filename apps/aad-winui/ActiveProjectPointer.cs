@@ -3,13 +3,10 @@ using System.Text.Json;
 namespace Aad.WinUi;
 
 /// <summary>
-/// Tells the other suite apps which drawing is open here, so O-CoreOp can use the same ShilpiDB file. It keeps
+/// Tells the other suite apps which drawing is open here, so O-CoreOp can open the same project file. It keeps
 /// <c>%LOCALAPPDATA%\OSAS\active-project.json</c> current: written when the active drawing changes (opened, saved under a new name, another tab
-/// chosen), deleted when no saved drawing is active or the app closes. The ShilpiDB file is the one <c>takeoff.record</c> writes with
-/// <c>file: true</c>, <c>&lt;drawing&gt;.takeoff.vdb</c> beside the drawing (the drawing's extension replaced).
-/// <c>server</c> is the shilpi-http gateway (<see cref="ProjectServer"/>) while this app is serving that file, else null; O-CoreOp then reads and saves through it
-/// instead of touching the file.
-/// <code>{ "format": "osas-active-project", "version": 1, "app": "O-Draft", "drawing": "C:\p\house.dwg", "shilpidb": "C:\p\house.takeoff.vdb", "server": "http://127.0.0.1:7421", "updated_utc": "…" }</code>
+/// chosen), deleted when no saved drawing is active or the app closes. <c>project</c> is the drawing's path when it is a project file (<c>.osp</c>), else null.
+/// <code>{ "format": "osas-active-project", "version": 1, "app": "O-Draft", "drawing": "C:\p\house.osp", "project": "C:\p\house.osp", "updated_utc": "…" }</code>
 /// </summary>
 internal static class ActiveProjectPointer
 {
@@ -18,19 +15,15 @@ internal static class ActiveProjectPointer
     internal static string FilePath => System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OSAS", "active-project.json");
 
-    /// <summary>The ShilpiDB file that goes with a drawing: beside it, extension replaced by <c>takeoff.vdb</c>.</summary>
-    internal static string ShilpiDbFor(string drawingPath) =>
-        IsProjectFile(drawingPath) ? drawingPath : System.IO.Path.ChangeExtension(drawingPath, "takeoff.vdb");
-
-    /// <summary>A project file (<c>.osp</c>): the drawing and its take-off are one file, so it is its own ShilpiDB-side file and needs no server.</summary>
+    /// <summary>A project file (<c>.osp</c>): the drawing and its take-off are one file, so O-CoreOp opens the same file and needs no server.</summary>
     internal static bool IsProjectFile(string path) =>
         string.Equals(System.IO.Path.GetExtension(path), ".osp", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Point at <paramref name="drawingPath"/>, or clear the pointer when it is null or empty. A write that changes nothing is skipped.</summary>
-    internal static void Set(string? drawingPath, string? serverUrl = null)
+    internal static void Set(string? drawingPath)
     {
         var path = string.IsNullOrWhiteSpace(drawingPath) ? null : System.IO.Path.GetFullPath(drawingPath);
-        var key = path is null ? null : path + "|" + serverUrl;
+        var key = path;
         if (key == _last)
         {
             return;
@@ -50,8 +43,7 @@ internal static class ActiveProjectPointer
                 ["version"] = 1,
                 ["app"] = "O-Draft",
                 ["drawing"] = path,
-                ["shilpidb"] = ShilpiDbFor(path!),
-                ["server"] = serverUrl,
+                ["project"] = IsProjectFile(path!) ? path : null,
                 ["updated_utc"] = DateTime.UtcNow.ToString("o"),
             });
             // write beside, then move over, so a reader never sees half a file

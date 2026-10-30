@@ -156,48 +156,6 @@ fn two_handles_on_one_file_see_each_others_commits() {
 }
 
 #[test]
-fn a_vdb_is_imported_with_headers_rows_pdf_and_project() {
-    use aad_vdb::{Bbox, VdbRecord, VdbStore};
-    let id = |kind: u64, slot: u64, n: u64| (kind << 56) | (slot << 32) | n;
-    let rec = |id: u64, payload: &[u8]| VdbRecord { id, bbox: Bbox::new(aad_vdb::Point::new(0.0, 0.0), aad_vdb::Point::new(0.0, 0.0)), payload: payload.to_vec() };
-    let store = VdbStore::from_records_version(
-        vec![
-            rec(id(1, 5, 0), br#"{"format":"hcw-takeoff-shilpi","state":"complete"}"#),
-            rec(id(3, 5, 1), br#"{"ref":"W1","length_mm":9000}"#),
-            rec(id(4, 5, 1), br#"{"ref":"2A1","width_mm":1200}"#),
-            rec(id(9, 5, 1), b"BBB"),
-            rec(id(9, 5, 0), b"AAA"),
-            rec(id(0x60, 0, 1), b"\"}"),
-            rec(id(0x60, 0, 0), b"{\"name\":\""),
-            rec(id(0x45, 0, 0), b"history"),
-        ],
-        1,
-    )
-    .unwrap();
-    let dir = tempfile::tempdir().unwrap();
-    let vdb = dir.path().join("house.takeoff.vdb");
-    aad_vdb::save_path(&vdb, &store).unwrap();
-    let mut odp = Odp::create(&dir.path().join("house.osp"), "House").unwrap();
-    let report = odp.import_vdb(&vdb).unwrap();
-    assert_eq!(report, ImportReport { headers: 1, rows: 2, assets: 1, project: true, skipped: 1 });
-    assert_eq!(odp.revision().unwrap(), 1);
-    assert_eq!(odp.takeoff_headers().unwrap()[0].state, "complete");
-    assert_eq!(odp.takeoff_rows(5).unwrap().len(), 2);
-    assert_eq!(odp.asset("annotated-5.pdf").unwrap().unwrap().bytes, b"AAABBB");
-    assert_eq!(odp.project_doc().unwrap().unwrap(), "{\"name\":\"\"}");
-}
-
-#[test]
-fn a_bbsproj_becomes_the_project_document() {
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path().join("old.bbsproj");
-    std::fs::write(&p, "{\"project\":{\"name\":\"Old\"}}").unwrap();
-    let mut odp = Odp::create(&dir.path().join("house.osp"), "House").unwrap();
-    odp.import_bbsproj(&p).unwrap();
-    assert!(odp.project_doc().unwrap().unwrap().contains("Old"));
-}
-
-#[test]
 fn take_off_records_round_trip_and_only_what_changed_is_written() {
     let (_d, path) = temp();
     let mut odp = Odp::create(&path, "House").unwrap();

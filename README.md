@@ -131,7 +131,7 @@ An offline assistant can call a fixed set of validated tools (summary, flatten, 
 | [docs/status.md](docs/status.md) | Implemented and planned functionality (capability matrix) |
 | [docs/documentation-policy.md](docs/documentation-policy.md) | Documentation maintenance and change management (required for all contributors and agents) |
 | [docs/hcw-kit-port.md](docs/hcw-kit-port.md) | Architectural tools ported from hcwCAD-KIT |
-| [docs/takeoff-shilpidb.md](docs/takeoff-shilpidb.md) | Take-off recorded in ShilpiDB for O-CoreOp |
+| [docs/takeoff-shilpidb.md](docs/takeoff-shilpidb.md) | Take-off recorded into the project file for O-CoreOp (retired ShilpiDB route; layout kept) |
 | [docs/parametric.md](docs/parametric.md) | Parametric graph engine, wall commit and take-off facts |
 | [docs/HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md](docs/HANDOFF-O-COREOP-PARAMETRIC-TAKEOFF.md) | Hand-off to O-CoreOp: parametric wall take-off rows |
 | [docs/projects.md](docs/projects.md), [docs/sheets.md](docs/sheets.md), [docs/widgets.md](docs/widgets.md), [docs/input-forms.md](docs/input-forms.md) | Floor projects and Xrefs, layouts and plotting, calculator and Pomodoro, input forms |
@@ -148,7 +148,7 @@ An offline assistant can call a fixed set of validated tools (summary, flatten, 
 | [docs/UI_STANDARDS.md](docs/UI_STANDARDS.md), [docs/UI_TOKENS.md](docs/UI_TOKENS.md), [docs/WINDOW_SIZING.md](docs/WINDOW_SIZING.md), [docs/TYPOGRAPHY.md](docs/TYPOGRAPHY.md), [docs/COMPACT_CAD_UI.md](docs/COMPACT_CAD_UI.md), [docs/canvas-smoothness.md](docs/canvas-smoothness.md) | WinUI shell standards, tokens, window sizes, type, compact layout, canvas rendering plan |
 | [docs/qa/README.md](docs/qa/README.md) | Quality records: test matrix, defect ledger, regression and release readiness |
 | [docs/licensing/DEPENDENCY_INVENTORY.md](docs/licensing/DEPENDENCY_INVENTORY.md), [docs/licensing/PROPRIETARY_COMPONENT_REMOVAL.md](docs/licensing/PROPRIETARY_COMPONENT_REMOVAL.md) | Dependency licences, proprietary components not shipped |
-| [docs/architecture/suite-integration.md](docs/architecture/suite-integration.md) | How O-Draft connects to O-Studio, O-CoreOp and ShilpiDB |
+| [docs/architecture/suite-integration.md](docs/architecture/suite-integration.md) | How O-Draft connects to O-Studio and O-CoreOp (see docs/SUITE.md) |
 | [docs/parity-checklist.md](docs/parity-checklist.md) | Generated menu-name comparison (`cargo xtask parity`) |
 | [CLAUDE.md](CLAUDE.md) | Rules for developers and coding agents |
 

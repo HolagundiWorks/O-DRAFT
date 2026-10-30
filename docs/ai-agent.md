@@ -10,7 +10,7 @@ work.
 | Part | State |
 |---|---|
 | Tool registry, strict parsing, schema validation, confirmation policy, loop limits, audit log (`crates/agent`) | **Implemented and tested** (13 unit tests) |
-| Tools: `get_drawing_summary`, spatial query tools, ShilpiDB `export` / `query` / `import` / `connect` / `disconnect` / `push` / `pull`, `flatten_drawing`, `audit_drawing`, `purge_unused`, `recover_file`, units/plot/annotation layout tools | **Implemented and tested**, each one an existing engine command |
+| Tools: `get_drawing_summary`, spatial query tools, `flatten_drawing`, `audit_drawing`, `purge_unused`, `recover_file`, units/plot/annotation layout tools | **Implemented and tested**, each one an existing engine command |
 | Auditor v0 detect tools: `validate_drawing`, `check_command_parity`, `check_command_menu_coverage`, `check_ui_tokens`, `auditor_report` (plus detect path of `audit_drawing`) | **Implemented and tested** via `aad-auditor`; detect-only (no auto repair). Repo checks need the source tree (`AAD_REPO_ROOT` or cwd). Screenshot capture stays on the live Windows control/MCP path |
 | Qwen3 chat format, model-file discovery and checks, generation settings (`crates/llm`) | **Implemented and tested** (7 tests, no model needed) |
 | Assistant conversation state machine: tool list prompt, strict parse, one retry, confirmation, step and history limits (`agent::Assistant`) | **Implemented and tested** with scripted model replies (8 tests) |
@@ -200,13 +200,6 @@ by read-only, bounded engine queries (`crates/engine/src/cmd/spatialq.rs`, teste
 | `find_objects_in_window {window, mode?, layers?, types?, limit?}` | `spatial.query` | The objects touching or inside a rectangle: handle, type, layer, bounds, centre and key geometry; `matched` and `truncated` say when the list was cut |
 | `find_nearest_objects {point, count?, layers?, types?}` | `spatial.nearest` | The objects closest to a point, with the distance to their bounds |
 | `describe_objects {handles}` | `spatial.describe` | Details by handle: a line's ends and length, a circle's centre and radius, a text's words and position, a block's name |
-| `export_shilpidb {path}` | `vdb.export` | Write model-space entities to a ShilpiDB `.vdb` (format v2 payloads). Does not change the drawing |
-| `query_shilpidb {path, window, limit?}` | `vdb.query` | Ids and labels whose bounds intersect a window in a `.vdb` file |
-| `import_shilpidb {path, replace?}` | `vdb.import` | Best-effort geometry from a `.vdb` into model space (one undo step) |
-| `connect_shilpidb {addr?}` | `vdb.connect` | Ping a local `shilpid` (default `127.0.0.1:7420`) and remember the address |
-| `disconnect_shilpidb {}` | `vdb.disconnect` | Forget the remembered server address |
-| `push_shilpidb {replace?}` | `vdb.push` | Upsert model space to the connected server; `replace=true` deletes server ids not in the drawing |
-| `pull_shilpidb {replace?}` | `vdb.pull` | Pull server records into model space (one undo step; needs connect first) |
 
 The references add positions too: `/view` (the visible window and the objects in it), `/selection`
 (each object's bounds), `/rooms` (each label's position) and `/drawing` (extents and view).

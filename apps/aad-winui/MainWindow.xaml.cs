@@ -157,7 +157,6 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) =>
         {
             ActiveProjectPointer.Set(null);
-            ProjectServer.StopNow();
             TearDownShell();
         };
         Activated += (_, _) =>
@@ -548,16 +547,6 @@ public sealed partial class MainWindow : Window
         if (id is "open" or "qsave" or "saveas")
         {
             _ = PickFile(id);
-            return;
-        }
-        if (id is "vdb.export" or "vdb.import")
-        {
-            _ = PickVdb(id);
-            return;
-        }
-        if (id is "vdb.connect" or "vdb.disconnect" or "vdb.push" or "vdb.pull" or "vdb.sidecar" or "vdb.convert")
-        {
-            RunShilpiCommand(id);
             return;
         }
         if (id == "close")
@@ -1002,16 +991,6 @@ public sealed partial class MainWindow : Window
         if (id is "open" or "qsave" or "saveas")
         {
             _ = PickFile(id);
-            return;
-        }
-        if (id is "vdb.export" or "vdb.import")
-        {
-            _ = PickVdb(id);
-            return;
-        }
-        if (id is "vdb.connect" or "vdb.disconnect" or "vdb.push" or "vdb.pull" or "vdb.sidecar" or "vdb.convert")
-        {
-            RunShilpiCommand(id);
             return;
         }
         if (id is "pasteclip" or "pasteblock")
@@ -1818,54 +1797,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task PickVdb(string id)
-    {
-        try
-        {
-            await PickVdbCore(id);
-        }
-        catch (Exception ex)
-        {
-            History.Text = ex.Message;
-        }
-    }
-
-    private async Task PickVdbCore(string id)
-    {
-        var hwnd = WindowNative.GetWindowHandle(this);
-        if (id == "vdb.import")
-        {
-            var open = new FileOpenPicker();
-            InitializeWithWindow.Initialize(open, hwnd);
-            open.FileTypeFilter.Add(".vdb");
-            var file = await open.PickSingleFileAsync();
-            if (file == null)
-            {
-                return;
-            }
-            if (Native.Execute(_host, "vdb.import", PathJson(file.Path)) != 0)
-            {
-                History.Text = Native.LastError(_host);
-            }
-            AfterCommand();
-            return;
-        }
-        var save = new FileSavePicker();
-        InitializeWithWindow.Initialize(save, hwnd);
-        save.FileTypeChoices.Add("ShilpiDB", new List<string> { ".vdb" });
-        save.SuggestedFileName = "drawing";
-        var chosen = await save.PickSaveFileAsync();
-        if (chosen == null)
-        {
-            return;
-        }
-        if (Native.Execute(_host, "vdb.export", PathJson(chosen.Path)) != 0)
-        {
-            History.Text = Native.LastError(_host);
-        }
-        AfterCommand();
-    }
-
     private async Task<bool> OpenFileAsync(string path)
     {
         var name = System.IO.Path.GetFileName(path);
@@ -1931,33 +1862,8 @@ public sealed partial class MainWindow : Window
         _docPaths[System.IO.Path.GetFileName(path)] = path;
     }
 
-    private string? _servedDrawing;
-
-    /// <summary>
-    /// Publish the active drawing and serve its ShilpiDB file (<see cref="ProjectServer"/>) so take-off recording and O-CoreOp share it live. The pointer is
-    /// written at once without the server and again, with the gateway address, when the server answers.
-    /// </summary>
-    private void PublishActiveProject(string? drawing)
-    {
-        var db = drawing is null ? null : ActiveProjectPointer.ShilpiDbFor(drawing);
-        ActiveProjectPointer.Set(drawing, ProjectServer.UrlFor(db));
-        if (drawing == _servedDrawing)
-        {
-            return;
-        }
-        _servedDrawing = drawing;
-        _ = ServeAsync(drawing, db);
-    }
-
-    private async Task ServeAsync(string? drawing, string? db)
-    {
-        // A project file (.osp) needs no server: O-CoreOp opens the same file. Moving to one stops the server of the drawing before it.
-        var up = await ProjectServer.EnsureAsync(db is not null && ActiveProjectPointer.IsProjectFile(db) ? null : db);
-        if (drawing == _servedDrawing)
-        {
-            ActiveProjectPointer.Set(drawing, up ? ProjectServer.UrlFor(db) : null);
-        }
-    }
+    /// <summary>Publish the active drawing so O-CoreOp can find the same project file (the pointer; a project file needs no server).</summary>
+    private void PublishActiveProject(string? drawing) => ActiveProjectPointer.Set(drawing);
 
     private string? ActiveDrawingPath(DocTab? active) =>
         active is not null && _docPaths.TryGetValue(active.Title, out var path) && System.IO.File.Exists(path) ? path : null;
@@ -1972,36 +1878,10 @@ public sealed partial class MainWindow : Window
             picker.FileTypeFilter.Add(".osp");
             picker.FileTypeFilter.Add(".dxf");
             picker.FileTypeFilter.Add(".dwg");
-            picker.FileTypeFilter.Add(".vdb");
             var file = await picker.PickSingleFileAsync();
             if (file == null)
             {
                 return false;
-            }
-            if (file.Path.EndsWith(".vdb", StringComparison.OrdinalIgnoreCase))
-            {
-                // Open replaces model space so a .vdb is not merged onto the current drawing.
-                ShowBusy("Opening?", file.Name);
-                try
-                {
-                    var import = "{\"path\":" + JsonSerializer.Serialize(file.Path) + ",\"replace\":true}";
-                    if (Native.Execute(_host, "vdb.import", import) != 0)
-                    {
-                        History.Text = Native.LastError(_host);
-                        AfterCommand();
-                        return false;
-                    }
-                    Native.Execute(_host, "zoom.extents", "{}");
-                    ShellPrefs.RememberRecent(file.Path);
-                    HideWelcome();
-                    _docKey = "";
-                    AfterCommand();
-                    return true;
-                }
-                finally
-                {
-                    HideBusy();
-                }
             }
             // The file is read on a worker thread so the window keeps responding; the host fits the view.
             History.Text = "Opening " + file.Name + "...";
@@ -2655,53 +2535,8 @@ public sealed partial class MainWindow : Window
         {
             _revisionsPanel?.Load();
         }
-        RefreshShilpiChip();
         BuildMenus();
         CommandInput.Focus(FocusState.Programmatic);
-    }
-
-    private void RefreshShilpiChip()
-    {
-        if (_host == IntPtr.Zero || ShilpiChip == null || ShilpiChipHost == null)
-        {
-            return;
-        }
-        ShilpiChipHost.Visibility = Visibility.Visible;
-        if (Native.Execute(_host, "vdb.status", "{}") != 0)
-        {
-            SetStatusGlow(ShilpiChipHost, active: false, accent: false);
-            ToolTipService.SetToolTip(ShilpiChip, "ShilpiDB — click to connect (127.0.0.1:7420)");
-            return;
-        }
-        try
-        {
-            using var doc = JsonDocument.Parse(Native.ReadResult(_host));
-            var root = doc.RootElement;
-            var connected = root.TryGetProperty("connected", out var c) && c.GetBoolean();
-            var addr = root.TryGetProperty("addr", out var a) ? a.GetString() ?? "" : "";
-            var sidecar = root.TryGetProperty("sidecar", out var sc) && sc.GetBoolean();
-            SetStatusGlow(ShilpiChipHost, active: connected, accent: false);
-            if (connected)
-            {
-                var tip = string.IsNullOrEmpty(addr) ? "ShilpiDB connected" : addr;
-                if (sidecar)
-                {
-                    tip += " · sidecar on save";
-                }
-                ToolTipService.SetToolTip(ShilpiChip, tip + " — click for Push / Pull / Disconnect");
-            }
-            else
-            {
-                ToolTipService.SetToolTip(ShilpiChip, sidecar
-                    ? "ShilpiDB (sidecar) — hover shows address after connect; click to connect 127.0.0.1:7420"
-                    : "ShilpiDB — click to connect (127.0.0.1:7420)");
-            }
-        }
-        catch (JsonException)
-        {
-            SetStatusGlow(ShilpiChipHost, active: false, accent: false);
-            ToolTipService.SetToolTip(ShilpiChip, "ShilpiDB — click to connect (127.0.0.1:7420)");
-        }
     }
 
     private void RefreshAiChip(ChromeState state)
@@ -2755,79 +2590,6 @@ public sealed partial class MainWindow : Window
             host.BorderBrush = brush;
             host.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
-    }
-
-    private void OnShilpiChip(object sender, RoutedEventArgs e)
-    {
-        if (_host == IntPtr.Zero)
-        {
-            return;
-        }
-        var flyout = new MenuFlyout();
-        void Add(string label, string id)
-        {
-            var item = new MenuFlyoutItem { Text = label, Tag = id };
-            item.Click += (_, _) => RunShilpiCommand(id);
-            flyout.Items.Add(item);
-        }
-        var connected = false;
-        if (Native.Execute(_host, "vdb.status", "{}") == 0)
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(Native.ReadResult(_host));
-                connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
-            }
-            catch (JsonException)
-            {
-            }
-        }
-        Add("Convert / Push to ShilpiDB\tCtrl+Shift+H", "vdb.convert");
-        if (connected)
-        {
-            Add("Push drawing (replace server)", "vdb.push");
-            Add("Pull into drawing (replace)", "vdb.pull");
-            Add("Disconnect", "vdb.disconnect");
-        }
-        else
-        {
-            Add("Connect 127.0.0.1:7420", "vdb.connect");
-        }
-        Add("Toggle sidecar on save", "vdb.sidecar");
-        flyout.ShowAt(ShilpiChip);
-    }
-
-    private void RunShilpiCommand(string id)
-    {
-        if (_host == IntPtr.Zero)
-        {
-            return;
-        }
-        var parameters = id switch
-        {
-            "vdb.connect" => "{\"addr\":\"127.0.0.1:7420\"}",
-            "vdb.push" => "{\"replace\":true}",
-            "vdb.pull" => "{\"replace\":true}",
-            "vdb.sidecar" => "{\"toggle\":true}",
-            _ => "{}",
-        };
-        if (Native.Execute(_host, id, parameters) != 0)
-        {
-            History.Text = Native.LastError(_host);
-            Status.Text = Native.LastError(_host);
-        }
-        else if (id is "vdb.connect" or "vdb.push" or "vdb.pull" or "vdb.disconnect" or "vdb.sidecar" or "vdb.convert")
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(Native.ReadResult(_host));
-                History.Text = doc.RootElement.GetRawText();
-            }
-            catch (JsonException)
-            {
-            }
-        }
-        AfterCommand();
     }
 
     private void BuildMenus()

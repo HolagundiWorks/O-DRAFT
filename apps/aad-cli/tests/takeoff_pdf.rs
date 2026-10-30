@@ -1,6 +1,6 @@
 //! The annotated take-off drawing with the real PDF writer: the plotter the application installs, not a stand-in.
 //! `takeoff.record` stores the PDF in chunks; they must reassemble into the PDF the header describes, and a
-//! recording against a real `shilpid` must hold the same.
+//! recording into a project file must hold the same.
 
 use std::sync::Once;
 
@@ -48,15 +48,15 @@ fn house() -> Session {
     s
 }
 
-/// The PDF the chunks of a database add up to, checked against its header.
-fn reassemble(store: &aad_vdb::VdbStore) -> (Vec<u8>, Value) {
-    let header = store.records().iter().find(|r| r.id >> 56 == 1).expect("a header");
-    let header: Value = serde_json::from_slice(&header.payload).unwrap();
+/// The PDF the chunks of a project file's take-off add up to, checked against its header.
+fn reassemble(records: &[(u64, Vec<u8>)]) -> (Vec<u8>, Value) {
+    let header = records.iter().find(|(id, _)| id >> 56 == 1).expect("a header");
+    let header: Value = serde_json::from_slice(&header.1).unwrap();
     let pdf = &header["annotated_pdf"];
-    let mut chunks: Vec<_> = store.records().iter().filter(|r| r.id >> 56 == 9).collect();
-    chunks.sort_by_key(|r| r.id);
+    let mut chunks: Vec<_> = records.iter().filter(|(id, _)| id >> 56 == 9).collect();
+    chunks.sort_by_key(|(id, _)| *id);
     assert_eq!(pdf["chunks"].as_u64(), Some(chunks.len() as u64), "{header}");
-    let bytes: Vec<u8> = chunks.iter().flat_map(|c| c.payload.clone()).collect();
+    let bytes: Vec<u8> = chunks.iter().flat_map(|c| c.1.clone()).collect();
     assert_eq!(pdf["bytes"].as_u64(), Some(bytes.len() as u64));
     (bytes, header)
 }
@@ -66,11 +66,11 @@ fn the_real_plotter_makes_a_pdf_that_travels_in_chunks_and_reassembles() {
     let mut s = house();
     let dir = std::env::temp_dir().join(format!("aad-takeoff-pdf-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("house.takeoff.vdb");
+    let path = dir.join("house.osp");
     let r = s.execute("takeoff.record", &json!({"path": path.to_string_lossy()})).unwrap();
     assert!(r["warnings"].as_array().unwrap().iter().all(|w| !w.as_str().unwrap().starts_with("no annotated drawing")), "{r}");
-    let store = aad_vdb::load_path(&path).unwrap();
-    let (bytes, header) = reassemble(&store);
+    let records = aad_odp::Odp::open(&path).unwrap().takeoff_as_records().unwrap();
+    let (bytes, header) = reassemble(&records);
     assert!(bytes.starts_with(b"%PDF"), "a PDF");
     assert!(bytes.len() > 1000, "{} bytes", bytes.len());
     assert_eq!(header["state"], "complete");
@@ -83,26 +83,4 @@ fn the_real_plotter_makes_a_pdf_that_travels_in_chunks_and_reassembles() {
     assert!(a["drawn"].as_u64().unwrap() >= 5, "{a}");
     assert!(std::fs::read(&file).unwrap().starts_with(b"%PDF"));
     std::fs::remove_dir_all(&dir).ok();
-}
-
-/// Against a real `shilpid`: `AAD_SHILPID_ADDR=127.0.0.1:7433 cargo test -p aad-cli --test takeoff_pdf -- --ignored`
-/// (start it with `shilpid --bind 127.0.0.1:7433 --data x.vdb`). Records two drawings, the second linked to a project.
-#[test]
-#[ignore = "needs a running shilpid; see the doc comment"]
-fn a_running_shilpid_holds_two_drawings_and_a_real_pdf() {
-    let Ok(addr) = std::env::var("AAD_SHILPID_ADDR") else { return };
-    let mut a = house();
-    let ra = a.execute("takeoff.record", &json!({"server": addr})).unwrap();
-    let mut b = house();
-    let rb = b.execute("takeoff.record", &json!({"server": addr})).unwrap();
-    assert_ne!(ra["slot"], rb["slot"], "two drawings, two slots: {ra} {rb}");
-    let mut client = aad_vdb::VdbClient::connect(addr.as_str()).unwrap();
-    let store = client.pull_store().unwrap();
-    assert_eq!(store.records().iter().filter(|r| r.id >> 56 == 1).count(), 2, "two headers");
-    for slot in [ra["slot"].as_u64().unwrap(), rb["slot"].as_u64().unwrap()] {
-        let mine: Vec<_> = store.records().iter().filter(|r| (r.id >> 32) & 0xFF_FFFF == slot).cloned().collect();
-        let (bytes, header) = reassemble(&aad_vdb::VdbStore::from_records(mine).unwrap());
-        assert!(bytes.starts_with(b"%PDF"));
-        assert_eq!(header["state"], "complete");
-    }
 }

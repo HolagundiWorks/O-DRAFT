@@ -366,7 +366,7 @@ pub static FORMS: &[Form] = &[
         wrap: None,
         fields: &[
             field("name", "One take-off (blank: every saved table)", Kind::Text),
-            field("path", "ShilpiDB .vdb (blank: use tables already in the drawing)", Kind::Text),
+            field("path", "Project file .osp (blank: use tables already in the drawing)", Kind::Text),
             field("clear", "Clear MEASURE-TABLE first", Kind::Bool).def("true"),
         ],
     },

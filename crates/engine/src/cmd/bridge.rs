@@ -132,11 +132,10 @@ pub(crate) struct Item {
     pub kind: u8,
     pub n: u64,
     pub row: Value,
-    pub bbox: [f64; 4],
 }
 
 /// Everything `bridge.export` knows: the file's content as an object, what it could not include, and the rows with the
-/// numbers and boxes a ShilpiDB record needs.
+/// numbers a take-off record needs.
 pub(crate) struct Collected {
     pub root: Map<String, Value>,
     pub warnings: Vec<String>,
@@ -145,7 +144,7 @@ pub(crate) struct Collected {
     pub counts: Value,
 }
 
-/// The kinds of ShilpiDB take-off record ([TAKEOFF-SHILPIDB.md] in the O-CoreOp repository).
+/// The kinds of take-off record ([TAKEOFF-SHILPIDB.md] in the O-CoreOp repository holds the layout).
 pub(crate) const KIND_WALL: u8 = 3;
 pub(crate) const KIND_OPENING: u8 = 4;
 pub(crate) const KIND_COLUMN: u8 = 5;
@@ -267,7 +266,7 @@ fn run_export(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 /// Collect what the drawing knows for the AQC hand-off: the bridge file's content and the rows with their
-/// stable numbers and boxes. `bridge.export` writes it as a file; `takeoff.record` writes it as ShilpiDB records.
+/// stable numbers and boxes. `bridge.export` writes it as a file; `takeoff.record` writes it as records in the project file.
 pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     let bearing = f64_or(p, "bearing", 150.0);
     if !(bearing.is_finite() && bearing > 0.0 && bearing < 2000.0) {
@@ -369,7 +368,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             },
             None => no_outline += 1,
         }
-        items.push(Item { kind: KIND_ROOM, n: number_of(r.handle), row: row.clone(), bbox: box_mm(d, r.outline.or(Some(r.handle)), unit_mm) });
+        items.push(Item { kind: KIND_ROOM, n: number_of(r.handle), row: row.clone() });
         room_rows.push(row);
     }
     if no_outline > 0 {
@@ -470,7 +469,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             row["type"] = json!(text_of(e, "type"));
         }
         super::takeoffphase::stamp_row(d, Some(*handle), &mut row);
-        items.push(Item { kind: KIND_OPENING, n: number_of(*handle), row: row.clone(), bbox: box_mm(d, Some(*handle), unit_mm) });
+        items.push(Item { kind: KIND_OPENING, n: number_of(*handle), row: row.clone() });
         opening_rows.push(row);
     }
     if schedule_rows.is_empty() {
@@ -519,7 +518,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             }
             if let Some(h) = handle {
                 super::takeoffphase::stamp_row(d, Some(h), &mut row);
-                items.push(Item { kind: KIND_WALL, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
+                items.push(Item { kind: KIND_WALL, n: number_of(h), row: row.clone() });
             } else {
                 unstable += 1;
             }
@@ -534,13 +533,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
     }
     for w in param_walls {
         let Some(first) = w.handles.first() else { continue };
-        let bbox = w
-            .handles
-            .iter()
-            .map(|h| box_mm(d, Some(*h), unit_mm))
-            .filter(|b| b.iter().any(|v| *v != 0.0))
-            .fold(None, |acc: Option<[f64; 4]>, b| Some(acc.map_or(b, |a| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])])));
-        items.push(Item { kind: KIND_WALL, n: number_of(*first), row: w.row.clone(), bbox: bbox.unwrap_or([0.0; 4]) });
+        items.push(Item { kind: KIND_WALL, n: number_of(*first), row: w.row.clone() });
         walls.push(w.row);
     }
     if nominal_thickness > 0 {
@@ -617,7 +610,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 let mut row = json!({ "ref": col_ref, "mark": mark, "level": level_of(handle), "width_mm": mm(w), "depth_mm": mm(dep) });
                 if let Some(h) = handle {
                     super::takeoffphase::stamp_row(d, Some(h), &mut row);
-                    items.push(Item { kind: KIND_COLUMN, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
+                    items.push(Item { kind: KIND_COLUMN, n: number_of(h), row: row.clone() });
                 } else {
                     unstable += 1;
                 }
@@ -651,7 +644,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 });
                 if let Some(h) = handle {
                     super::takeoffphase::stamp_row(d, Some(h), &mut row);
-                    items.push(Item { kind: KIND_LINTEL, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
+                    items.push(Item { kind: KIND_LINTEL, n: number_of(h), row: row.clone() });
                 } else {
                     unstable += 1;
                 }
@@ -686,7 +679,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
                 }
                 if let Some(h) = handle {
                     super::takeoffphase::stamp_row(d, Some(h), &mut row);
-                    items.push(Item { kind: KIND_SLAB, n: number_of(h), row: row.clone(), bbox: box_mm(d, Some(h), unit_mm) });
+                    items.push(Item { kind: KIND_SLAB, n: number_of(h), row: row.clone() });
                 } else {
                     unstable += 1;
                 }
@@ -707,7 +700,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             row["level"] = json!(level);
         }
         let n = row["handle"].as_str().and_then(aad_doc::Handle::parse_hex).map(number_of).unwrap_or(i as u64 + 1);
-        items.push(Item { kind: KIND_ELEC_BOARD, n, row: row.clone(), bbox: [0.0; 4] });
+        items.push(Item { kind: KIND_ELEC_BOARD, n, row: row.clone() });
         boards.push(row);
     }
     for (i, row) in elec["circuits"].as_array().into_iter().flatten().enumerate() {
@@ -716,7 +709,7 @@ pub(crate) fn collect(s: &mut Session, p: &Value) -> Result<Collected> {
             row["level"] = json!(level);
         }
         let n = row["handle"].as_str().and_then(aad_doc::Handle::parse_hex).map(number_of).unwrap_or(i as u64 + 1);
-        items.push(Item { kind: KIND_ELEC_CIRCUIT, n, row: row.clone(), bbox: [0.0; 4] });
+        items.push(Item { kind: KIND_ELEC_CIRCUIT, n, row: row.clone() });
         circuits.push(row);
     }
     if !boards.is_empty() {

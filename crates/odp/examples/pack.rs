@@ -1,11 +1,11 @@
-//! Make a project file from the files a project has today.
-//! Run: cargo run -p aad-odp --example pack -- <out.osp> <name> [--drawing file.dwg] [--vdb file.vdb] [--bbsproj file.bbsproj]
+//! Make a project file from a drawing.
+//! Run: cargo run -p aad-odp --example pack -- <out.osp> <name> [--drawing file.dwg]
 use std::path::{Path, PathBuf};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 2 {
-        eprintln!("usage: pack <out.osp> <name> [--drawing file.dwg] [--vdb file.vdb] [--bbsproj file.bbsproj]");
+        eprintln!("usage: pack <out.osp> <name> [--drawing file.dwg]");
         std::process::exit(2);
     }
     let out = PathBuf::from(&args[0]);
@@ -21,11 +21,6 @@ fn main() {
                 let mut e = odp.edit().expect("edit");
                 e.put_drawing(&name, &ext, &bytes).expect("put drawing");
                 println!("drawing {name}: {} bytes, revision {}", bytes.len(), e.commit().expect("commit"));
-            }
-            "--vdb" => println!("vdb: {:?}", odp.import_vdb(path).expect("import vdb")),
-            "--bbsproj" => {
-                odp.import_bbsproj(path).expect("import bbsproj");
-                println!("project document imported");
             }
             other => eprintln!("unknown option {other}"),
         }

@@ -1,12 +1,12 @@
 //! Quantity-trust checklist: known wall / opening numbers through
-//! fixture drawing → `takeoff.record` / bridge / `.vdb`, catching double-count,
+//! fixture drawing → `takeoff.record` / bridge / `.osp`, catching double-count,
 //! `wall_ref`, and thickness regressions.
 //!
 //! Expected numbers are also published as
 //! `crates/engine/tests/fixtures/quantity-trust-checklist.json` for O-CoreOp
 //! CadImport tests and the clean-VM runbook.
 //!
-//! Optional export for CoreOp / ShilpiDB hand-off:
+//! Optional export for CoreOp hand-off:
 //! `TAKEOFF_TRUST_EXPORT=/path/to/dir cargo test -p aad-engine --test quantity_trust -- --nocapture`
 
 use aad_engine::Session;
@@ -54,7 +54,7 @@ fn layer(s: &mut Session, name: &str) {
 fn temp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("aad-quantity-trust-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    dir.join("quantity-trust.takeoff.vdb")
+    dir.join("quantity-trust.osp")
 }
 
 fn cleanup(path: &Path) {
@@ -64,8 +64,7 @@ fn cleanup(path: &Path) {
 }
 
 fn read_vdb(path: &Path) -> std::collections::BTreeMap<u64, Value> {
-    let store = aad_vdb::load_path(path).unwrap();
-    store.records().iter().map(|r| (r.id, serde_json::from_slice(&r.payload).unwrap_or(Value::Null))).collect()
+    aad_odp::Odp::open(path).unwrap().takeoff_as_records().unwrap().into_iter().map(|(id, payload)| (id, serde_json::from_slice(&payload).unwrap_or(Value::Null))).collect()
 }
 
 fn kind(id: u64) -> u64 {
@@ -181,7 +180,7 @@ fn maybe_export(bridge: &Value, vdb: &Path, scene: &TrustScene) {
     std::fs::create_dir_all(&dir).unwrap();
     let checklist = json!({
         "name": DRAWING_ID_HINT,
-        "description": "Known wall/opening numbers for Draft→ShilpiDB→CoreOp quantity trust",
+        "description": "Known wall/opening numbers for Draft→project file→CoreOp quantity trust",
         "project_ref": { "v": 1, "company_uuid": COMPANY_UUID, "project_id": PROJECT_ID },
         "level": "Ground",
         "walls": [
@@ -203,7 +202,7 @@ fn maybe_export(bridge: &Value, vdb: &Path, scene: &TrustScene) {
         "bridge": bridge,
     });
     std::fs::write(dir.join("quantity-trust-checklist.json"), serde_json::to_string_pretty(&checklist).unwrap()).unwrap();
-    std::fs::copy(vdb, dir.join("quantity-trust.takeoff.vdb")).unwrap();
+    std::fs::copy(vdb, dir.join("quantity-trust.osp")).unwrap();
     eprintln!("quantity-trust export written under {}", dir.display());
 }
 
@@ -316,19 +315,4 @@ fn opening_without_wall_ref_is_caught_and_thickness_regression_is_caught() {
     assert!(nr["warnings"].as_array().unwrap().iter().any(|w| w.as_str().is_some_and(|t| t.contains("nominal"))));
     cleanup(&path);
     cleanup(&npath);
-}
-
-/// Live `shilpid` path when `AAD_SHILPID_ADDR` is set (same convention as `takeoff_record`).
-#[test]
-#[ignore = "needs a running shilpid; see scripts/takeoff-e2e-harness.sh"]
-fn checklist_through_a_running_shilpid() {
-    let addr = std::env::var("AAD_SHILPID_ADDR").expect("AAD_SHILPID_ADDR=host:port");
-    let mut s = session();
-    let scene = trust_scene(&mut s);
-    link_project(&mut s);
-    let r = s.execute("takeoff.record", &json!({"server": addr, "annotate": false})).unwrap_or_else(|e| panic!("takeoff.record against {addr}: {e}"));
-    assert_eq!(r["counts"]["walls"], 2);
-    assert_eq!(r["counts"]["openings"], 2);
-    assert_eq!(r["state"], "complete");
-    let _ = scene;
 }

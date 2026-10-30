@@ -48,10 +48,10 @@ fn save_and_restore_round_trip_model() {
     let saved = s.execute("history.save", &json!({"name": "m1", "scope": "project"})).unwrap();
     let id = saved["id"].as_u64().unwrap();
     assert!(
-        path.with_extension("dxf.history.vdb").exists() || {
-            // sidecar is path + ".history.vdb"
+        {
+            // the history of a drawing that is not a project file is the sidecar path + ".history.osp"
             let mut p = path.as_os_str().to_os_string();
-            p.push(".history.vdb");
+            p.push(".history.osp");
             PathBuf::from(p).exists()
         }
     );
@@ -94,9 +94,9 @@ fn second_unchanged_milestone_shares_object_rows() {
     s.execute("history.save", &json!({"name": "b", "scope": "project"})).unwrap();
 
     let mut hist = path.as_os_str().to_os_string();
-    hist.push(".history.vdb");
-    let store = aad_vdb::load_path(&PathBuf::from(hist)).unwrap();
-    let objects = store.records().iter().filter(|r| aad_vdb::history::kind_of(r.id) == aad_vdb::history::KIND_OBJECT).count();
+    hist.push(".history.osp");
+    let records = aad_odp::Odp::open(&PathBuf::from(hist)).unwrap().history_records().unwrap();
+    let objects = records.keys().filter(|id| aad_odp::history::kind_of(**id) == aad_odp::history::KIND_OBJECT).count();
     // One line → one object row, shared by both milestones.
     assert_eq!(objects, 1);
 }
@@ -188,8 +188,8 @@ fn hostile_history_file_does_not_panic() {
     let path = temp_dxf("hostile");
     let mut s = session_with_path(&path);
     let mut hist = path.as_os_str().to_os_string();
-    hist.push(".history.vdb");
-    std::fs::write(&hist, b"NOTVDB!!garbage").unwrap();
+    hist.push(".history.osp");
+    std::fs::write(&hist, b"NOT A PROJECT FILE, only garbage").unwrap();
     // Ensure a drawing id so open is attempted.
     let _ = s.execute("history.list", &json!({}));
     // Damaged file should error, not panic.

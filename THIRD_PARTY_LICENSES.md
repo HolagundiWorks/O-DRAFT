@@ -417,9 +417,6 @@ The check fails on any licence that is not on the allow list in `xtask/src/licen
 | serde_repr | 0.1.21 | MIT OR Apache-2.0 | https://github.com/dtolnay/serde-repr |
 | serde_spanned | 1.1.2 | MIT OR Apache-2.0 | https://github.com/toml-rs/toml |
 | sha2 | 0.11.1 | MIT OR Apache-2.0 | https://github.com/RustCrypto/hashes |
-| shilpi-client | 0.2.1 | Apache-2.0 | https://github.com/HolagundiWorks/shilpidb |
-| shilpi-protocol | 0.2.1 | Apache-2.0 | https://github.com/HolagundiWorks/shilpidb |
-| shilpidb | 0.2.1 | Apache-2.0 | https://github.com/HolagundiWorks/shilpidb |
 | shlex | 2.0.1 | MIT OR Apache-2.0 | https://github.com/comex/rust-shlex |
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 | https://github.com/vorner/signal-hook |
 | simd-adler32 | 0.3.10 | MIT | https://github.com/mcountryman/simd-adler32 |

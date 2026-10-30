@@ -391,11 +391,6 @@
                         <local:DrawnIcon Kind="agent" />
                     </Button>
                 </Border>
-                <Border x:Name="ShilpiChipHost" CornerRadius="{StaticResource CornerRadiusButton}" BorderThickness="1.5" BorderBrush="Transparent" VerticalAlignment="Center" Visibility="Collapsed">
-                    <Button x:Name="ShilpiChip" Style="{StaticResource IconButtonStyle}" Click="OnShilpiChip" AutomationProperties.Name="ShilpiDB connection" ToolTipService.ToolTip="Connect to a local shilpid server">
-                        <local:DrawnIcon Kind="shilpi" />
-                    </Button>
-                </Border>
                 <TextBlock x:Name="ControlPort" Visibility="Collapsed" Style="{StaticResource StatusTextStyle}" AutomationProperties.Name="Control channel" />
                 <TextBlock x:Name="Status" Style="{StaticResource StatusTextStyle}" AutomationProperties.Name="Drawing status" />
             </StackPanel>

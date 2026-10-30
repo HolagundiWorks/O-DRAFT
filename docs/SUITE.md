@@ -26,7 +26,7 @@ Other names:
 | **Active-project pointer** | `%LOCALAPPDATA%\OSAS\active-project.json`, written by O-Draft: which project file is open there, so O-CoreOp can open the same one |
 | **Ticket** | One-time sign-in token OSAS gives an app it starts: 32 random bytes, two minutes, one use. The password is never passed on |
 | **Persona** | In O-CoreOp, Project Manager/PMC or Contractor: each has its own letterhead and numbering |
-| **ShilpiDB** | The old spatial store (`.vdb`, `shilpid`). **Retired for take-off and project data.** Some O-Draft features still use it (library, `vdb.*` sync, history sidecar, agent tools) until they are moved; nothing new is built on it |
+| **ShilpiDB** | The old spatial store (`.vdb`, `shilpid`). **Retired and removed** from O-Draft, O-CoreOp, OSAS and the installers. No conversion exists or is needed: no production project was ever created in it. Its record layout survives as the take-off tables of the `.osp` |
 
 ## 2. Hierarchy
 
