@@ -24,6 +24,10 @@ log = { workspace = true }
 # R-tree spatial index for picking, window selection and object snaps (MIT OR Apache-2.0).
 rstar = { version = "0.12", default-features = false }
 
+# The project file (.odp) is SQLite, not built for the web target.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+aad-odp = { workspace = true }
+
 [dev-dependencies]
 aad-io = { workspace = true }
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }

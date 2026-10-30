@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 mod import;
 mod time;
 
-pub use import::ImportReport;
+pub use import::{ImportReport, PDF_CHUNK};
 
 /// `meta.format`.
 pub const FORMAT: &str = "osas-project";
@@ -355,6 +355,35 @@ impl Edit<'_> {
             }
         }
         Ok(removed)
+    }
+
+    pub fn delete_takeoff_row(&mut self, slot: u32, kind: u8, n: u32) -> Result<()> {
+        self.tx.execute("DELETE FROM takeoff_row WHERE slot = ?1 AND kind = ?2 AND n = ?3", params![slot, kind, n])?;
+        self.log("takeoff_row", &format!("{slot}/{kind}/{n}"), "delete")
+    }
+
+    /// Remove a drawing's take-off header and every row under it.
+    pub fn delete_takeoff_header(&mut self, slot: u32) -> Result<()> {
+        self.tx.execute("DELETE FROM takeoff_row WHERE slot = ?1", params![slot])?;
+        self.tx.execute("DELETE FROM takeoff_header WHERE slot = ?1", params![slot])?;
+        self.log("takeoff_header", &slot.to_string(), "delete")
+    }
+
+    pub fn delete_asset(&mut self, id: &str) -> Result<()> {
+        self.tx.execute("DELETE FROM asset WHERE id = ?1", params![id])?;
+        self.log("asset", id, "delete")
+    }
+
+    /// The SHA-256 stored for an asset, if there is one (to skip writing the same bytes again).
+    pub fn asset_hash(&self, id: &str) -> Result<Option<String>> {
+        Ok(self.tx.query_row("SELECT sha256 FROM asset WHERE id = ?1", params![id], |r| r.get(0)).optional()?)
+    }
+
+    /// The ids of the annotated-PDF assets.
+    pub fn annotated_asset_ids(&self) -> Result<Vec<String>> {
+        let mut st = self.tx.prepare("SELECT id FROM asset WHERE id LIKE 'annotated-%'")?;
+        let rows = st.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
     /// Replace the O-CoreOp project document.

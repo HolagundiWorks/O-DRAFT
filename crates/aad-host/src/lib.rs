@@ -523,10 +523,42 @@ fn install_formats() {
         write: |drawing, name| aad_io::write(drawing, name).map_err(|e| e.to_string()),
         plot: Some(|drawing, space, opts| aad_io::plot(drawing, space, opts).map_err(|e| e.to_string())),
     });
+    aad_engine::cmd::file::set_container(aad_engine::cmd::file::ContainerHooks { read: read_project_drawing, write: write_project_drawing });
     aad_engine::cmd::file::set_pdf_reader(|bytes, page| aad_io::pdfread::read_page(bytes, page).map_err(|e| e.to_string()));
     if let Some(worker) = dwg_worker() {
         let _ = aad_dwg::isolated::enable_with(worker);
     }
+}
+
+/// The drawing inside a project file (`.odp`): its bytes and its name, which says whether it is DWG or DXF.
+fn read_project_drawing(path: &str) -> Result<(Vec<u8>, String), String> {
+    let odp = aad_odp::Odp::open(std::path::Path::new(path)).map_err(|e| format!("{path}: {e}"))?;
+    let name = odp
+        .drawing_names()
+        .map_err(|e| format!("{path}: {e}"))?
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("{path} holds no drawing yet"))?;
+    let drawing = odp.drawing(&name).map_err(|e| format!("{path}: {e}"))?.ok_or_else(|| format!("{path}: the drawing {name} is missing"))?;
+    Ok((drawing.bytes, drawing.name))
+}
+
+/// Write the drawing into a project file, in the format of the drawing already in it (DXF for a new file). It is written in place, as one revision, and not
+/// at all when the bytes are the ones already stored, so a save that changed nothing does not make other programs reload.
+fn write_project_drawing(path: &str, drawing: &aad_engine::doc::Drawing) -> Result<usize, String> {
+    let p = std::path::Path::new(path);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("Project").to_string();
+    let mut odp = if p.exists() { aad_odp::Odp::open(p) } else { aad_odp::Odp::create(p, &stem) }.map_err(|e| format!("{path}: {e}"))?;
+    let name = odp.drawing_names().map_err(|e| format!("{path}: {e}"))?.into_iter().next().unwrap_or_else(|| format!("{stem}.dxf"));
+    let bytes = aad_io::write(drawing, &name).map_err(|e| e.to_string())?;
+    let same = odp.drawing(&name).map_err(|e| format!("{path}: {e}"))?.is_some_and(|d| d.sha256 == aad_odp::sha256_hex(&bytes));
+    if !same {
+        let ext = std::path::Path::new(&name).extension().and_then(|e| e.to_str()).unwrap_or("dxf").to_string();
+        let mut edit = odp.edit().map_err(|e| format!("{path}: {e}"))?;
+        edit.put_drawing(&name, &ext, &bytes).map_err(|e| format!("{path}: {e}"))?;
+        edit.commit().map_err(|e| format!("{path}: {e}"))?;
+    }
+    Ok(bytes.len())
 }
 
 fn dwg_worker() -> Option<std::path::PathBuf> {

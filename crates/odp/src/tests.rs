@@ -196,3 +196,40 @@ fn a_bbsproj_becomes_the_project_document() {
     odp.import_bbsproj(&p).unwrap();
     assert!(odp.project_doc().unwrap().unwrap().contains("Old"));
 }
+
+#[test]
+fn take_off_records_round_trip_and_only_what_changed_is_written() {
+    let (_d, path) = temp();
+    let mut odp = Odp::create(&path, "House").unwrap();
+    let id = |kind: u64, slot: u64, n: u64| (kind << 56) | (slot << 32) | n;
+    let pdf: Vec<u8> = (0..(PDF_CHUNK * 2 + 10)).map(|i| (i % 251) as u8).collect();
+    let mut records = vec![
+        (id(1, 5, 0), br#"{"format":"hcw-takeoff-shilpi","state":"complete"}"#.to_vec()),
+        (id(3, 5, 1), br#"{"ref":"W1"}"#.to_vec()),
+        (id(3, 5, 2), br#"{"ref":"W2"}"#.to_vec()),
+    ];
+    for (n, c) in pdf.chunks(PDF_CHUNK).enumerate() {
+        records.push((id(9, 5, n as u64), c.to_vec()));
+    }
+    assert_eq!(odp.replace_takeoff(&records).unwrap(), 1);
+    let mut back = odp.takeoff_as_records().unwrap();
+    back.sort();
+    let mut want = records.clone();
+    want.sort();
+    assert_eq!(back, want, "what was written is what comes back, PDF chunks included");
+
+    // the same again: no change, no new revision
+    assert_eq!(odp.replace_takeoff(&records).unwrap(), 1);
+    // one row edited, one removed, the PDF gone
+    let next = vec![
+        (id(1, 5, 0), br#"{"format":"hcw-takeoff-shilpi","state":"complete"}"#.to_vec()),
+        (id(3, 5, 1), br#"{"ref":"W1","length_mm":5}"#.to_vec()),
+    ];
+    assert_eq!(odp.replace_takeoff(&next).unwrap(), 2);
+    let log: Vec<_> = odp.changes_since(1).unwrap().into_iter().map(|(_, t, k, o)| format!("{t} {k} {o}")).collect();
+    assert_eq!(log, ["takeoff_row 5/3/1 put", "takeoff_row 5/3/2 delete", "asset annotated-5.pdf delete"]);
+    assert!(odp.asset("annotated-5.pdf").unwrap().is_none());
+    // a drawing's header removed takes its rows with it
+    assert_eq!(odp.replace_takeoff(&[]).unwrap(), 3);
+    assert!(odp.takeoff_headers().unwrap().is_empty() && odp.takeoff_rows(5).unwrap().is_empty());
+}

@@ -66,10 +66,10 @@ pub(crate) fn load_tables(s: &Session, p: &Value) -> Result<Value> {
             Some(drawing) => Some(std::path::Path::new(drawing).with_extension("takeoff.vdb")),
             None => return Err(bad("takeoff.restore", "save the drawing first, or give `path` or `server`")),
         },
-        (None, false) => None,
+        (None, false) => project_file_of(s, p),
     };
     let mut sink: Box<dyn Sink> = match (&file_path, str_param(p, "server")) {
-        (Some(path), _) => Box::new(FileSink::open(path)?),
+        (Some(path), _) => open_file_sink(path)?,
         (None, server) => {
             let addr = server.unwrap_or(SHARED_ADDR).to_string();
             if server.is_none() {
@@ -352,6 +352,70 @@ impl Sink for FileSink {
         let store = aad_vdb::VdbStore::from_records_version(self.records.values().cloned().collect(), aad_vdb::SHILPID_COMPAT_VERSION)
             .map_err(|e| bad("takeoff.record", e.to_string()))?;
         aad_vdb::save_path(&self.path, &store).map_err(|e| bad("takeoff.record", format!("{}: {e}", self.path.display())))
+    }
+}
+
+/// The project file (`.odp`) the open drawing came from, when no `path` or `server` was asked for: the take-off then goes into the same file.
+#[cfg(not(target_arch = "wasm32"))]
+fn project_file_of(s: &Session, p: &Value) -> Option<std::path::PathBuf> {
+    if str_param(p, "server").is_some() {
+        return None;
+    }
+    s.state().ok()?.path.as_deref().filter(|d| super::file::is_container(d)).map(std::path::PathBuf::from)
+}
+
+/// The sink for a file: a project file (`.odp`) or a ShilpiDB take-off file.
+#[cfg(not(target_arch = "wasm32"))]
+fn open_file_sink(path: &std::path::Path) -> Result<Box<dyn Sink>> {
+    if super::file::is_container(&path.to_string_lossy()) {
+        return Ok(Box::new(OdpSink::open(path)?));
+    }
+    Ok(Box::new(FileSink::open(path)?))
+}
+
+/// A project file as a take-off store. The records are held in memory in the same shape the ShilpiDB sinks use and written back in one revision on
+/// `save` (only what changed), so the recorder's steps (claim the slot, write the rows, delete what is gone, write the header again) are unchanged.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) struct OdpSink {
+    odp: aad_odp::Odp,
+    records: std::collections::BTreeMap<u64, Vec<u8>>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl OdpSink {
+    pub(crate) fn open(path: &std::path::Path) -> Result<OdpSink> {
+        let odp = if path.exists() {
+            aad_odp::Odp::open(path)
+        } else {
+            let name = path.file_stem().and_then(|n| n.to_str()).unwrap_or("Project");
+            aad_odp::Odp::create(path, name)
+        }
+        .map_err(|e| bad("takeoff.record", format!("{}: {e}", path.display())))?;
+        let records = odp.takeoff_as_records().map_err(|e| bad("takeoff.record", e.to_string()))?.into_iter().collect();
+        Ok(OdpSink { odp, records })
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Sink for OdpSink {
+    fn ids(&mut self) -> Result<Vec<u64>> {
+        Ok(self.records.keys().copied().collect())
+    }
+    fn payload(&mut self, id: u64) -> Result<Option<Vec<u8>>> {
+        Ok(self.records.get(&id).cloned())
+    }
+    fn put(&mut self, recs: &[Rec]) -> Result<()> {
+        for r in recs {
+            self.records.insert(r.id, r.payload.clone());
+        }
+        Ok(())
+    }
+    fn delete(&mut self, id: u64) -> Result<bool> {
+        Ok(self.records.remove(&id).is_some())
+    }
+    fn save(&mut self) -> Result<()> {
+        let all: Vec<(u64, Vec<u8>)> = self.records.iter().map(|(k, v)| (*k, v.clone())).collect();
+        self.odp.replace_takeoff(&all).map(|_| ()).map_err(|e| bad("takeoff.record", e.to_string()))
     }
 }
 
@@ -742,10 +806,10 @@ fn run_record(s: &mut Session, p: &Value) -> Result<Value> {
                 Some(drawing) => Some(std::path::Path::new(drawing).with_extension("takeoff.vdb")),
                 None => return Err(bad("takeoff.record", "save the drawing first, or give `path` or `server`")),
             },
-            (None, false) => None,
+            (None, false) => project_file_of(s, p),
         };
         let (target, mut sink): (Value, Box<dyn Sink>) = match (&file_path, str_param(p, "server")) {
-            (Some(path), _) => (json!({ "path": path.display().to_string() }), Box::new(FileSink::open(path)?)),
+            (Some(path), _) => (json!({ "path": path.display().to_string() }), open_file_sink(path)?),
             (None, server) => {
                 let addr = server.unwrap_or(SHARED_ADDR).to_string();
                 if server.is_none() {

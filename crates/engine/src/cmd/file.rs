@@ -23,6 +23,37 @@ pub struct IoHooks {
 
 static IO: OnceLock<IoHooks> = OnceLock::new();
 
+/// Project files (`.odp`): one file that holds the drawing and the take-off. The host installs the reader and writer (it links `aad-odp`); a drawing opened
+/// from one stays tied to the project file, so saving writes the drawing back into it in one revision and take-off recording goes into it too.
+pub struct ContainerHooks {
+    /// The drawing inside the project file: its bytes and its name (the name says DWG or DXF).
+    pub read: fn(&str) -> std::result::Result<(Vec<u8>, String), String>,
+    /// Write the drawing into the project file; returns the byte count of the drawing written.
+    pub write: fn(&str, &Drawing) -> std::result::Result<usize, String>,
+}
+
+static CONTAINER: OnceLock<ContainerHooks> = OnceLock::new();
+
+pub fn set_container(h: ContainerHooks) {
+    let _ = CONTAINER.set(h);
+}
+
+pub fn container() -> Option<&'static ContainerHooks> {
+    CONTAINER.get()
+}
+
+/// True for a project file path (`.odp`).
+pub fn is_container(path: &str) -> bool {
+    std::path::Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case("odp"))
+}
+
+fn read_container(path: &str) -> std::result::Result<Drawing, String> {
+    let hooks = io().ok_or_else(|| "file formats are not available in this build".to_string())?;
+    let c = container().ok_or_else(|| "project files (.odp) are not available in this build".to_string())?;
+    let (bytes, name) = (c.read)(path)?;
+    (hooks.read)(&bytes, &name)
+}
+
 pub fn set_io(h: IoHooks) {
     let _ = IO.set(h);
 }
@@ -132,6 +163,9 @@ pub fn prepare(mut d: Drawing) -> Prepared {
 /// Read, parse and flatten a drawing file without a session.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_drawing_file(path: &str) -> std::result::Result<Prepared, String> {
+    if is_container(path) {
+        return read_container(path).map(prepare);
+    }
     let hooks = io().ok_or_else(|| "file formats are not available in this build".to_string())?;
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     (hooks.read)(&bytes, path).map(prepare)
@@ -183,6 +217,13 @@ fn run_open(s: &mut Session, p: &Value) -> Result<Value> {
         let path = _path;
         #[cfg(not(target_arch = "wasm32"))]
         {
+            if is_container(path) {
+                let d = read_container(path).map_err(|e| bad("open", e))?;
+                let i = import_drawing(s, d, path, Some(path.to_string()))?;
+                return Ok(
+                    json!({ "index": i, "entities": s.docs.get(i).map(|d| d.doc.entity_count()), "flatten": s.last_flatten.as_ref().map(|r| r.to_json()) }),
+                );
+            }
             let bytes = std::fs::read(path).map_err(|e| bad("open", format!("{path}: {e}")))?;
             let i = open_bytes(s, &bytes, path, Some(path.to_string()))?;
             return Ok(
@@ -252,6 +293,16 @@ pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<usize> {
         && let Err(e) = super::history::ensure_drawing_id(s)
     {
         s.echo(format!("Drawing history id not prepared: {e}"));
+    }
+    if is_container(path) {
+        // A project file is written in place, one revision (never replaced as a whole file: another program may have it open).
+        let c = container().ok_or_else(|| bad("save", "project files (.odp) are not available in this build"))?;
+        let n = (c.write)(path, &super::xref::without_overlays(s.doc()?)).map_err(|e| bad("save", e))?;
+        let st = s.state_mut()?;
+        st.saved = st.doc.clone();
+        st.path = Some(path.to_string());
+        st.title = file_name(path);
+        return Ok(n);
     }
     let bytes = (hooks.write)(&super::xref::without_overlays(s.doc()?), path).map_err(|e| bad("save", e))?;
     let n = commit_save(s, path, &bytes, store)?;
@@ -432,6 +483,10 @@ pub fn begin_save(s: &mut Session, path: Option<&str>) -> Result<SaveJob> {
 impl SaveJob {
     /// Write the file; returns the byte count.
     pub fn run(&self) -> std::result::Result<usize, String> {
+        if is_container(&self.path) {
+            let c = container().ok_or_else(|| "project files (.odp) are not available in this build".to_string())?;
+            return (c.write)(&self.path, &super::xref::without_overlays(&self.doc));
+        }
         let hooks = io().ok_or_else(|| "file formats are not available in this build".to_string())?;
         let bytes = (hooks.write)(&super::xref::without_overlays(&self.doc), &self.path)?;
         store(&self.path, &bytes).map_err(|e| e.to_string())?;
@@ -446,7 +501,7 @@ impl SaveJob {
 /// Mark the drawing saved under the job's path and report what the file could not keep.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn finish_save(s: &mut Session, job: &SaveJob, bytes: usize) -> Result<Value> {
-    if is_drawing_file(&job.path) {
+    if is_drawing_file(&job.path) || is_container(&job.path) {
         let st = s.docs.get_mut(job.index).ok_or_else(|| bad("save", "the drawing was closed while it was being saved"))?;
         st.saved = job.doc.clone();
         st.path = Some(job.path.clone());
@@ -467,6 +522,12 @@ fn save_reporting(s: &mut Session, p: &Value, run: fn(&mut Session, &Value) -> R
 
 /// The reports that follow a saved drawing file: what the file couldn't keep, and the ShilpiDB sidecar.
 fn after_save(s: &mut Session, r: &mut Value, lost: &std::collections::BTreeMap<String, usize>) {
+    if r.get("path").and_then(Value::as_str).is_some_and(is_container) {
+        // A project file has no sidecar and no server to push to: say what could not be kept, and record the take-off into the same file.
+        report_not_saved(s, r, lost);
+        record_takeoff_if_any(s);
+        return;
+    }
     if r.get("path").and_then(Value::as_str).is_some_and(is_drawing_file) {
         report_not_saved(s, r, lost);
         if let Some(path) = r.get("path").and_then(Value::as_str) {
