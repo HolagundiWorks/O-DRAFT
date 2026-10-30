@@ -1,6 +1,6 @@
-//! Print what a project file holds. Run: cargo run -p aad-odp --example inspect -- file.odp
+//! Print what a project file holds. Run: cargo run -p aad-odp --example inspect -- file.osp
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: inspect <file.odp>");
+    let path = std::env::args().nth(1).expect("usage: inspect <file.osp>");
     let odp = aad_odp::Odp::open(std::path::Path::new(&path)).expect("open");
     let m = odp.meta().expect("meta");
     println!("{} (id {}), revision {}, created {}", m.name, m.project_id, m.revision, m.created);

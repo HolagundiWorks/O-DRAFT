@@ -5,8 +5,8 @@ use aad_odp::Odp;
 #[test]
 fn the_dotnet_file_reads_here() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("from_dotnet.odp");
-    std::fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/from_dotnet.odp"), &path).unwrap();
+    let path = dir.path().join("from_dotnet.osp");
+    std::fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/from_dotnet.osp"), &path).unwrap();
     let mut odp = Odp::open(&path).expect("the .NET file opens");
     let meta = odp.meta().unwrap();
     assert_eq!((meta.name.as_str(), meta.revision), ("FromDotnet", 2));

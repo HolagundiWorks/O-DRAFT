@@ -355,7 +355,7 @@ impl Sink for FileSink {
     }
 }
 
-/// The project file (`.odp`) the open drawing came from, when no `path` or `server` was asked for: the take-off then goes into the same file.
+/// The project file (`.osp`) the open drawing came from, when no `path` or `server` was asked for: the take-off then goes into the same file.
 #[cfg(not(target_arch = "wasm32"))]
 fn project_file_of(s: &Session, p: &Value) -> Option<std::path::PathBuf> {
     if str_param(p, "server").is_some() {
@@ -364,7 +364,7 @@ fn project_file_of(s: &Session, p: &Value) -> Option<std::path::PathBuf> {
     s.state().ok()?.path.as_deref().filter(|d| super::file::is_container(d)).map(std::path::PathBuf::from)
 }
 
-/// The sink for a file: a project file (`.odp`) or a ShilpiDB take-off file.
+/// The sink for a file: a project file (`.osp`) or a ShilpiDB take-off file.
 #[cfg(not(target_arch = "wasm32"))]
 fn open_file_sink(path: &std::path::Path) -> Result<Box<dyn Sink>> {
     if super::file::is_container(&path.to_string_lossy()) {
@@ -415,7 +415,7 @@ impl Sink for OdpSink {
     }
     fn save(&mut self) -> Result<()> {
         let all: Vec<(u64, Vec<u8>)> = self.records.iter().map(|(k, v)| (*k, v.clone())).collect();
-        self.odp.replace_takeoff(&all).map(|_| ()).map_err(|e| bad("takeoff.record", e.to_string()))
+        self.osp.replace_takeoff(&all).map(|_| ()).map_err(|e| bad("takeoff.record", e.to_string()))
     }
 }
 

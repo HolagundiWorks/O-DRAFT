@@ -22,9 +22,9 @@ internal static class ActiveProjectPointer
     internal static string ShilpiDbFor(string drawingPath) =>
         IsProjectFile(drawingPath) ? drawingPath : System.IO.Path.ChangeExtension(drawingPath, "takeoff.vdb");
 
-    /// <summary>A project file (<c>.odp</c>): the drawing and its take-off are one file, so it is its own ShilpiDB-side file and needs no server.</summary>
+    /// <summary>A project file (<c>.osp</c>): the drawing and its take-off are one file, so it is its own ShilpiDB-side file and needs no server.</summary>
     internal static bool IsProjectFile(string path) =>
-        string.Equals(System.IO.Path.GetExtension(path), ".odp", StringComparison.OrdinalIgnoreCase);
+        string.Equals(System.IO.Path.GetExtension(path), ".osp", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Point at <paramref name="drawingPath"/>, or clear the pointer when it is null or empty. A write that changes nothing is skipped.</summary>
     internal static void Set(string? drawingPath, string? serverUrl = null)

@@ -1,4 +1,4 @@
-//! The `.odp` project file (format `osas-project`, version 1): one SQLite file that holds everything about a project, so the same file opens
+//! The `.osp` project file (format `osas-project`, version 1): one SQLite file that holds everything about a project, so the same file opens
 //! as a drawing in O-Draft, as a take-off and a project in O-CoreOp, and in a viewer on another device. Spec: `docs/ODP-PROJECT-FILE-AND-SYNC.md`
 //! (OSAS repository).
 //!

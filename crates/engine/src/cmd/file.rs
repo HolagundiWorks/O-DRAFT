@@ -23,13 +23,14 @@ pub struct IoHooks {
 
 static IO: OnceLock<IoHooks> = OnceLock::new();
 
-/// Project files (`.odp`): one file that holds the drawing and the take-off. The host installs the reader and writer (it links `aad-odp`); a drawing opened
+/// Project files (`.osp`): one file that holds the drawing and the take-off. The host installs the reader and writer (it links `aad-odp`); a drawing opened
 /// from one stays tied to the project file, so saving writes the drawing back into it in one revision and take-off recording goes into it too.
 pub struct ContainerHooks {
     /// The drawing inside the project file: its bytes and its name (the name says DWG or DXF).
     pub read: fn(&str) -> std::result::Result<(Vec<u8>, String), String>,
-    /// Write the drawing into the project file; returns the byte count of the drawing written.
-    pub write: fn(&str, &Drawing) -> std::result::Result<usize, String>,
+    /// Write the drawing into the project file; returns the byte count of the drawing written. The last argument is the format of the file the drawing was
+    /// opened from (`dwg` or `dxf`), used only when the project file holds no drawing yet, so a DWG saved as a new project stays a DWG.
+    pub write: fn(&str, &Drawing, Option<&str>) -> std::result::Result<usize, String>,
 }
 
 static CONTAINER: OnceLock<ContainerHooks> = OnceLock::new();
@@ -42,14 +43,20 @@ pub fn container() -> Option<&'static ContainerHooks> {
     CONTAINER.get()
 }
 
-/// True for a project file path (`.odp`).
+/// True for a project file path (`.osp`).
 pub fn is_container(path: &str) -> bool {
-    std::path::Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case("odp"))
+    std::path::Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case("osp"))
+}
+
+/// `dwg` or `dxf` when `path` is a drawing file of that kind (the format a project saved from it keeps).
+fn format_hint(path: Option<&str>) -> Option<String> {
+    let ext = std::path::Path::new(path?).extension()?.to_string_lossy().to_ascii_lowercase();
+    matches!(ext.as_str(), "dwg" | "dxf").then_some(ext)
 }
 
 fn read_container(path: &str) -> std::result::Result<Drawing, String> {
     let hooks = io().ok_or_else(|| "file formats are not available in this build".to_string())?;
-    let c = container().ok_or_else(|| "project files (.odp) are not available in this build".to_string())?;
+    let c = container().ok_or_else(|| "project files (.osp) are not available in this build".to_string())?;
     let (bytes, name) = (c.read)(path)?;
     (hooks.read)(&bytes, &name)
 }
@@ -296,8 +303,9 @@ pub(crate) fn save_to(s: &mut Session, path: &str) -> Result<usize> {
     }
     if is_container(path) {
         // A project file is written in place, one revision (never replaced as a whole file: another program may have it open).
-        let c = container().ok_or_else(|| bad("save", "project files (.odp) are not available in this build"))?;
-        let n = (c.write)(path, &super::xref::without_overlays(s.doc()?)).map_err(|e| bad("save", e))?;
+        let c = container().ok_or_else(|| bad("save", "project files (.osp) are not available in this build"))?;
+        let hint = format_hint(s.state()?.path.as_deref());
+        let n = (c.write)(path, &super::xref::without_overlays(s.doc()?), hint.as_deref()).map_err(|e| bad("save", e))?;
         let st = s.state_mut()?;
         st.saved = st.doc.clone();
         st.path = Some(path.to_string());
@@ -457,6 +465,8 @@ pub struct SaveJob {
     doc: std::sync::Arc<Drawing>,
     index: usize,
     path: String,
+    /// The format of the file the drawing was opened from, for a first save into a project file.
+    format_hint: Option<String>,
     lost: std::collections::BTreeMap<String, usize>,
 }
 
@@ -476,7 +486,8 @@ pub fn begin_save(s: &mut Session, path: Option<&str>) -> Result<SaveJob> {
         super::takeoff::sync_meta(d);
     }
     let state = s.state()?;
-    Ok(SaveJob { doc: state.doc.clone(), index: s.active, lost: not_saved(&state.doc), path })
+    let format_hint = format_hint(state.path.as_deref());
+    Ok(SaveJob { doc: state.doc.clone(), index: s.active, lost: not_saved(&state.doc), path, format_hint })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -484,8 +495,8 @@ impl SaveJob {
     /// Write the file; returns the byte count.
     pub fn run(&self) -> std::result::Result<usize, String> {
         if is_container(&self.path) {
-            let c = container().ok_or_else(|| "project files (.odp) are not available in this build".to_string())?;
-            return (c.write)(&self.path, &super::xref::without_overlays(&self.doc));
+            let c = container().ok_or_else(|| "project files (.osp) are not available in this build".to_string())?;
+            return (c.write)(&self.path, &super::xref::without_overlays(&self.doc), self.format_hint.as_deref());
         }
         let hooks = io().ok_or_else(|| "file formats are not available in this build".to_string())?;
         let bytes = (hooks.write)(&super::xref::without_overlays(&self.doc), &self.path)?;

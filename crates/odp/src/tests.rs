@@ -4,7 +4,7 @@ use super::*;
 
 fn temp() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("house.odp");
+    let path = dir.path().join("house.osp");
     (dir, path)
 }
 
@@ -125,13 +125,13 @@ fn a_project_that_is_not_json_is_refused() {
 #[test]
 fn files_that_are_not_projects_are_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let text = dir.path().join("a.odp");
+    let text = dir.path().join("a.osp");
     std::fs::write(&text, b"this is not sqlite").unwrap();
     assert!(matches!(Odp::open(&text), Err(Error::NotAProject(_))));
     let other = dir.path().join("b.db");
     rusqlite::Connection::open(&other).unwrap().execute_batch("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('format','something-else');").unwrap();
     assert!(matches!(Odp::open(&other), Err(Error::NotAProject(_))));
-    assert!(Odp::open(&dir.path().join("missing.odp")).is_err());
+    assert!(Odp::open(&dir.path().join("missing.osp")).is_err());
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn a_vdb_is_imported_with_headers_rows_pdf_and_project() {
     let dir = tempfile::tempdir().unwrap();
     let vdb = dir.path().join("house.takeoff.vdb");
     aad_vdb::save_path(&vdb, &store).unwrap();
-    let mut odp = Odp::create(&dir.path().join("house.odp"), "House").unwrap();
+    let mut odp = Odp::create(&dir.path().join("house.osp"), "House").unwrap();
     let report = odp.import_vdb(&vdb).unwrap();
     assert_eq!(report, ImportReport { headers: 1, rows: 2, assets: 1, project: true, skipped: 1 });
     assert_eq!(odp.revision().unwrap(), 1);
@@ -192,7 +192,7 @@ fn a_bbsproj_becomes_the_project_document() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("old.bbsproj");
     std::fs::write(&p, "{\"project\":{\"name\":\"Old\"}}").unwrap();
-    let mut odp = Odp::create(&dir.path().join("house.odp"), "House").unwrap();
+    let mut odp = Odp::create(&dir.path().join("house.osp"), "House").unwrap();
     odp.import_bbsproj(&p).unwrap();
     assert!(odp.project_doc().unwrap().unwrap().contains("Old"));
 }

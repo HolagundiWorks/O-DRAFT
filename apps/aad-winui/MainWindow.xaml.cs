@@ -1951,7 +1951,7 @@ public sealed partial class MainWindow : Window
 
     private async Task ServeAsync(string? drawing, string? db)
     {
-        // A project file (.odp) needs no server: O-CoreOp opens the same file. Moving to one stops the server of the drawing before it.
+        // A project file (.osp) needs no server: O-CoreOp opens the same file. Moving to one stops the server of the drawing before it.
         var up = await ProjectServer.EnsureAsync(db is not null && ActiveProjectPointer.IsProjectFile(db) ? null : db);
         if (drawing == _servedDrawing)
         {
@@ -1969,7 +1969,7 @@ public sealed partial class MainWindow : Window
         {
             var picker = new FileOpenPicker();
             InitializeWithWindow.Initialize(picker, hwnd);
-            picker.FileTypeFilter.Add(".odp");
+            picker.FileTypeFilter.Add(".osp");
             picker.FileTypeFilter.Add(".dxf");
             picker.FileTypeFilter.Add(".dwg");
             picker.FileTypeFilter.Add(".vdb");
@@ -2038,7 +2038,7 @@ public sealed partial class MainWindow : Window
         }
         var save = new FileSavePicker();
         InitializeWithWindow.Initialize(save, hwnd);
-        save.FileTypeChoices.Add("Project (drawing and take-off)", new List<string> { ".odp" });
+        save.FileTypeChoices.Add("Project (drawing and take-off)", new List<string> { ".osp" });
         save.FileTypeChoices.Add("DXF", new List<string> { ".dxf" });
         save.FileTypeChoices.Add("DWG", new List<string> { ".dwg" });
         save.SuggestedFileName = "drawing";

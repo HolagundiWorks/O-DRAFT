@@ -1,11 +1,11 @@
 //! Make a project file from the files a project has today.
-//! Run: cargo run -p aad-odp --example pack -- <out.odp> <name> [--drawing file.dwg] [--vdb file.vdb] [--bbsproj file.bbsproj]
+//! Run: cargo run -p aad-odp --example pack -- <out.osp> <name> [--drawing file.dwg] [--vdb file.vdb] [--bbsproj file.bbsproj]
 use std::path::{Path, PathBuf};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 2 {
-        eprintln!("usage: pack <out.odp> <name> [--drawing file.dwg] [--vdb file.vdb] [--bbsproj file.bbsproj]");
+        eprintln!("usage: pack <out.osp> <name> [--drawing file.dwg] [--vdb file.vdb] [--bbsproj file.bbsproj]");
         std::process::exit(2);
     }
     let out = PathBuf::from(&args[0]);

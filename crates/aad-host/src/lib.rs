@@ -530,7 +530,7 @@ fn install_formats() {
     }
 }
 
-/// The drawing inside a project file (`.odp`): its bytes and its name, which says whether it is DWG or DXF.
+/// The drawing inside a project file (`.osp`): its bytes and its name, which says whether it is DWG or DXF.
 fn read_project_drawing(path: &str) -> Result<(Vec<u8>, String), String> {
     let odp = aad_odp::Odp::open(std::path::Path::new(path)).map_err(|e| format!("{path}: {e}"))?;
     let name = odp
@@ -543,13 +543,14 @@ fn read_project_drawing(path: &str) -> Result<(Vec<u8>, String), String> {
     Ok((drawing.bytes, drawing.name))
 }
 
-/// Write the drawing into a project file, in the format of the drawing already in it (DXF for a new file). It is written in place, as one revision, and not
+/// Write the drawing into a project file, in the format of the drawing already in it (a new file takes the format of the file the drawing came from, DXF
+/// if it came from nowhere). It is written in place, as one revision, and not
 /// at all when the bytes are the ones already stored, so a save that changed nothing does not make other programs reload.
-fn write_project_drawing(path: &str, drawing: &aad_engine::doc::Drawing) -> Result<usize, String> {
+fn write_project_drawing(path: &str, drawing: &aad_engine::doc::Drawing, format_hint: Option<&str>) -> Result<usize, String> {
     let p = std::path::Path::new(path);
     let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("Project").to_string();
     let mut odp = if p.exists() { aad_odp::Odp::open(p) } else { aad_odp::Odp::create(p, &stem) }.map_err(|e| format!("{path}: {e}"))?;
-    let name = odp.drawing_names().map_err(|e| format!("{path}: {e}"))?.into_iter().next().unwrap_or_else(|| format!("{stem}.dxf"));
+    let name = odp.drawing_names().map_err(|e| format!("{path}: {e}"))?.into_iter().next().unwrap_or_else(|| format!("{stem}.{}", format_hint.unwrap_or("dxf")));
     let bytes = aad_io::write(drawing, &name).map_err(|e| e.to_string())?;
     let same = odp.drawing(&name).map_err(|e| format!("{path}: {e}"))?.is_some_and(|d| d.sha256 == aad_odp::sha256_hex(&bytes));
     if !same {
