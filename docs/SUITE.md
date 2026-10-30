@@ -1,6 +1,6 @@
 # OSAS suite: names, roles, files, links and how it works live
 
-**Canonical copy:** the OSAS repository, `docs/SUITE.md`. Each app repository carries an identical copy at `docs/SUITE.md` so a developer in any one repo knows what the others are, what they are called, what their toolbars hold and how they connect. If you change one, change all four. Updated 2026-10-30.
+**Canonical copy:** the O-Studio repository, `docs/SUITE.md`. Each app repository carries an identical copy at `docs/SUITE.md` so a developer in any one repo knows what the others are, what they are called, what their toolbars hold and how they connect. If you change one, change all four. Updated 2026-10-30.
 
 ## 1. Names
 
@@ -124,12 +124,12 @@ Saving: O-Draft writes the drawing back into the `.osp` only when its bytes chan
 
 | Topic | Document |
 |---|---|
-| Project file format and sync plan | OSAS `docs/ODP-PROJECT-FILE-AND-SYNC.md` (filename keeps the working name) |
+| Project file format and sync plan | O-Studio `docs/ODP-PROJECT-FILE-AND-SYNC.md` (filename keeps the working name) |
 | Suite architecture and integration map | O-Studio `docs/suite-architecture.md`, `docs/suite-hub.md` |
 | Company file ABI | O-Studio `docs/office-abi.md` |
 | O-Draft UI, commands, performance | O-Draft `docs/UI_UX.md`, `docs/PERFORMANCE.md`, `docs/PERFORMANCE-AUDIT-2026-10-30.md` |
 | O-CoreOp shell, model, take-off | O-CoreOp `docs/WINUI-SHELL.md`, `docs/LOCAL-MODEL.md`, `docs/PROJECT-FILE.md` |
-| Installers | OSAS `installer/suite/README.md`; O-CoreOp `docs/PACKAGING.md`, `docs/SUITE-PACKAGING.md` |
+| Installers | O-Studio `installer/suite/README.md`; O-CoreOp `docs/PACKAGING.md`, `docs/SUITE-PACKAGING.md` |
 
 ## 7. Conventions
 
