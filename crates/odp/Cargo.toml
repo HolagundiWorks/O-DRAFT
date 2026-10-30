@@ -1,0 +1,20 @@
+[package]
+name = "aad-odp"
+description = "The .odp project file: one SQLite file holding a drawing, its take-off, the O-CoreOp project, assets and markups"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# SQLite is compiled in: no system library, the same engine on every platform and in later WASM builds.
+rusqlite = { version = "0.32", features = ["bundled"] }
+aad-vdb = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
