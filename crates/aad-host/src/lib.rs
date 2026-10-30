@@ -184,6 +184,49 @@ fn has_traces(doc: &Drawing) -> bool {
     doc.active_sheet.is_some() || doc.active_level_ref().is_some_and(|l| !l.traces.is_empty())
 }
 
+/// Opt-in timing for the host: with `AAD_PERF=1` a redraw that takes over 20 ms is appended to `%LOCALAPPDATA%\OSAS\odraft-perf.log` with the time of each step.
+mod perf {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+
+    fn on() -> bool {
+        static ON: OnceLock<bool> = OnceLock::new();
+        *ON.get_or_init(|| std::env::var("AAD_PERF").is_ok_and(|v| v == "1"))
+    }
+    pub fn start() -> Option<Instant> {
+        on().then(Instant::now)
+    }
+    /// Milliseconds since `start` (0 when timing is off).
+    pub fn lap(start: &Option<Instant>) -> f64 {
+        start.map_or(0.0, |t| t.elapsed().as_secs_f64() * 1000.0)
+    }
+    /// Log a line whatever the time (only when timing is on).
+    pub fn force(line: &str) {
+        let Some(dir) = std::env::var_os("LOCALAPPDATA") else { return };
+        let path = std::path::Path::new(&dir).join("OSAS").join("odraft-perf.log");
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "host: {line}");
+        }
+    }
+    pub fn note(start: &Option<Instant>, line: &str) {
+        let Some(t) = start else { return };
+        let total = t.elapsed().as_secs_f64() * 1000.0;
+        if total < 20.0 {
+            return;
+        }
+        let Some(dir) = std::env::var_os("LOCALAPPDATA") else { return };
+        let path = std::path::Path::new(&dir).join("OSAS").join("odraft-perf.log");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "host {total:.0} ms total: {line}");
+        }
+    }
+}
+
 /// The display list of `space`; model space of a level with traces is built with its traces,
 /// faded towards `background`.
 fn build_list(doc: &Drawing, space: &Space, opts: &aad_render::Options, background: Rgb) -> DisplayList {
@@ -2031,6 +2074,7 @@ impl Host {
             view_height: view.height,
             view_center: matches!(state.space, Space::Model).then_some(view.center),
             plot_style_table: None,
+            screen_px: px,
         };
         let pan_cell = if matches!(state.space, Space::Model) {
             let (cx, cy) = aad_render::model_pan_cell(view.center, view.height);
@@ -2077,6 +2121,9 @@ impl Host {
                     self.frame.pending = Some(PendingList { key: list_key, rx });
                 }
             } else if !same_drawing {
+                if perf::start().is_some() {
+                    perf::force(&format!("sync list build: old key {:?} new key {:?}", self.frame.list_key, list_key));
+                }
                 self.frame.pending = None;
                 aad_engine::spatial::warm(state.doc.clone(), state.space.clone());
                 let t0 = std::time::Instant::now();
@@ -2344,8 +2391,10 @@ impl Host {
     }
 
     pub fn redraw(&mut self) -> Result<(), String> {
+        let t_all = perf::start();
         self.pixels_per_point = window::dpi_scale(self.hwnd);
         let (key, uniform, origin) = self.mesh()?;
+        let t_mesh = perf::lap(&t_all);
         let paper = self.paper();
         let warm_grip = self.screen.and_then(|s| self.grip_at(s.x, s.y)).map(|g| (g.handle, g.index));
         let cursor = self.screen.is_some().then_some(overlay::Cursor {
@@ -2369,6 +2418,7 @@ impl Host {
             self.show_ucs,
             f64::from(self.pixels_per_point),
         );
+        let t_overlay = perf::lap(&t_all);
         let over_key = gpu::Gpu::overlay_key(&overlay);
         let stamp =
             PaintStamp { mesh_key: key, over_key, uniform: std::array::from_fn(|i| uniform[i].to_bits()), clear: (paper.0, paper.1, paper.2) };
@@ -2404,6 +2454,7 @@ impl Host {
             gpu.present(key, built, &uniform)?;
         }
         self.paint = Some(stamp);
+        perf::note(&t_all, &format!("redraw: mesh {t_mesh:.1}, cursor+overlay {:.1}, gpu present {:.1} ms", t_overlay - t_mesh, perf::lap(&t_all) - t_overlay));
         Ok(())
     }
 }

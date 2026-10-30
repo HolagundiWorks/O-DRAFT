@@ -213,6 +213,7 @@ fn list_options(app: &CadApp, st: &aad_engine::DocState, band: i32, px: f64) -> 
         view_height: view.height,
         view_center: matches!(st.space, aad_doc::Space::Model).then_some(view.center),
         plot_style_table: None,
+        screen_px: 0.0,
     }
 }
 

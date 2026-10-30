@@ -244,3 +244,7 @@ before micro-optimising.
 
 Re-measure large drawings with `aad-cli perf` / `perf_probe` on the same machine before claiming
 new absolute times; the structural change removes full rebuilds from the common pan path.
+
+## Interactive audit with a real drawing (2026-10-30)
+
+Zoom and pan on a 9 672-entity architectural drawing went from 320 to 680 ms to 15 to 50 ms: text and hatches are drawn by their size on screen, a model-space zoom no longer rebuilds the display list on the UI thread, and the side panels are rebuilt lazily. Method, numbers and the `AAD_PERF=1` log: [PERFORMANCE-AUDIT-2026-10-30.md](PERFORMANCE-AUDIT-2026-10-30.md).

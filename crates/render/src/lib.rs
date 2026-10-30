@@ -185,6 +185,10 @@ pub struct Options {
     /// Plot style table to draw with. When `None`, [`build`] of a layout whose page setup has
     /// "Display plot styles" on uses the layout's table; [`build_plot`] uses none.
     pub plot_style_table: Option<std::sync::Arc<aad_doc::PlotStyleTable>>,
+    /// World units per screen pixel at the current zoom (0 = unknown, for plots and tools that have no screen). With it, each piece of text
+    /// is drawn at the detail its own size on screen deserves: full glyphs when it is legible, a grey bar when it is a few pixels tall, and
+    /// nothing when it is under a pixel. Without it only the zoom-wide [`Self::text_greek`] switch applies.
+    pub screen_px: f64,
 }
 
 impl Default for Options {
@@ -200,6 +204,7 @@ impl Default for Options {
             view_height: 0.0,
             view_center: None,
             plot_style_table: None,
+            screen_px: 0.0,
         }
     }
 }
@@ -247,6 +252,10 @@ pub fn lod_flags_for_view(view_height: f64, pixel_height: f64) -> LodFlags {
     let fill_tint = fill && wpp >= 12.0;
     LodFlags { text, fill, text_greek, fill_tint }
 }
+
+/// Text shorter than this on screen is not drawn; shorter than [`TEXT_GREEK_PX`] it is a grey bar instead of glyphs.
+const TEXT_SKIP_PX: f64 = 1.5;
+const TEXT_GREEK_PX: f64 = 6.0;
 
 /// World-space half-extent of the mesh origin snap cell ([`mesh::choose_origin`] uses `64 × h`).
 pub const MODEL_ORIGIN_CELL: f64 = 64.0;
@@ -445,6 +454,18 @@ impl Builder<'_> {
             self.greek_text(ctx, sh);
             return;
         }
+        if self.opts.screen_px > 0.0 {
+            // Detail by size on screen. A line of text a few pixels tall is a smudge: its glyph triangles (thousands of vertices a line)
+            // cost far more than they show.
+            let px_h = self.text_pixel_height(ctx, sh);
+            if px_h < TEXT_SKIP_PX {
+                return;
+            }
+            if px_h < TEXT_GREEK_PX {
+                self.greek_text(ctx, sh);
+                return;
+            }
+        }
         for s in &sh.strokes {
             self.polyline(ctx, color, lw, s);
         }
@@ -462,6 +483,27 @@ impl Builder<'_> {
                 }
             }
         }
+    }
+    /// Height of this shaped text on screen, in pixels (its vertical extent through the block transform, over world units per pixel).
+    fn text_pixel_height(&self, ctx: &Ctx, sh: &aad_fonts::Shaped) -> f64 {
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        let mut note = |p: &Vec2| {
+            let q = ctx.xf.apply(sh.post_xf.apply(*p));
+            lo = lo.min(q.y);
+            hi = hi.max(q.y);
+        };
+        for s in &sh.strokes {
+            s.iter().for_each(&mut note);
+        }
+        for g in &sh.glyphs {
+            for c in g {
+                c.iter().for_each(&mut note);
+            }
+        }
+        if hi < lo {
+            return f64::INFINITY; // nothing to measure: leave it to the normal path
+        }
+        (hi - lo) / self.opts.screen_px
     }
     /// Cheap stand-in for far-zoom text: a mid-grey bar over the shaped bounds.
     fn greek_text(&mut self, ctx: &Ctx, sh: &aad_fonts::Shaped) {

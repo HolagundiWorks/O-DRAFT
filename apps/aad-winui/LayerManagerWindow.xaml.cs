@@ -124,6 +124,11 @@ public sealed partial class LayerManagerWindow : Window
         {
             return;
         }
+        if (!AppWindow.IsVisible)
+        {
+            // A hidden manager is reloaded when it is shown (OpenLayers reloads); rebuilding its table on every change cost ~0.25 s each.
+            return;
+        }
         if (_editors > 0)
         {
             _refreshWhenIdle = true;

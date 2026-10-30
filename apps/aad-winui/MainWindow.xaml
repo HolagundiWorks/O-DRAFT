@@ -59,6 +59,12 @@
                     <StackPanel x:Name="SheetRail" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="{StaticResource PaddingSm}" />
                 </ScrollViewer>
             </Border>
+            <!-- Draw, Modify and Annotate tools: two vertical bars on the left (Classic). The top strip keeps the layer box and the architecture tools. -->
+            <Border x:Name="LeftToolHost" Grid.Column="1" Style="{StaticResource ToolStripChromeStyle}" BorderThickness="0,0,1,0" AutomationProperties.Name="Draw and modify tools" AutomationProperties.LandmarkType="Navigation">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="LeftToolStack" Orientation="Vertical" Spacing="{StaticResource SpaceXs}" Margin="{StaticResource PaddingSm}" />
+                </ScrollViewer>
+            </Border>
             <Border x:Name="CanvasHost" Grid.Column="2" Background="{ThemeResource CanvasBackgroundBrush}" SizeChanged="OnCanvasSize" AutomationProperties.Name="Drawing" />
             <local:ResizeGrip x:Name="LeftSplitter" Grid.Column="3" Width="{StaticResource SplitterWidth}" MinWidth="{StaticResource SplitterWidth}" Background="{ThemeResource BorderDefaultBrush}" PointerPressed="OnSplitPressed" PointerMoved="OnSplitMoved" PointerReleased="OnSplitReleased" PointerCaptureLost="OnSplitCaptureLost" KeyDown="OnSplitKey" AutomationProperties.Name="Resize side panel" ToolTipService.ToolTip="Drag, or Left and Right arrows when focused" />
             <Border x:Name="SideHost" Grid.Column="4" Style="{StaticResource SidePanelChromeStyle}" BorderThickness="1,0,0,0" PointerEntered="OnColumnEntered" PointerExited="OnColumnExited">
@@ -299,7 +305,16 @@
                         Click="OnNameplateMenu"
                         AutomationProperties.Name="Nameplate designer"
                         ToolTipService.ToolTip="Design Nameplate L (landscape) or Nameplate P (portrait)" />
-                    <TextBlock x:Name="Coords" VerticalAlignment="Center" Margin="{StaticResource MarginGroupStart}" FontFamily="{StaticResource FontFamilyMono}" FontSize="{StaticResource FontSizeMono}" AutomationProperties.Name="Cursor coordinates" />
+<ToggleButton
+                        x:Name="TakeoffModeButton"
+                        Content="Take-off"
+                        MinHeight="{StaticResource ControlHeight}"
+                        FontSize="{StaticResource FontSizeCaption}"
+                        Padding="{StaticResource PaddingControl}"
+                        Click="OnTakeoffMode"
+                        AutomationProperties.Name="Take-off mode"
+                        ToolTipService.ToolTip="Take-off mode: shows the take-off tools (walls, beams, floors, record to O-CoreOp)" />
+                                        <TextBlock x:Name="Coords" VerticalAlignment="Center" Margin="{StaticResource MarginGroupStart}" FontFamily="{StaticResource FontFamilyMono}" FontSize="{StaticResource FontSizeMono}" AutomationProperties.Name="Cursor coordinates" />
                 </StackPanel>
             </ScrollViewer>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">

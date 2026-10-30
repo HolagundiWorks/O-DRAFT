@@ -18,6 +18,7 @@ public sealed partial class MainWindow
     private SideTab _sideTab = SideTab.Properties;
     private readonly Dictionary<SideTab, Button> _railButtons = new();
     private readonly Dictionary<SideTab, string> _sideTitles = new();
+    private readonly Dictionary<SideTab, (bool Current, string Title)> _railShown = new();
 
     private static readonly (SideTab Tab, string Title)[] RailTitles =
     [
@@ -33,6 +34,7 @@ public sealed partial class MainWindow
     {
         SideRailTabs.Children.Clear();
         _railButtons.Clear();
+        _railShown.Clear();
         foreach (var (tab, title) in RailTitles)
         {
             var which = tab;
@@ -98,21 +100,25 @@ public sealed partial class MainWindow
             return;
         }
         var open = _leftFloat != null || !_leftCollapsed;
+        // Called on every hover change; restyling six buttons and replacing their tooltips each time cost about 0.2 s on a large drawing.
+        // A button is touched only when its state or its title changed.
         foreach (var (tab, button) in _railButtons)
         {
             var current = open && tab == _sideTab;
-            SeamlessTab.Apply(button, current, TabEdge.Right);
             var title = _sideTitles.TryGetValue(tab, out var live) && live.Length > 0 ? live : RailTitles.First(r => r.Tab == tab).Title;
+            if (_railShown.TryGetValue(tab, out var shown) && shown == (current, title))
+            {
+                continue;
+            }
+            _railShown[tab] = (current, title);
+            SeamlessTab.Apply(button, current, TabEdge.Right);
             ToolTipService.SetToolTip(button, title + (current ? " (click to collapse)" : " (click to open)"));
             AutomationProperties.SetName(button, (current ? "Collapse " : "Open ") + RailTitles.First(r => r.Tab == tab).Title);
         }
-        if (_sideTitles.TryGetValue(_sideTab, out var heading) && heading.Length > 0)
+        var heading = _sideTitles.TryGetValue(_sideTab, out var h) && h.Length > 0 ? h : RailTitles.First(r => r.Tab == _sideTab).Title;
+        if (SidePanelTitle.Text != heading)
         {
             SidePanelTitle.Text = heading;
-        }
-        else
-        {
-            SidePanelTitle.Text = RailTitles.First(r => r.Tab == _sideTab).Title;
         }
     }
 }

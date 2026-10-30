@@ -148,8 +148,9 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
     if !b.opts.fill {
         return;
     }
-    // Far zoom: a light solid tint avoids moiré from sub-pixel pattern lines.
-    if b.opts.fill_tint {
+    // Far zoom: a light solid tint avoids moiré from sub-pixel pattern lines. Beyond the zoom-wide switch, a pattern whose own line spacing is
+    // under a few pixels on screen is a tint too, whatever the drawing's units: its lines are a smear, and there can be hundreds of thousands.
+    if b.opts.fill_tint || tight_on_screen(b, ctx, h) {
         let tint = Ink {
             rgb: Rgb(
                 ((u16::from(rgb.rgb.0) * 2 + 255) / 3) as u8,
@@ -172,6 +173,28 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
             b.polyline(ctx, rgb, lw, seg);
         }
     }
+}
+
+/// Pattern lines closer together than this on screen are drawn as a tint.
+const MIN_PATTERN_SPACING_PX: f64 = 3.0;
+
+/// True when the hatch's densest line family is under [`MIN_PATTERN_SPACING_PX`] apart at the current zoom (needs `Options::screen_px`).
+fn tight_on_screen(b: &Builder, ctx: &Ctx, h: &Hatch) -> bool {
+    if b.opts.screen_px <= 0.0 || b.opts.screen_px.is_nan() {
+        return false;
+    }
+    let lines = match pattern(&h.pattern) {
+        Some(p) => p.lines,
+        None if !h.pattern_lines.is_empty() => h.pattern_lines.iter().take(MAX_PATTERN_LINES).cloned().collect(),
+        None => pattern("ANSI31").map(|p| p.lines).unwrap_or_default(),
+    };
+    let scale = if h.scale.is_finite() && h.scale > 1e-9 { h.scale } else { 1.0 };
+    let spacing = lines.iter().map(|f| (f.delta.1 * scale).abs()).filter(|s| s.is_finite() && *s > 1e-9).fold(f64::INFINITY, f64::min);
+    if !spacing.is_finite() {
+        return false;
+    }
+    let world = spacing * ctx.xf.apply_vec(Vec2::new(1.0, 0.0)).len();
+    world / b.opts.screen_px < MIN_PATTERN_SPACING_PX
 }
 
 /// Upper bound on loop count × vertex count for island detection (the nesting test compares

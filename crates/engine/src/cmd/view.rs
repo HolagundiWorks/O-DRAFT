@@ -152,7 +152,12 @@ pub(crate) fn zoom(s: &mut Session, p: &Value) -> Result<Value> {
         }
         _ => return Err(bad("zoom", "unknown mode")),
     }
-    s.touch();
+    // A model-space zoom needs no new display list: the cache is keyed by zoom band and pan cell, and the redraw follows the view. Bumping
+    // the revision made every zoom command rebuild the whole list on the UI thread (0.15 to 0.25 s on a large drawing) instead of only
+    // when the band changes, on a worker. A paper or viewport view shows other content through the view, so it still redraws.
+    if !matches!(s.state()?.space, aad_doc::Space::Model) {
+        s.touch();
+    }
     Ok(Value::Null)
 }
 

@@ -32,6 +32,8 @@ public sealed partial class MainWindow : Window
     private DispatcherQueueTimer? _timer;
     private int _ticks;
     private string _panelKey = "";
+    private static readonly SideTab[] AllPanelTabs = [SideTab.Properties, SideTab.Layers, SideTab.Blocks, SideTab.Project];
+    private readonly HashSet<SideTab> _stalePanels = new(AllPanelTabs);
     private string _docKey = "";
     private bool _buildingTabs;
     private bool _filling;
@@ -49,6 +51,8 @@ public sealed partial class MainWindow : Window
     private string _font = "engineering";
     private bool _showMenu = true;
     private bool _showTools = true;
+    // Take-off tools are shown only while take-off mode is on (the Take-off button in the bottom bar).
+    private bool _takeoffMode;
     private bool _showTabs = true;
     private bool _showStatus = true;
     private bool _showCommand = true;
@@ -2191,10 +2195,10 @@ public sealed partial class MainWindow : Window
 
     private void ApplySlot(ShellPrefs.ModeSlot slot)
     {
-        _pinLeft = slot.PinLeft;
+        _pinLeft = true;                             // pinned at every start so the panel stays open; unpin from the panel header if you want it to auto-hide
         _showTools = slot.ToolsVisible;
         _leftWidth = Math.Clamp(slot.LeftWidth > 0 ? slot.LeftWidth : Density.SidePanelWidth, 180, 640);
-        _leftCollapsed = slot.LeftCollapsed;
+        _leftCollapsed = false;                      // the side panel is open at every start; the rail title still closes it
         _leftIdleSince = DateTime.UtcNow;
         UpdatePinButton();
     }
@@ -3147,18 +3151,43 @@ public sealed partial class MainWindow : Window
             return;
         }
         _panelKey = key;
-        FillProperties(snapshot);
-        FillLayers(snapshot);
-        FillBlocks(snapshot);
-        FillProject();
+        // Only the panel that is on screen is rebuilt. The others are marked stale and rebuilt when their title is chosen: rebuilding the
+        // Blocks thumbnails and the Layers list on every hover change cost about a second per zoom or pointer move on a large drawing.
+        _stalePanels.UnionWith(AllPanelTabs);
+        var visible = _leftFloat != null || !_leftCollapsed ? _sideTab : (SideTab?)null;
+        var w = PerfLog.Enabled ? System.Diagnostics.Stopwatch.StartNew() : null;
+        if (visible == SideTab.Properties && _stalePanels.Remove(SideTab.Properties))
+        {
+            FillProperties(snapshot);
+            Density.Apply(PropertiesPanel);
+        }
+        w?.Mark("  props");
+        if (visible == SideTab.Layers && _stalePanels.Remove(SideTab.Layers))
+        {
+            FillLayers(snapshot);
+            Density.Apply(LayersPanel);
+        }
+        w?.Mark("  layers");
+        if (visible == SideTab.Blocks && _stalePanels.Remove(SideTab.Blocks))
+        {
+            FillBlocks(snapshot);
+            Density.Apply(BlocksPanel);
+        }
+        w?.Mark("  blocks");
+        if (visible == SideTab.Project && _stalePanels.Remove(SideTab.Project))
+        {
+            FillProject();
+            Density.Apply(ProjectPanel);
+        }
+        w?.Mark("  project");
         FillContext(snapshot);
+        w?.Mark("  context");
         UpdateSideTabHeaders(snapshot);
-        Density.Apply(PropertiesPanel);
-        Density.Apply(LayersPanel);
-        Density.Apply(BlocksPanel);
-        Density.Apply(ProjectPanel);
+        w?.Mark("  headers");
         _layersWindow?.OnDocumentRevision(snapshot.Uid, snapshot.Revision);
+        w?.Mark("  layerswin");
         UpdateQuick();
+        w?.Mark("  quick");
     }
 
     /// <summary>Tab titles show what is selected or under the cursor.</summary>
@@ -3225,6 +3254,8 @@ public sealed partial class MainWindow : Window
         PresentToolWindow(_quickSelectWindow);
     }
 
+    private string? _quickApplied;
+
     private void UpdateQuick()
     {
         var wanted = _qpmode && _command.Length == 0 && _quickJson != null;
@@ -3252,8 +3283,10 @@ public sealed partial class MainWindow : Window
             _quickWindow.Place(this);
             PresentToolWindow(_quickWindow);
         }
-        if (_quickJson != null)
+        if (_quickJson != null && !string.Equals(_quickJson, _quickApplied, StringComparison.Ordinal))
         {
+            _quickApplied = _quickJson;               // the same fields again need no rebuild of the window (it cost ~0.2 s)
+            PerfLog.Note("quick " + _quickJson.Length + " " + _quickJson[..Math.Min(160, _quickJson.Length)]);
             _quickWindow.Apply(_quickJson);
         }
     }
@@ -5611,12 +5644,14 @@ public sealed partial class MainWindow : Window
             {
                 return;
             }
+            var perf = PerfLog.Enabled ? System.Diagnostics.Stopwatch.StartNew() : null;
             CanvasMenu.DismissOutsideClick();
             PollEscapeCancel();
             if (Native.Pump(_host) != 0)
             {
                 Status.Text = Native.LastError(_host);
             }
+            perf?.Mark("pump");
             var popup = Native.ReadPopup(_host);
             if (popup.Length > 0)
             {
@@ -5634,15 +5669,19 @@ public sealed partial class MainWindow : Window
             _ticks++;
             SyncHistory();
             UpdateDyn();
+            perf?.Mark("history+dyn");
             if (_ticks % 4 == 0)
             {
                 RefreshChrome();
+                perf?.Mark("chrome");
             }
             // Every ~4 ticks so hover rollover updates Properties / Layer / Blocks promptly.
             if (_ticks % 4 == 0)
             {
                 RefreshPanels();
+                perf?.Mark("panels");
             }
+            perf?.Report();
         };
         _timer.Start();
     }
@@ -5659,6 +5698,7 @@ public sealed partial class MainWindow : Window
     private void BuildTools()
     {
         ToolStrip.Children.Clear();
+        LeftToolStack.Children.Clear();
         // Draw · Modify · Annotate — thin dividers between sections (suite icon tile 36 / glyph 20).
         string[][] groups =
         [
@@ -5676,7 +5716,7 @@ public sealed partial class MainWindow : Window
             }
             if (!first)
             {
-                ToolStrip.Children.Add(MakeToolDivider(horizontalBar: true));
+                LeftToolStack.Children.Add(MakeToolRule());
             }
             first = false;
             foreach (var id in visible)
@@ -5685,12 +5725,8 @@ public sealed partial class MainWindow : Window
                 var command = id;
                 var button = MakeToolTile(ToolIcons.For(id, _dark), label);
                 button.Click += (_, _) => StartCommand(command);
-                ToolStrip.Children.Add(button);
+                LeftToolStack.Children.Add(button);
             }
-        }
-        if (ToolStrip.Children.Count > 0)
-        {
-            ToolStrip.Children.Add(MakeToolDivider(horizontalBar: true));
         }
         var gear = MakeToolTile(ToolIcons.For("gear", _dark), "Customize tool bar");
         gear.Click += (_, _) => OpenTools();
@@ -5723,6 +5759,15 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(button, name);
         return button;
     }
+
+    /// <summary>A thin horizontal rule between groups of the vertical tool bar.</summary>
+    private static Border MakeToolRule() => new()
+    {
+        Height = 1,
+        Margin = new Thickness(4, 2, 4, 2),
+        Background = Density.ThemeBrush("BorderSubtleBrush") ?? new SolidColorBrush(Windows.UI.Color.FromArgb(120, 128, 128, 128)),
+        Opacity = 0.85,
+    };
 
     private static Border MakeToolDivider(bool horizontalBar = false)
     {
@@ -6091,12 +6136,15 @@ public sealed partial class MainWindow : Window
         // Pro hides the tool strip; Classic honours the per-mode toolbar switch.
         var tools = _classic && _showTools;
         ToolColumn.Width = tools ? GridLength.Auto : new GridLength(0);
+        LeftToolHost.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
+        var takeoff = tools && _takeoffMode;
+        TakeoffModeButton.IsChecked = _takeoffMode;
         ToolStripHost.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
         if (tools && ArchBar.Children.Count == 0)
         {
             RebuildArchitectureBar();
         }
-        if (tools && TakeoffBar.Children.Count == 0)
+        if (takeoff && TakeoffBar.Children.Count == 0)
         {
             RebuildTakeoffBar();
         }
@@ -6108,9 +6156,9 @@ public sealed partial class MainWindow : Window
         ArchBar.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
         if (TakeoffToolsDivider != null)
         {
-            TakeoffToolsDivider.Visibility = tools && TakeoffBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            TakeoffToolsDivider.Visibility = takeoff && TakeoffBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
-        TakeoffBar.Visibility = tools ? Visibility.Visible : Visibility.Collapsed;
+        TakeoffBar.Visibility = takeoff ? Visibility.Visible : Visibility.Collapsed;
         // A panel is open until its title is clicked again (or, unpinned, until the pointer has been
         // away for 1.5 s). The rail of titles is always there, so a collapsed dock is just the rail.
         var leftOpen = _leftFloat != null || !_leftCollapsed;
@@ -6273,6 +6321,7 @@ public sealed partial class MainWindow : Window
         };
         // Only the chosen panel is shown: there are no tabs inside the panel.
         _sideTab = tab;
+        _panelKey = "";                                // rebuild the panel now shown at the next tick
         PropertiesTab.Visibility = item == PropertiesTab ? Visibility.Visible : Visibility.Collapsed;
         LayersTab.Visibility = item == LayersTab ? Visibility.Visible : Visibility.Collapsed;
         BlocksTab.Visibility = item == BlocksTab ? Visibility.Visible : Visibility.Collapsed;
@@ -6312,6 +6361,12 @@ public sealed partial class MainWindow : Window
         var item = new MenuFlyoutItem { Text = label, Tag = "shell.cmd." + label };
         item.Click += (_, _) => run();
         menu.Items.Add(item);
+    }
+
+    private void OnTakeoffMode(object sender, RoutedEventArgs e)
+    {
+        _takeoffMode = TakeoffModeButton.IsChecked == true;
+        ApplyChrome();
     }
 
     private void OnPin(object sender, RoutedEventArgs e)

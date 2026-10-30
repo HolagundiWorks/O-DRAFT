@@ -9,7 +9,7 @@ and [UI_BASELINE.md](UI_BASELINE.md); workspace details in [workspaces.md](works
 | Region | Notes |
 |---|---|
 | Menu bar | 12 menus: File, Edit, View, Insert, Format, Tools, Draw, Dimension, Modify, Architecture, Window, Help (282 entries) |
-| Toolbars | Classic only: Draw and Modify (with Dimension and Leader) as two vertical bars on the left, and the customisable top tool bar under the menu (right-click it or View > Customize Top Bar) |
+| Toolbars | Classic only: Draw, Modify and Annotate as vertical tool bars on the left; the top strip has the layer box, the architecture tools and the gear (View > Customize Top Bar). The take-off tools (Ext wall, Int wall, Beam, Floor, Ceiling, Column, Deduct, Paint, Openings, Record, Map layers) appear in the top strip only while **Take-off** is switched on, the toggle in the bottom bar next to Nameplate |
 | Context bar | Both workspaces: current layer (searchable), floor, drawing space, panel pin/auto-hide ([ACTIVE_DRAWING_SPACE.md](ACTIVE_DRAWING_SPACE.md)) |
 | File tabs and layout tabs | Drawings along the top; Model and layout tabs along the bottom, with New layout and a layout list |
 | Canvas | GPU-drawn AutoCAD cursor (`CURSORSIZE` / `PICKBOX`): idle = crosshairs+pickbox; point prompt = crosshairs only; select-objects prompt = pickbox only; OS cursor hidden on the WinUI drawing HWND. Cyan rubber-band preview, dashed blue selection / solid hover highlight, mode-specific snap markers with tips, polar/OTRACK paths, grips (warm under pointer), selection window fill + dashed crossing |
