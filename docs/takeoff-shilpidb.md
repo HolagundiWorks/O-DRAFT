@@ -1,5 +1,7 @@
 # Take-off recorded in ShilpiDB
 
+> **Retired (2026-10-30):** the ShilpiDB route (`.vdb`, `shilpid`, gateway) is no longer used for projects. A project is a `.osp` file; see the suite document [SUITE.md](SUITE.md). The record layout below is still what the `.osp` take-off tables hold.
+
 O-Draft records its take-off in a ShilpiDB database, and O-CoreOp reads it from there. The contract
 (version 1, revised 2026-10-19) is `docs/TAKEOFF-SHILPIDB.md` in the O-CoreOp repository; the hand-off that
 asked for this is `docs/HANDOFF-O-DRAFT-TAKEOFF.md` there. This page says what exists on the O-Draft side.

@@ -7,6 +7,8 @@ code stays portable, but only Windows is built, tested and packaged). This repos
 [storytold/cadcraft](https://github.com/storytold/cadcraft) with the 3D, parametric-constraint and
 mechanical features removed.
 
+> **The suite:** names, roles, file formats, toolbars of every app and how they link in real time are in [docs/SUITE.md](docs/SUITE.md).
+
 What is built and what is planned is listed in [docs/status.md](docs/status.md). Nothing in the
 documentation describes a feature as available unless it exists and has tests.
 
