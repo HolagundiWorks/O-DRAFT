@@ -476,7 +476,7 @@ impl Sink<'_> {
 }
 
 impl Sink<'_> {
-    /// A dimension snaps to what it draws, as in AutoCAD (into its block): the objects of its
+    /// A dimension snaps to what it draws, as in (into its block): the objects of its
     /// block when the drawing has one (read from a file), else the lines generated from it
     /// (Endpoint on their ends); Node on its definition points.
     fn dimension(&mut self, d: &Drawing, dm: &aad_doc::Dimension, budget: &mut usize) {
@@ -678,7 +678,7 @@ fn deferred_hit(prims: &[Prim], cursor: Vec2, aperture: f64, osmode: u32) -> Opt
 /// endpoints (in the order given), or `None` when there is no such line (a point inside the
 /// circle it should be tangent to, concentric circles, non-parallel lines both perpendicular to
 /// it, degenerate or non-finite geometry). Among several solutions, the one whose deferred
-/// points lie closest to where the curves were picked wins (as AutoCAD does).
+/// points lie closest to where the curves were picked wins (as does).
 pub fn resolve_deferred(a: LineEnd, b: LineEnd) -> Option<(Vec2, Vec2)> {
     match (a, b) {
         (LineEnd::Point(p), LineEnd::Point(q)) => (p.is_finite() && q.is_finite()).then_some((p, q)),

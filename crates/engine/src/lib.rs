@@ -1,10 +1,10 @@
 //! The AAD engine.
 //!
-//! Every user-visible action is a command with a stable id (AutoCAD's command names in lower
+//! Every user-visible action is a command with a stable id (command names in lower
 //! case: `line`, `circle`, `zoom`, `layer`…, plus dotted ids for UI operations). Commands run two
 //! ways: programmatically with JSON parameters ([`Session::execute`], no dialogs, used by the
 //! control channel, MCP, CLI and scripts) and interactively through prompts ([`Session::start`],
-//! [`Session::input`], [`Session::cmdline`]) exactly like typing at AutoCAD's command line.
+//! [`Session::input`], [`Session::cmdline`]) exactly like typing at command line.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
@@ -53,7 +53,7 @@ pub fn standard_lintel(doc: &doc::Drawing) -> f64 {
 }
 pub use prompt::{Accept, Input, Interactive, Prompt, Step};
 
-/// Drawn cursor in the drawing area (AutoCAD: crosshairs, pickbox, or both).
+/// Drawn cursor in the drawing area.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorShape {
     /// Specify a point — full crosshairs, no pickbox.
@@ -260,7 +260,7 @@ impl DocState {
         }
         self.store_view(v);
     }
-    /// The active MSPACE viewport when ZOOM works on its own view, as in AutoCAD: extents and
+    /// The active MSPACE viewport when ZOOM works on its own view: extents and
     /// windows fit the viewport, and zooms keep its centre. A locked viewport keeps its scale, so
     /// zooming it moves the sheet instead (see `store_view`).
     pub fn zoom_viewport(&self) -> Option<aad_doc::Viewport> {
@@ -299,7 +299,7 @@ impl DocState {
     }
 }
 
-/// Session-level drafting settings (the AutoCAD system variables stored in the registry/profile).
+/// Session-level drafting settings (the system variables stored in the registry/profile).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -308,7 +308,7 @@ pub struct Settings {
     pub polarmode: bool,
     /// POLARANG (radians).
     pub polarang: f64,
-    /// OSNAPHATCH: object snaps find hatch objects (off by default, as in AutoCAD).
+    /// OSNAPHATCH: object snaps find hatch objects (off by default).
     pub osnaphatch: bool,
     pub dynmode: bool,
     /// DYNPIFORMAT = 1: Dynamic Input shows second and next points as Cartesian `x,y` instead of
@@ -391,7 +391,7 @@ pub struct PendingWindow {
 }
 
 /// Options and values the interactive commands remember for the rest of the session, offered as
-/// the `<default>` the next time they ask (as AutoCAD does). Values AutoCAD keeps in a drawing
+/// the `<default>` the next time they ask (as does). Values keeps in a drawing
 /// system variable (HPNAME, OFFSETDIST, FILLETRAD, CHAMFERA, POLYSIDES…) live in the drawing
 /// header instead. JSON calls never read these: their explicit parameters and documented defaults
 /// stay authoritative.
@@ -804,7 +804,7 @@ impl Session {
     }
 
     /// Give an input to the running command. With no command running, `Enter` repeats the last
-    /// command (as in AutoCAD) and points do nothing.
+    /// command (by convention) and points do nothing.
     pub fn input(&mut self, input: Input) -> Result<()> {
         let drawn = self.doc().ok().and_then(annot::drawing_unit);
         units::with_drawn_unit(drawn, || self.input_inner(input))
@@ -930,7 +930,7 @@ impl Session {
                 Err(EngineError::Internal(id, m))
             }
             Err(e) => {
-                // Invalid input: report and keep prompting (AutoCAD re-prompts).
+                // Invalid input: report and keep prompting (re-prompts).
                 self.echo(e.to_string());
                 self.running = Some(run);
                 Ok(())
@@ -987,7 +987,7 @@ impl Session {
 
     /// Whether a click picks objects right now (hit-test / hover): select prompts, and idle when
     /// PICKFIRST is on (noun-verb selection). Distinct from [`Self::cursor_shape`], which follows
-    /// AutoCAD's drawn cursor (idle always shows the pickbox even when PICKFIRST is off).
+    /// drawn cursor (idle always shows the pickbox even when PICKFIRST is off).
     pub fn picking_objects(&self) -> bool {
         match self.current_prompt() {
             Some(p) => p.picks_objects(),
@@ -995,7 +995,7 @@ impl Session {
         }
     }
 
-    /// AutoCAD drawing-area cursor: idle = crosshairs+pickbox; point prompt = crosshairs only;
+    /// drawing-area cursor: idle = crosshairs+pickbox; point prompt = crosshairs only;
     /// select-objects prompt = pickbox only.
     pub fn cursor_shape(&self) -> CursorShape {
         match self.current_prompt() {
@@ -1138,7 +1138,7 @@ impl Session {
     }
 
     /// Run a script: one input per line; within a line, spaces separate inputs except at text
-    /// prompts (as AutoCAD scripts do).
+    /// prompts (as scripts do).
     pub fn script(&mut self, text: &str) -> Result<()> {
         for line in text.lines() {
             let line = line.trim_end();
@@ -1208,7 +1208,7 @@ impl Session {
     // ---------------- picking without a command ----------------
 
     /// Open a selection window with one corner at `corner`, for press-and-drag selection
-    /// (AutoCAD's PICKDRAG = 2: a drag opens the window wherever it starts, even over an object;
+    /// (PICKDRAG = 2: a drag opens the window wherever it starts, even over an object;
     /// the next point, where the drag ends, closes it). Only while objects are being selected: no
     /// command running, or a command asking for objects. Returns whether a window was opened.
     pub fn begin_window(&mut self, corner: Vec2) -> bool {

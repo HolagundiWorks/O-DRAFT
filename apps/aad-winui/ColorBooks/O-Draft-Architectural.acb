@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<colorBook>
+  <bookName>O-Draft Architectural</bookName>
+  <colorPage>
+    <pageColor><RGB8><red>240</red><green>238</green><blue>235</blue></RGB8></pageColor>
+    <colorEntry><colorName>Paper white</colorName><RGB8><red>255</red><green>255</green><blue>255</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Warm white</colorName><RGB8><red>250</red><green>248</green><blue>245</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Light warm grey</colorName><RGB8><red>230</red><green>226</green><blue>220</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Mid warm grey</colorName><RGB8><red>180</red><green>175</green><blue>168</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Charcoal</colorName><RGB8><red>54</red><green>54</green><blue>54</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Soft black</colorName><RGB8><red>26</red><green>26</green><blue>26</blue></RGB8></colorEntry>
+  </colorPage>
+  <colorPage>
+    <pageColor><RGB8><red>200</red><green>80</green><blue>60</blue></RGB8></pageColor>
+    <colorEntry><colorName>Brick red</colorName><RGB8><red>168</red><green>54</green><blue>46</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Terracotta</colorName><RGB8><red>192</red><green>92</green><blue>62</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Sandstone</colorName><RGB8><red>210</red><green>180</green><blue>140</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Ochre</colorName><RGB8><red>204</red><green>153</green><blue>51</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Forest trim</colorName><RGB8><red>46</red><green>94</green><blue>62</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Steel blue</colorName><RGB8><red>70</red><green>110</green><blue>150</blue></RGB8></colorEntry>
+  </colorPage>
+  <colorPage>
+    <pageColor><RGB8><red>0</red><green>120</green><blue>200</blue></RGB8></pageColor>
+    <colorEntry><colorName>Presentation cyan</colorName><RGB8><red>0</red><green>174</green><blue>239</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Presentation blue</colorName><RGB8><red>0</red><green>112</green><blue>192</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Presentation green</colorName><RGB8><red>0</red><green>176</green><blue>80</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Presentation orange</colorName><RGB8><red>255</red><green>127</green><blue>0</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Presentation magenta</colorName><RGB8><red>192</red><green>0</green><blue>112</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Highlight yellow</colorName><RGB8><red>255</red><green>255</green><blue>0</blue></RGB8></colorEntry>
+  </colorPage>
+</colorBook>

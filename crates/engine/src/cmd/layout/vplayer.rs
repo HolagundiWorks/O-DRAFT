@@ -16,7 +16,7 @@ const OPTIONS: &[&str] = &["?", "Color", "Freeze", "Thaw", "Reset", "Newfrz", "V
 
 /// Keyword-only: spaces separate inputs.
 const KW: Accept = Accept { point: false, number: false, text: false, select: false, enter: true };
-/// A name or value: Space ends the input, as in AutoCAD scripts.
+/// A name or value: Space ends the input, as in scripts.
 const NAME: Accept = Accept { number: true, ..Accept::TEXT };
 
 /// A per-viewport layer change.

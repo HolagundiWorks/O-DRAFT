@@ -119,7 +119,7 @@ fn dim(s: &Session, kind: DimKind, defpt: Vec2, p13: Vec2, p14: Vec2, p15: Vec2,
     })
 }
 
-/// Horizontal (0) or vertical (90°) from where the dimension line is placed (AutoCAD's rule).
+/// Horizontal (0) or vertical (90°) from where the dimension line is placed (rule).
 fn auto_rotation(p1: Vec2, p2: Vec2, at: Vec2) -> f64 {
     let (x0, x1) = (p1.x.min(p2.x), p1.x.max(p2.x));
     let (y0, y1) = (p1.y.min(p2.y), p1.y.max(p2.y));
@@ -1258,7 +1258,7 @@ struct MLeaderM {
 }
 
 impl MLeaderM {
-    /// Starts with the order and Options chosen the last time (as AutoCAD does).
+    /// Starts with the order and Options chosen the last time (as does).
     fn new(s: &Session) -> Self {
         let o = s.last_used.mleader;
         let max_points = o.max_points.clamp(2, MAX_LEADER_POINTS);

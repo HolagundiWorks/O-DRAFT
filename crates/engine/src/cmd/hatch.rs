@@ -319,7 +319,7 @@ fn run_hatch_patterns(s: &mut Session, _p: &Value) -> Result<Value> {
     }))
 }
 
-/// Swatch geometry for the Hatch Editor (unit square, AutoCAD-style sample tile).
+/// Swatch geometry for the Hatch Editor (unit square, classic sample tile).
 fn hatch_pattern_preview(name: &str) -> Value {
     if name.eq_ignore_ascii_case("SOLID") {
         return json!({ "solid": true, "segments": [] });

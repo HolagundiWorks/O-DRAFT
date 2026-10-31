@@ -138,8 +138,8 @@ public sealed partial class MainWindow
     private MenuFlyout BuildLevelMenu(LevelTab level, bool design)
     {
         var menu = new MenuFlyout { Placement = FlyoutPlacementMode.TopEdgeAlignedLeft };
-        var settings = new MenuFlyoutItem { Text = "Rename, elevation and height..." };
-        settings.Click += (_, _) => StartLevelForm("level.set", level);
+        var settings = new MenuFlyoutItem { Text = "Story settings..." };
+        settings.Click += (_, _) => OpenStorySettings(level.Id);
         menu.Items.Add(settings);
         if (!level.Active)
         {

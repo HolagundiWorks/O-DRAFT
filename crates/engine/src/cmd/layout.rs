@@ -158,7 +158,7 @@ fn run_pspace(s: &mut Session, _p: &Value) -> Result<Value> {
 
 // ---------- layouts ----------
 
-/// Characters AutoCAD does not allow in layout names.
+/// Characters does not allow in layout names.
 const BAD_CHARS: &[char] = &['<', '>', '/', '\\', '"', ':', ';', '?', '*', '|', ',', '=', '`'];
 
 fn check_name(cmd: &str, d: &Drawing, name: &str, except: Option<&str>) -> Result<String> {
@@ -252,7 +252,7 @@ fn run_new(s: &mut Session, p: &Value) -> Result<Value> {
     s.doc_mut()?.layouts.push(Layout { page, ..Layout::new(&name, order) });
     let mut vp = Value::Null;
     if bool_or(p, "viewport", true) {
-        // AutoCAD behaviour: one viewport over the printable area, zoomed to the model extents.
+        // behaviour: one viewport over the printable area, zoomed to the model extents.
         let space = Space::Paper(name.clone());
         let rect = printable(s, &name)?;
         if let Some(h) = add_viewports(s, &space, rect, 1, "")?.first() {
@@ -400,7 +400,7 @@ fn target_layout(s: &Session, cmd: &str, p: &Value) -> Result<Space> {
     }
 }
 
-/// Split a rectangle into `count` viewport rectangles (AutoCAD's VPORTS arrangements).
+/// Split a rectangle into `count` viewport rectangles (VPORTS arrangements).
 fn split(r: Bounds2, count: usize, arrangement: &str) -> Vec<Bounds2> {
     let (x0, y0, x1, y1) = (r.min.x, r.min.y, r.max.x, r.max.y);
     let xm = (x0 + x1) / 2.0;

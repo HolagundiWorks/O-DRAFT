@@ -9,7 +9,7 @@
     -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-            <!-- OSAS glass soft-UI (aligned with Hcw.Ui SuiteColors). Canvas stays white. -->
+            <!-- Suite glass soft-UI (aligned with O.Ui SuiteColors). Canvas stays white. -->
             <SolidColorBrush x:Key="AppBackgroundBrush" Color="#E4EAF2" />
             <SolidColorBrush x:Key="SurfaceBrush" Color="#EEF2F8" />
             <SolidColorBrush x:Key="SurfaceSecondaryBrush" Color="#F1F5FA" />

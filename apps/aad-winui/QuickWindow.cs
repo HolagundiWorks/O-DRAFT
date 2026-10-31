@@ -9,11 +9,8 @@ namespace Aad.WinUi;
 /// <summary>Quick Properties for the current selection. Edits go through <c>properties.set</c>.</summary>
 internal sealed class QuickWindow : Window
 {
-    private static readonly string[] Colors = ["ByLayer", "ByBlock", "Red", "Yellow", "Green", "Cyan", "Blue", "Magenta", "White"];
-
     private readonly Action<string, string> _run;
     private readonly StackPanel _stack = new() { Spacing = Density.SpaceSm, Margin = Density.DialogMargin };
-    private readonly ComboBox _color = new() { MinWidth = 140, MinHeight = Density.ControlHeight };
     private readonly ComboBox _layer = new() { MinWidth = 140, MinHeight = Density.ControlHeight };
     private readonly ComboBox _linetype = new() { MinWidth = 140, MinHeight = Density.ControlHeight };
     private readonly Dictionary<string, TextBox> _fields = new();
@@ -30,7 +27,6 @@ internal sealed class QuickWindow : Window
         Title = "Quick Properties";
         // Owned by the shell, so it stays above the drawing without being always-on-top system-wide.
         StandardWindow.Present(this, null, WindowTemplate.Floating, "quickprops");
-        _color.SelectionChanged += (_, _) => CommitChoice("color", _color);
         _layer.SelectionChanged += (_, _) => CommitChoice("layer", _layer);
         _linetype.SelectionChanged += (_, _) => CommitChoice("linetype", _linetype);
     }
@@ -87,8 +83,8 @@ internal sealed class QuickWindow : Window
             }
         }
         Title = root.TryGetProperty("title", out var title) ? title.GetString() ?? "Quick Properties" : "Quick Properties";
-        _stack.Children.Add(Row("Color", _color));
-        FillChoices(_color, Colors, Text(root, "color"));
+        var colorName = Text(root, "color");
+        _stack.Children.Add(Row("Color", IndexColorWindow.CreatePickerButton(this, colorName, allowByLayerByBlock: true, value => CommitChoiceValue("color", value))));
         _stack.Children.Add(Row("Layer", _layer));
         FillChoices(_layer, Names(root, "layers"), Text(root, "layer"));
         _stack.Children.Add(Row("Linetype", _linetype));
@@ -135,6 +131,15 @@ internal sealed class QuickWindow : Window
     private void CommitChoice(string key, ComboBox box)
     {
         if (_filling || _handles.Count == 0 || box.SelectedItem is not ComboBoxItem item || item.Tag is not string value || value.Length == 0 || value == "*VARIES*")
+        {
+            return;
+        }
+        CommitChoiceValue(key, value);
+    }
+
+    private void CommitChoiceValue(string key, string value)
+    {
+        if (_filling || _handles.Count == 0 || value.Length == 0 || value == "*VARIES*")
         {
             return;
         }

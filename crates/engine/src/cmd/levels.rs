@@ -21,8 +21,8 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("level.new", "New Level", run_new)
             .menu(&["Architecture", "Levels", "New Level"])
             .params("{name, elevation?, height?, after? (level id or name), first? (name for the existing level when the drawing has none yet)} → {id, name, levels}"),
-        CommandSpec::new("level.set", "Level Settings", run_set)
-            .menu(&["Architecture", "Levels", "Level Settings"])
+        CommandSpec::new("level.set", "Story settings", run_set)
+            .menu(&["Architecture", "Levels", "Story settings"])
             .params("{level (id or name), name?, elevation?, height?, order? (0-based tab position)} → {level}"),
         CommandSpec::new("level.delete", "Delete Level", run_delete)
             .menu(&["Architecture", "Levels", "Delete Level"])

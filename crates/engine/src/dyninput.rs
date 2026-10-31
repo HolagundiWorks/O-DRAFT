@@ -2,7 +2,7 @@
 //!
 //! The command-line text is the single source of truth; the boxes are a view of it:
 //! - `40` is typing in the first box (X, or the distance for second and next points, which
-//!   default to polar as in AutoCAD; DYNPIFORMAT = 1 makes them Cartesian).
+//!   default to polar; DYNPIFORMAT = 1 makes them Cartesian).
 //! - `40,` locks X = 40 and moves to Y; `40<` locks the distance and moves to the angle. A locked
 //!   value holds the cursor.
 //! - Tab types the separator for the format on show, so `40` Tab `90` reads `40<90`.

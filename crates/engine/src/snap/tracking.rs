@@ -20,7 +20,7 @@ use serde::Serialize;
 
 use super::{SnapHit, mode};
 
-/// The most points kept acquired (as AutoCAD: seven).
+/// The most points kept acquired (seven).
 pub const MAX_ACQUIRED: usize = 7;
 /// Seconds the cursor rests on a point before it is acquired (or released).
 pub const DWELL: f64 = 0.4;

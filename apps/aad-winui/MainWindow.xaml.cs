@@ -694,6 +694,11 @@ public sealed partial class MainWindow : Window
             OpenProjectWizard();
             return;
         }
+        if (id == "level.set")
+        {
+            OpenStorySettings();
+            return;
+        }
         if (id == "level.import")
         {
             _ = OpenImportLevel();
@@ -3714,7 +3719,7 @@ public sealed partial class MainWindow : Window
                 currentLayer = layer.Name;
             }
         }
-        AddChoice("Color", new[] { "ByLayer", "ByBlock", "Red", "Yellow", "Green", "Cyan", "Blue", "Magenta", "White" }, Row(snapshot, "Color"), value =>
+        AddColorPicker("Color", Row(snapshot, "Color"), allowByLayerByBlock: true, value =>
             RunProp("color", new Dictionary<string, object> { ["color"] = value }));
         AddChoice("Layer", layers, currentLayer, value =>
             RunProp("layer.current", new Dictionary<string, object> { ["name"] = value }));
@@ -3835,7 +3840,7 @@ public sealed partial class MainWindow : Window
             var layers = Names(root, "layers");
             var linetypes = Names(root, "linetypes");
             AddChoice("Layer", layers, Text(root, "layer"), value => CommitChoice(handles, "layer", value));
-            AddChoice("Color", new[] { "ByLayer", "ByBlock", "Red", "Yellow", "Green", "Cyan", "Blue", "Magenta", "White" }, Text(root, "color"), value => CommitChoice(handles, "color", value));
+            AddColorPicker("Color", Text(root, "color"), allowByLayerByBlock: true, value => CommitChoice(handles, "color", value));
             AddChoice("Linetype", linetypes.Count > 0 ? linetypes : new List<string> { "ByLayer", "ByBlock", "Continuous" }, Text(root, "linetype"), value => CommitChoice(handles, "linetype", value));
             AddChoice("Lineweight", new[] { "ByLayer", "ByBlock", "Default", "0.25", "0.50", "1.00" }, NormalizeWeight(Text(root, "lineweight")), value =>
             {
@@ -3981,6 +3986,12 @@ public sealed partial class MainWindow : Window
         };
         PropertiesPanel.Children.Add(FieldLabel(label));
         PropertiesPanel.Children.Add(box);
+    }
+
+    private void AddColorPicker(string label, string current, bool allowByLayerByBlock, Action<string> commit)
+    {
+        PropertiesPanel.Children.Add(FieldLabel(label));
+        PropertiesPanel.Children.Add(IndexColorWindow.CreatePickerButton(this, current, allowByLayerByBlock, commit));
     }
 
     private void AddTextSizeField(List<string> handles, string key, string label, string currentHeight)

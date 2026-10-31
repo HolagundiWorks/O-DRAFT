@@ -418,7 +418,7 @@
                         HorizontalAlignment="Center"
                         AutomationProperties.HeadingLevel="Level1" />
                     <TextBlock
-                        Text="Architectural drafting for OSAS"
+                        Text="Architectural drafting with O-Studio and O-CoreOp"
                         FontSize="{StaticResource FontSizeSection}"
                         Foreground="{ThemeResource TextSecondaryBrush}"
                         HorizontalAlignment="Center"
@@ -515,7 +515,7 @@
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource SpaceMd}">
                 <Image x:Name="SplashLogo" Width="{StaticResource LogoSplash}" Height="{StaticResource LogoSplash}" HorizontalAlignment="Center" AutomationProperties.Name="O-Draft" />
                 <TextBlock Text="O-Draft" FontSize="{StaticResource FontSizeSplashTitle}" FontWeight="SemiBold" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
-                <TextBlock Text="Architectural drafting for OSAS" FontSize="{StaticResource FontSizeSection}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Architectural drafting with O-Studio and O-CoreOp" FontSize="{StaticResource FontSizeSection}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="Open Source Architecture Suite · with O-Studio and O-CoreOp" FontSize="{StaticResource FontSizeBody}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="Open source · MIT OR Apache-2.0" FontSize="{StaticResource FontSizeBody}" Foreground="{ThemeResource SplashForegroundBrush}" HorizontalAlignment="Center" Margin="0,8,0,0" />
             </StackPanel>

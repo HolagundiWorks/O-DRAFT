@@ -4,7 +4,7 @@
 //! Optional fields may be empty and are left out of the nameplate rather than printed as blanks.
 //!
 //! This local store is for offline / unlinked Draft only. When the suite company file is present
-//! (`OSAS_COMPANY`), writes are refused: firm identity is owned by Studio and refreshed into the
+//! (`OSTUDIO_COMPANY`), writes are refused: firm identity is owned by Studio and refreshed into the
 //! drawing with `companyfile`. This path never writes the company file SoR.
 
 use std::path::{Path, PathBuf};
@@ -21,7 +21,7 @@ pub fn suite_company_env() -> bool {
             return v;
         }
     }
-    std::env::var_os("OSAS_COMPANY").is_some_and(|v| !v.is_empty())
+    std::env::var_os("OSTUDIO_COMPANY").is_some_and(|v| !v.is_empty())
 }
 
 #[cfg(test)]
@@ -175,7 +175,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// Save a profile (after validating it). Returns the profile folder.
-/// Refused when `OSAS_COMPANY` is set (suite-linked): local profiles are offline-only.
+/// Refused when `OSTUDIO_COMPANY` is set (suite-linked): local profiles are offline-only.
 pub fn save(base: &Path, profile: &CompanyProfile) -> Result<PathBuf, String> {
     refuse_suite_write("save")?;
     let issues = profile.validate();
@@ -220,7 +220,7 @@ pub fn list(base: &Path) -> Vec<(String, String)> {
 
 /// Copy a logo into the profile as its managed asset (`assets/logo.<ext>`) and record it. Only
 /// PNG, JPEG and SVG files up to 5 MB are accepted; the file is checked by extension and size.
-/// Refused when suite-linked (`OSAS_COMPANY`): logos belong with Studio company details.
+/// Refused when suite-linked (`OSTUDIO_COMPANY`): logos belong with Studio company details.
 pub fn set_logo(base: &Path, profile: &mut CompanyProfile, source: &Path) -> Result<(), String> {
     refuse_suite_write("set the logo on")?;
     let ext = source.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();

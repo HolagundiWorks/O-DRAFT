@@ -1,4 +1,4 @@
-//! Grip editing acts on the whole selection, as in AutoCAD: a stretched grip drags the
+//! Grip editing acts on the whole selection: a stretched grip drags the
 //! coincident grips of the other selected objects with it, and Move/Rotate/Scale/Mirror
 //! transform every selected object.
 

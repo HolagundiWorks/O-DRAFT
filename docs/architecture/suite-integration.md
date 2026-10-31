@@ -1,6 +1,6 @@
 # Suite integration: what O-Draft has, what the contracts need
 
-This page maps O-Draft onto the OSAS suite (O-Draft drawing, O-Studio office
+This page maps O-Draft in the O-Studio suite (O-Draft drawing, O-Studio office
 management, O-CoreOp quantities and costing) with one
 shared project identity in the **company file**. It describes O-Draft's side
 only. Where it names O-Studio / O-CoreOp behaviour beyond what
@@ -15,7 +15,7 @@ missing and what the first milestone needs.
 | Data | System of record | O-Draft's part |
 |---|---|---|
 | Drawing geometry, layers, blocks, layouts, undo, DXF/DWG | O-Draft (`aad-doc`, `aad-engine`) | Owns it. Other applications read it through commands, never through the document model |
-| Company details (name, address, registrations) | Studio (OSAS company file) | Reads them (`companyfile`), prints them in the title block; never writes; when linked, refuses free typing of firm identity via `project` / wizard |
+| Company details (name, address, registrations) | O-Studio company file | Reads them (`companyfile`), prints them in the title block; never writes; when linked, refuses free typing of firm identity via `project` / wizard |
 | Project name, site, client | Studio / O-Studio, in the company file | Reads them (`companyfile`); when `project_ref` is set, those detail keys are refresh-only in Draft |
 | Quantities and costs | O-CoreOp | Produces measured quantities (`takeoff.*`) and a hand-off file (`bridge.export`); does not price |
 | Reusable details and spatial records | (planned) | Component library in code today; not a separate spatial server |

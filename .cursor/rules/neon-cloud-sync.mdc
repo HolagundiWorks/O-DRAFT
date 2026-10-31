@@ -1,5 +1,5 @@
 ---
-description: Planned .osp cloud sync uses Neon (Lakebase Postgres), not Supabase. O-Studio owns the connector; Draft and CoreOp stay offline-first.
+description: .osp cloud sync uses Neon (Lakebase Postgres). O-Studio owns the connector; O-Draft and O-CoreOp stay offline-first.
 alwaysApply: true
 ---
 

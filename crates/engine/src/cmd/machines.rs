@@ -230,7 +230,7 @@ mod tests {
         assert!(s.doc().unwrap().layer("0").is_some_and(|l| l.on));
     }
 
-    /// Hit-test pickbox vs drawn cursor shape (#34 / AutoCAD cursors).
+    /// Hit-test pickbox vs drawn cursor shape (#34 / cursors).
     #[test]
     fn pick_box_at_object_selection_prompts() {
         use crate::CursorShape;

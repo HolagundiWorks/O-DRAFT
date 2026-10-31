@@ -1,5 +1,7 @@
 # Dynamo dependency inventory
 
-O-Draft does not start Dynamo and does not reference LibG, ProtoGeometry, ForgeUnits, Autodesk.IDSDK, or Dynamo analytics.
+O-Draft talks to **O-Dynamo** through a local pipe only. The tree here lists Rust crates and tools
+used by the shell and engine; it does not include Dynamo Core, LibG, ProtoGeometry, ForgeUnits, or
+Dynamo analytics packages.
 
 The shell does not launch `ODynamo.Host.exe`.

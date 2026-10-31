@@ -1329,7 +1329,7 @@ pub(crate) fn break_entity(s: &mut Session, h: Handle, p1: Vec2, p2: Vec2) -> Re
             }
             let a1 = c.center.xy().angle_to(p1);
             let a2 = c.center.xy().angle_to(p2);
-            // AutoCAD removes the CCW portion from the first to the second point.
+            // removes the CCW portion from the first to the second point.
             vec![arc(&Arc::new(c.center.xy(), c.radius, a2, a1))]
         }
         EntityKind::Arc(a) => {

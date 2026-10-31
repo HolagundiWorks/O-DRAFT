@@ -43,7 +43,7 @@ Generated and ignored (see `.gitignore`): `target/` (Cargo build output), `dist/
 | `ui-egui` | `src/` canvas, menus, command line, panels, dialogs, icons (drawn in code); `tests/` |
 | `aad-host` | C ABI, registry menu, command line, pointer input, and Win32 child window for the WinUI shell. `apps/aad-winui` is the C# project and is excluded from the Cargo workspace |
 | `mcp`, `agent`, `auditor`, `llm` | MCP server, allow-listed tool layer, Auditor v0 detect-only checks, model runtime facade |
-| `office` | Loads the OSAS `office.dll` at run time (Windows) and reads the company file; the `companyfile` command uses it |
+| `office` | Loads `office.dll` at run time (Windows) and reads the company file; the `companyfile` command uses it |
 | `odp` (`aad-odp`) | Project file (`.osp`): drawing, take-off, history, assets; `takeoff.record` writes take-off rows here ([PROJECT-FILE.md](PROJECT-FILE.md)) |
 | `param` (`aad-param`) | Parametric graph engine: `graph.rs`, `nodes.rs`, `schema.rs`, `units.rs`, `formula.rs`, `eval.rs`, `template.rs`; no drawing I/O. Engine `param.*` commands commit walls and take-off facts ([parametric.md](parametric.md)) |
 
@@ -74,11 +74,11 @@ See [TESTING.md](TESTING.md). Fixtures that are files live next to their tests, 
 
 ## Names
 
-The product is **O-Draft**, the drafting app of OSAS (the Open Source Architecture Suite), beside O-Studio and O-CoreOp. It was called AAD (Accelerated Architecture Drafting). Only what a person reads was renamed: window titles, About, menus, the installer, the logo and the documents. Identifiers that other things read keep their old names, so nothing breaks:
+The product is **O-Draft**, the drafting app in the O-Studio suite, beside O-Studio and O-CoreOp. It was called AAD (Accelerated Architecture Drafting). Only what a person reads was renamed: window titles, About, menus, the installer, the logo and the documents. Identifiers that other things read keep their old names, so nothing breaks:
 
 | Kept | Why |
 |---|---|
-| Crates and libraries `aad-*`, `aad_host.dll`, the Cargo binary names `aad` and `aad-cli`, the C# namespace `Aad.WinUi` | Other crates import them. The Windows package renames the two programs it ships: `aad` becomes `o-draft.exe` and the WinUI shell is `ODraft.WinUi.exe`; the OSAS launcher looks for `o-draft.exe` first and `aad.exe` as a fallback for old installs |
+| Crates and libraries `aad-*`, `aad_host.dll`, the Cargo binary names `aad` and `aad-cli`, the C# namespace `Aad.WinUi` | Other crates import them. The Windows package renames the two programs it ships: `aad` becomes `o-draft.exe` and the WinUI shell is `ODraft.WinUi.exe`; the O-Studio looks for `o-draft.exe` first and `aad.exe` as a fallback for old installs |
 | Command ids, the command-line grammar, MCP tool names (`serverInfo.name` is `aad`), control-channel methods | Scripts and agents call them |
 | File formats: `AAD_PROJECT` extension data in DXF, `.vdb`, the `hcw-aqc-bridge` file (`source.app` is `AAD`) | Existing drawings and AQC import must keep working |
 | The application id `io.github.holagundiworks.aad` | Other apps and installers may still key on it |
@@ -86,4 +86,4 @@ The product is **O-Draft**, the drafting app of OSAS (the Open Source Architectu
 | The WiX UpgradeCode and the `AAD.Drawing` file association | An installed copy must still upgrade |
 | The repository name | Links and clones |
 
-The Windows programs ship as `o-draft.exe` (the `aad` binary, renamed by `packaging/windows/package.ps1`) and `ODraft.WinUi.exe`; `aad-cli.exe` keeps its name. The OSAS launcher finds both `o-draft.exe` and the older `aad.exe`. The installer and its files are named `o-draft-<version>-windows-<arch>`. The logo is the OSAS suite mark in O-Draft's black, drawn by `cargo xtask logo`. The accent colour is black (`#1B1C20`) in the light palette and a light neutral (`#F6F5F1`) in the dark palette, where black would not show; the two palettes are `theme::Tokens` in `crates/ui-egui/src/theme.rs`, and the WinUI shell sets the same values in `apps/aad-winui/App.xaml`.
+The Windows programs ship as `o-draft.exe` (the `aad` binary, renamed by `packaging/windows/package.ps1`) and `ODraft.WinUi.exe`; `aad-cli.exe` keeps its name. The O-Studio finds both `o-draft.exe` and the older `aad.exe`. The installer and its files are named `o-draft-<version>-windows-<arch>`. The logo is the OSAS suite mark in O-Draft's black, drawn by `cargo xtask logo`. The accent colour is black (`#1B1C20`) in the light palette and a light neutral (`#F6F5F1`) in the dark palette, where black would not show; the two palettes are `theme::Tokens` in `crates/ui-egui/src/theme.rs`, and the WinUI shell sets the same values in `apps/aad-winui/App.xaml`.

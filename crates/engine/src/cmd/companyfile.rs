@@ -337,7 +337,7 @@ mod tests {
     fn opening_without_an_osas_start_says_how_to_get_the_details() {
         let mut s = Session::new();
         // This test machine is not started from OSAS, so no company file or ticket is in the environment.
-        if std::env::var_os("OSAS_COMPANY").is_none() {
+        if std::env::var_os("OSTUDIO_COMPANY").is_none() {
             let message = s.execute("companyfile", &json!({ "open": true })).err().map(|e| e.to_string()).unwrap_or_default();
             assert!(message.contains("OSAS"), "{message}");
             assert!(s.execute("companyfile", &json!({ "projects": true })).is_err());

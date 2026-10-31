@@ -352,7 +352,7 @@ fn preview_path(path: &str) -> Result<Value> {
 }
 
 fn preview_entities<'a>(d: &aad_doc::Drawing, entities: impl Iterator<Item = &'a Entity>) -> Value {
-    // One display-list pass keeps layer/block colours (AutoCAD DesignCenter style).
+    // One display-list pass keeps layer/block colours (DesignCenter style).
     let ents: Vec<&Entity> =
         entities.take(400).filter(|e| !matches!(e.kind, EntityKind::Text(_) | EntityKind::MText(_) | EntityKind::AttDef(_))).collect();
     let list = aad_render::build_entities(d, ents, &aad_render::Options { tolerance: 0.05, text: false, fill: false, ..Default::default() });

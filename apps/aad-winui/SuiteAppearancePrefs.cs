@@ -4,8 +4,8 @@ using Microsoft.UI.Xaml;
 namespace Aad.WinUi;
 
 /// <summary>
-/// Shared suite theme preference (<c>%LOCALAPPDATA%\OSAS\appearance.json</c>),
-/// same file as Hcw.Ui.SuiteAppearance so OSAS / O-CoreOp / O-Draft stay in sync.
+/// Shared suite theme preference (<c>%LOCALAPPDATA%\O-Studio\appearance.json</c>),
+/// same file as O.Ui.SuiteAppearance so O-Studio, O-CoreOp and O-Draft stay in sync.
 /// </summary>
 internal static class SuiteAppearancePrefs
 {
@@ -53,6 +53,6 @@ internal static class SuiteAppearancePrefs
     static string Path() =>
         System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "OSAS",
+            "O-Studio",
             "appearance.json");
 }

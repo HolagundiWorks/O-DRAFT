@@ -22,8 +22,7 @@ title, file, category, source). Insert a file with `insert {name, file, at}` or 
 Every DXF here is an original Innerscene model released under **CC0 1.0** (public domain) in the
 [Innerscene Drawing Library](https://www.innerscene.com/tools/library/drawings); the licence of each
 item was read from its own page on 2026-10-27. Some sheets carry the text "INNERSCENE / FREE PARTS
-LIBRARY / ORIGINAL CC0" as a credit. See `catalog.json` and `ATTRIBUTION.md`. No Autodesk / Adobe /
-Avid content.
+LIBRARY / ORIGINAL CC0" as a credit. See `catalog.json` and `ATTRIBUTION.md`.
 
 Drafting symbols only: verify sizes, reinforcement and clearances against the design, the product
 and local codes before construction.

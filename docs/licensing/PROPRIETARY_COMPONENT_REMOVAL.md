@@ -1,5 +1,7 @@
 # Proprietary component removal
 
-O-Draft does not ship LibG, a Dynamo analytics package, Autodesk.IDSDK, ForgeUnits, Artifakt font files, or an Autodesk package feed.
+O-Draft ships only open-source components listed in `THIRD_PARTY_LICENSES.md`. The repository does
+not bundle LibG, a Dynamo analytics package, ForgeUnits, Artifakt font files, or a vendor package
+feed.
 
 This page is not a legal opinion.

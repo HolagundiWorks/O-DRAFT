@@ -1,6 +1,6 @@
 # O-Draft
 
-O-Draft (formerly AAD, Accelerated Architecture Drafting) is the drafting app of OSAS, the Open Source Architecture Suite, alongside O-Studio (office management) and O-CoreOp (quantities, estimates and billing). It is a 2D computer-aided drafting application written in Rust, aimed at architectural and civil
+O-Draft (formerly AAD, Accelerated Architecture Drafting) is the drafting app alongside **O-Studio** (office and suite hub) and **O-CoreOp** (quantities, estimates and billing). It is a 2D computer-aided drafting application written in Rust, aimed at architectural and civil
 drafting. It reads and writes DXF and DWG and can be driven from scripts and agents. **Windows is
 the only supported platform for now**; macOS, Linux and the web build come in later phases (the
 code stays portable, but only Windows is built, tested and packaged). This repository is a fork of
@@ -155,7 +155,3 @@ An offline assistant can call a fixed set of validated tools (summary, flatten, 
 
 [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option. Third-party notices are in
 [NOTICE](NOTICE) and asset sources in [ATTRIBUTION.md](ATTRIBUTION.md).
-
-Autodesk, AutoCAD and DWG are trademarks of Autodesk, Inc. This is an independent project, not
-affiliated with or endorsed by Autodesk; the names are used only to describe file formats and
-workflows it is compatible with.

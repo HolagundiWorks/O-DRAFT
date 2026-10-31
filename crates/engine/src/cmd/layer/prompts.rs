@@ -35,7 +35,7 @@ const OPTIONS: &[&str] = &[
 
 /// Keyword-only: spaces separate inputs.
 const KW: Accept = Accept { point: false, number: false, text: false, select: false, enter: true };
-/// A name or value: Space ends the input, as it does in AutoCAD scripts.
+/// A name or value: Space ends the input, as it does in scripts.
 const NAME: Accept = Accept { number: true, ..Accept::TEXT };
 
 /// A per-layer change applied to a list of layer names.

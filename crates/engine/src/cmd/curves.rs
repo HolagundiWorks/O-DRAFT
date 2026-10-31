@@ -9,7 +9,7 @@ use crate::{EngineError, Result, Session};
 /// Hard cap on generated vertices/points from user-sized inputs.
 pub const MAX_GEN: usize = 20_000;
 
-/// A keyword-only prompt: spaces separate inputs (like Enter), as at AutoCAD's option prompts.
+/// A keyword-only prompt: spaces separate inputs (like Enter), as at option prompts.
 pub const KW: crate::Accept = crate::Accept { point: false, number: false, text: false, select: false, enter: true };
 
 // ---------------- picking ----------------

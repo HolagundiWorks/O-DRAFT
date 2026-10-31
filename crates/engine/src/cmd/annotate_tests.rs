@@ -377,7 +377,7 @@ fn setvar_dim_variables_apply_to_new_dimensions() {
     assert_eq!(one.overrides.get("decimals"), Some(&json!(1)));
     assert_eq!(aad_render::dimension_in(s.doc().unwrap(), &one).value, "100.0");
 
-    // DIMSCALE 0 (AutoCAD: scale to the layout viewport) never shrinks a dimension to nothing.
+    // DIMSCALE 0 never shrinks a dimension to nothing.
     s.execute("setvar", &json!({ "name": "DIMSCALE", "value": 0 })).unwrap();
     let zero = linear(&mut s, -120.0);
     assert!((text_height(&s, zero) - base).abs() < 1e-12);

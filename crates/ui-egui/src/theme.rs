@@ -382,7 +382,7 @@ pub fn apply(ctx: &egui::Context, theme: Theme) {
     ctx.set_visuals_of(Theme::Light, visuals(Theme::Light));
     ctx.set_theme(egui::ThemePreference::from(theme));
     ctx.all_styles_mut(|s| {
-        // Match Hcw.Ui SuiteStyles: 8/12 stack · 16×6 control pad · 36 hit.
+        // Match O.Ui SuiteStyles: 8/12 stack · 16×6 control pad · 36 hit.
         s.spacing.item_spacing = egui::vec2(8.0, 8.0);
         s.spacing.button_padding = egui::vec2(16.0, 6.0);
         s.spacing.interact_size.y = 36.0;

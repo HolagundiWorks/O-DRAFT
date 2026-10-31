@@ -1,4 +1,4 @@
-//! Point modifiers typed at a point prompt, as in AutoCAD: `FROM` (a base point and an offset),
+//! Point modifiers typed at a point prompt: `FROM` (a base point and an offset),
 //! `M2P`/`MTP` (the midpoint between two points), the point filters `.x`, `.y`, `.z`, `.xy`,
 //! `.xz`, `.yz`, the angle override `<a` and the object snap overrides (`END`, `MID` … `NON`).
 //!

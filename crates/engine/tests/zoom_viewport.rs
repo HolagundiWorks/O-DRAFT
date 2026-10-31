@@ -1,4 +1,4 @@
-//! ZOOM inside a layout viewport (MSPACE) works on that viewport, as in AutoCAD: Extents and
+//! ZOOM inside a layout viewport (MSPACE) works on that viewport: Extents and
 //! Window fit the viewport, nX keeps its centre, nXP sets its scale (#370).
 
 use aad_doc::{EntityKind, Viewport};

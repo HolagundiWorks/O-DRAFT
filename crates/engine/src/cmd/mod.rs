@@ -1,5 +1,5 @@
-//! The command registry. Ids are AutoCAD command names in lower case; menu paths follow
-//! AutoCAD's menu bar so the catalog doubles as the parity metric.
+//! The command registry. Ids are command names in lower case; menu paths follow
+//! menu bar so the catalog doubles as the parity metric.
 
 mod aicards;
 mod annot;
@@ -284,7 +284,7 @@ pub fn find_command(id: &str) -> Option<&'static CommandSpec> {
     command_specs().iter().find(|c| c.id == l)
 }
 
-/// Resolve a typed name or alias (AutoCAD-style short names such as `L`, `C`, `PL`) to an id.
+/// Resolve a typed name or alias (classic short names such as `L`, `C`, `PL`) to an id.
 pub fn resolve_alias(name: &str) -> String {
     let l = name.to_ascii_lowercase();
     if find_command(&l).is_some() {

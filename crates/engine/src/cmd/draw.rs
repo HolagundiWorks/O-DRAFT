@@ -485,7 +485,7 @@ impl PlineM {
         k
     }
     /// The next segment, starting at the last vertex, takes the requested widths (#104); the
-    /// segments after it are uniform at the ending width, as in AutoCAD.
+    /// segments after it are uniform at the ending width.
     fn begin_segment(&mut self) {
         if let Some(last) = self.verts.last_mut() {
             (last.start_width, last.end_width) = (self.start_w, self.end_w);
@@ -1385,7 +1385,7 @@ struct MTextM {
     first: Option<Vec2>,
     second: Option<Vec2>,
     /// Paragraphs typed so far: one per input line, an empty line ends the text (as on
-    /// AutoCAD's command line and in scripts).
+    /// command line and in scripts).
     lines: Vec<String>,
     /// Height, justification, line spacing, rotation, style and width set by the options.
     opts: super::mtext_opts::MTextOpts,

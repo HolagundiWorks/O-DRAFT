@@ -4,16 +4,16 @@ namespace Aad.WinUi;
 
 /// <summary>
 /// Tells the other suite apps which drawing is open here, so O-CoreOp can open the same project file. It keeps
-/// <c>%LOCALAPPDATA%\OSAS\active-project.json</c> current: written when the active drawing changes (opened, saved under a new name, another tab
+/// <c>%LOCALAPPDATA%\O-Studio\active-project.json</c> current: written when the active drawing changes (opened, saved under a new name, another tab
 /// chosen), deleted when no saved drawing is active or the app closes. <c>project</c> is the drawing's path when it is a project file (<c>.osp</c>), else null.
-/// <code>{ "format": "osas-active-project", "version": 1, "app": "O-Draft", "drawing": "C:\p\house.osp", "project": "C:\p\house.osp", "updated_utc": "…" }</code>
+/// <code>{ "format": "studio-active-project", "version": 1, "app": "O-Draft", "drawing": "C:\p\house.osp", "project": "C:\p\house.osp", "updated_utc": "…" }</code>
 /// </summary>
 internal static class ActiveProjectPointer
 {
     private static string? _last;
 
-    internal static string FilePath => System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OSAS", "active-project.json");
+    internal static string FilePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "O-Studio", "active-project.json");
 
     /// <summary>A project file (<c>.osp</c>): the drawing and its take-off are one file, so O-CoreOp opens the same file and needs no server.</summary>
     internal static bool IsProjectFile(string path) =>
@@ -39,7 +39,7 @@ internal static class ActiveProjectPointer
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(FilePath)!);
             var json = JsonSerializer.Serialize(new Dictionary<string, object?>
             {
-                ["format"] = "osas-active-project",
+                ["format"] = "studio-active-project",
                 ["version"] = 1,
                 ["app"] = "O-Draft",
                 ["drawing"] = path,

@@ -4,12 +4,12 @@ using System.Text.Json;
 namespace Aad.WinUi;
 
 /// <summary>
-/// Check-only update channel (<c>OSAS_UPDATE_CHANNEL_URL</c>). Does not download or install.
+/// Check-only update channel (<c>OSTUDIO_UPDATE_CHANNEL_URL</c>). Does not download or install.
 /// </summary>
 internal static class UpdateCheck
 {
     public const string ProductId = "o-draft";
-    public const string EnvUrl = "OSAS_UPDATE_CHANNEL_URL";
+    public const string EnvUrl = "OSTUDIO_UPDATE_CHANNEL_URL";
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
@@ -21,7 +21,7 @@ internal static class UpdateCheck
         if (string.IsNullOrWhiteSpace(url))
         {
             return new Result(false, false, currentVersion, null,
-                "Update checks are not configured. Set OSAS_UPDATE_CHANNEL_URL when a channel JSON is published.");
+                "Update checks are not configured. Set OSTUDIO_UPDATE_CHANNEL_URL when a channel JSON is published.");
         }
 
         if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||

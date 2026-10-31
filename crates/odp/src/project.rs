@@ -1,4 +1,4 @@
-//! The `.osp` project file (format `osas-project`, version 1): one SQLite file that holds everything about a project, so the same file opens
+//! The `.osp` project file (format `osp`, version 1): one SQLite file that holds everything about a project, so the same file opens
 //! as a drawing in O-Draft, as a take-off and a project in O-CoreOp, and in a viewer on another device. Spec: `docs/ODP-PROJECT-FILE-AND-SYNC.md`
 //! (OSAS repository).
 //!
@@ -18,7 +18,7 @@ mod time;
 pub use import::PDF_CHUNK;
 
 /// `meta.format`.
-pub const FORMAT: &str = "osas-project";
+pub const FORMAT: &str = "osp";
 /// The schema version this crate writes and reads.
 pub const VERSION: i64 = 1;
 
@@ -177,7 +177,7 @@ impl Odp {
         Self::tune(&conn).map_err(|_| Error::NotAProject("it is not a SQLite file".into()))?;
         let odp = Odp { conn };
         let format = odp.meta_value("format").map_err(|_| Error::NotAProject("it has no meta table".into()))?;
-        if format.as_deref() != Some(FORMAT) {
+        if !matches!(format.as_deref(), Some(FORMAT) | Some("osas-project")) {
             return Err(Error::NotAProject(format!("its format is {format:?}")));
         }
         let version: i64 = odp.meta_value("version")?.and_then(|v| v.parse().ok()).unwrap_or(0);

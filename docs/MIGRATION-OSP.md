@@ -11,7 +11,7 @@ This page is the living checklist for retiring the old take-off store (ShilpiDB,
 | Take-off in a `.vdb` beside the drawing or on a shared `shilpid` server | Take-off in SQLite tables inside the **`.osp`** |
 | O-CoreOp opened ShilpiDB projects / `.vdb` / gateway | O-CoreOp opens **`.osp`** only; Take-off reads `takeoff_*` via `OdpTakeoffAdapter` |
 | Separate `.bbsproj` for estimate data | **`project_doc`** inside the same `.osp` |
-| Wire codename "ShilpiDB" in docs and UI | **OSAS project file**; code types `OspTakeoff`, `OdpTakeoffService` |
+| Wire codename "ShilpiDB" in docs and UI | **`.osp` project file**; code types `OspTakeoff`, `OdpTakeoffService` |
 
 **Unchanged on purpose (wire contract):**
 
@@ -94,4 +94,4 @@ When touching take-off or project files:
 1. Read O-CoreOp `docs/AADT.md` and `docs/PROJECT-FILE.md`.
 2. Do not reference ShilpiDB, `shilpid`, or `VdbFile` in new code or user-facing text.
 3. Use `OspTakeoff` / `OdpTakeoffAdapter` and `Services/Odp/` in O-CoreOp.
-4. If you change this checklist, update **`docs/MIGRATION-OSP.md` in all four suite repos** (O-Studio, O-CoreOp, O-Draft, OSAS meta repo).
+4. If you change this checklist, update **`docs/MIGRATION-OSP.md` in all four suite repos** (O-Studio, O-CoreOp, O-Draft, O-Studio repo).

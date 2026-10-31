@@ -4,12 +4,11 @@ Every non-code asset in this repository (images, icons, fonts, example drawings,
 here with its author, source and licence. `cargo xtask assets` (part of `cargo xtask ci`) fails if
 an asset file is missing from this table.
 
-**Policy (mandatory):** O-Draft contains **no Autodesk, Adobe or Avid iconography, images,
-artwork, fonts, hatch patterns, linetypes, templates or presets.** Every asset is original work by
-O-Draft contributors or third-party material under an open licence (OSI open source, public domain
-/ CC0, or Creative Commons that allows redistribution). Screenshots of Autodesk software are never
-committed. Font files are not added here: shared fonts live in
-[storytold/craft-fonts](https://github.com/storytold/craft-fonts), an optional build input.
+**Policy (mandatory):** Every asset is original work by O-Draft contributors or third-party material
+under an open licence (OSI open source, public domain / CC0, or Creative Commons that allows
+redistribution). Each file must have a row in this table (`cargo xtask assets` enforces it). Shared
+fonts live in [storytold/craft-fonts](https://github.com/storytold/craft-fonts), an optional build
+input.
 
 Generated-in-code assets are original and have no file to list:
 - the UI icon set (`crates/ui-egui/src/icons.rs`);

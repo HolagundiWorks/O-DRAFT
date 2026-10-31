@@ -1,7 +1,7 @@
 //! The clipboard every open drawing shares (COPYCLIP, CUTCLIP, COPYBASE; PASTECLIP, PASTEORIG,
 //! PASTEBLOCK).
 //!
-//! Like AutoCAD's, it holds the copied objects together with what they refer to in their drawing:
+//! Like the reference clipboard, it holds the copied objects together with what they refer to in their drawing:
 //! layers, linetypes, text, dimension, multileader and table styles, and the blocks they reference
 //! (nested ones too). Pasting adds the ones the target drawing doesn't have; a name the target
 //! already has keeps the target's definition, and a generated (anonymous `*…`) block whose name is
@@ -57,7 +57,7 @@ pub(crate) fn has_clip(s: &Session) -> std::result::Result<(), String> {
     if s.clipboard.is_empty() { Err("the clipboard is empty".into()) } else { Ok(()) }
 }
 
-/// Enabled check of PASTEORIG: as in AutoCAD, it pastes objects copied from another drawing.
+/// Enabled check of PASTEORIG:, it pastes objects copied from another drawing.
 pub(crate) fn can_paste_orig(s: &Session) -> std::result::Result<(), String> {
     has_clip(s)?;
     if from_active(s) {

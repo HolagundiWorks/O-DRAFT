@@ -1,6 +1,6 @@
 //! ATTEDIT / EATTEDIT: one block reference's attribute values, asked for one after another.
 //! -ATTEDIT: the attributes picked by block name, tag and value specifications, edited one at a
-//! time or by replacing a string in all of them. Attribute tags match in any case, as in AutoCAD.
+//! time or by replacing a string in all of them. Attribute tags match in any case.
 
 use aad_doc::color::Color;
 use aad_doc::{AttribProps, Common, EntityKind, Handle};

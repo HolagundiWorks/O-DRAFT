@@ -3,7 +3,7 @@
 //!
 //! A group is a named (or unnamed, `*A1`, `*A2`…) ordered set of objects in the drawing's
 //! `groups`, saved as GROUP objects in the ACAD_GROUP dictionary. The JSON forms never prompt;
-//! typed, the commands ask as AutoCAD's command-line versions do.
+//! typed, the commands ask as command-line versions do.
 
 use std::sync::Arc;
 

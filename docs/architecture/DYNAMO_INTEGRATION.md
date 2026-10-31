@@ -1,8 +1,8 @@
 # Dynamo companion integration
 
-O-Draft does not embed Autodesk Dynamo. A separate O-Dynamo companion
-(`ODynamo.Host`) evaluates a small 2D drafting graph over a local named pipe.
-Wall take-off graphs remain on `aad-param` (`param.*`); see [parametric.md](../parametric.md).
+Parametric wall take-off graphs use `aad-param` (`param.*`); see [parametric.md](../parametric.md).
+Graph evaluation for companion drafting uses a separate **O-Dynamo** host (`ODynamo.Host`) over a
+local named pipe.
 Enhancement roadmap: [dynamo-enhancement-plan.md](../dynamo-enhancement-plan.md).
 
 ## Pipe protocol (v2)

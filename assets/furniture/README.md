@@ -17,6 +17,6 @@ Plan-view CAD blocks for residential and office layouts. Geometry is **1:1 milli
 
 ## Licence
 
-Every DXF here is **CC0 1.0** (public domain) from the [Innerscene Drawing Library](https://www.innerscene.com/tools/library/drawings). See `standard/catalog.json` and `ATTRIBUTION.md`. No Autodesk / Adobe / Avid content.
+Every DXF here is **CC0 1.0** (public domain) from the [Innerscene Drawing Library](https://www.innerscene.com/tools/library/drawings). See `standard/catalog.json` and `ATTRIBUTION.md`.
 
 Drafting symbols only — verify dimensions and clearances against the product and local codes before construction.

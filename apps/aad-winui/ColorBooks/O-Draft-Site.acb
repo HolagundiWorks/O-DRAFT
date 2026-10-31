@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<colorBook>
+  <bookName>O-Draft Site</bookName>
+  <colorPage>
+    <pageColor><RGB8><red>120</red><green>160</green><blue>90</blue></RGB8></pageColor>
+    <colorEntry><colorName>Grass light</colorName><RGB8><red>180</red><green>210</green><blue>140</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Grass</colorName><RGB8><red>120</red><green>160</green><blue>90</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Grass dark</colorName><RGB8><red>70</red><green>110</green><blue>55</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Tree canopy</colorName><RGB8><red>40</red><green>90</green><blue>45</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Earth light</colorName><RGB8><red>210</red><green>190</green><blue>160</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Earth</colorName><RGB8><red>160</red><green>130</green><blue>95</blue></RGB8></colorEntry>
+  </colorPage>
+  <colorPage>
+    <pageColor><RGB8><red>100</red><green>140</green><blue>180</blue></RGB8></pageColor>
+    <colorEntry><colorName>Water light</colorName><RGB8><red>170</red><green>210</green><blue>240</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Water</colorName><RGB8><red>100</red><green>160</green><blue>210</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Water deep</colorName><RGB8><red>30</red><green>80</green><blue>130</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Paving light</colorName><RGB8><red>200</red><green>200</green><blue>195</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Paving</colorName><RGB8><red>140</red><green>140</green><blue>135</blue></RGB8></colorEntry>
+    <colorEntry><colorName>Asphalt</colorName><RGB8><red>70</red><green>72</green><blue>75</blue></RGB8></colorEntry>
+  </colorPage>
+</colorBook>

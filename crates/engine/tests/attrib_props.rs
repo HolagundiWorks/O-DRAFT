@@ -60,7 +60,7 @@ fn dash_attedit_sets_layer_and_colour_of_one_attribute() {
     assert!(props(&s, h, "U").is_empty(), "only the edited attribute changes");
     assert!(drawn_in(&s, blue), "the attribute's own colour is drawn");
 
-    // ATTSYNC brings the attributes back to their definitions, as in AutoCAD.
+    // ATTSYNC brings the attributes back to their definitions.
     s.execute("attsync", &json!({"name": "B"})).unwrap();
     assert!(props(&s, h, "T").is_empty());
     assert!(!drawn_in(&s, blue));

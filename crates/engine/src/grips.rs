@@ -1,5 +1,5 @@
 //! Grip editing: dragging an object's grips (the points from [`EntityKind::grips`]) the way
-//! AutoCAD does, plus the multi-functional grip modes (move, rotate, scale, mirror about a grip).
+//! does, plus the multi-functional grip modes (move, rotate, scale, mirror about a grip).
 //!
 //! The UI calls [`Session::grip_edit`]; every edit runs through a `grip.*` command so it is
 //! undoable and reachable from scripts, the control channel and MCP.
@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::{EngineError, Result, Session};
 
-/// What dragging a hot grip does (AutoCAD's grip modes, cycled with Space/Enter).
+/// What dragging a hot grip does (grip modes, cycled with Space/Enter).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum GripMode {
@@ -321,7 +321,7 @@ pub fn mode_matrix(mode: GripMode, base: Vec2, to: Vec2) -> Option<Mat3> {
 
 impl Session {
     /// Drag grip `grip_index` of `handle` to `new_point` in `mode` (one undo step).
-    /// The base point of the rotate/scale/mirror modes is the grip itself. As in AutoCAD the edit
+    /// The base point of the rotate/scale/mirror modes is the grip itself. As in the edit
     /// covers the selection: a stretch drags the grips of other selected objects that sit on the
     /// same point, and the other modes transform every selected object.
     pub fn grip_edit(&mut self, handle: Handle, grip_index: usize, new_point: Vec2, mode: GripMode) -> Result<()> {

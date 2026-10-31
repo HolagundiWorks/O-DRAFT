@@ -209,7 +209,7 @@ pub static FORMS: &[Form] = &[
     },
     Form {
         id: "level.set",
-        title: "Level Settings",
+        title: "Story settings",
         wrap: None,
         fields: &[
             field("level", "Level (name)", Kind::Text).req(),

@@ -120,7 +120,7 @@ internal static class ProjectWizardWindow
                 : "Company identity (name, address, contacts, registration, architect) is owned by Studio. When this drawing is linked, those fields are refresh-only — change them in Studio, then Read company file.";
             ToolTipService.SetToolTip(readCompany, refreshOnly
                 ? "Refresh company and linked project details from Studio (company file)"
-                : "Read company details from the Studio company file (needs OSAS_COMPANY and a ticket)");
+                : "Read company details from O-Studio's company file (needs OSTUDIO_COMPANY and a ticket)");
         }
 
         // ---- page 3: the building

@@ -22,13 +22,7 @@ internal static class AboutWindow
             FontSize = Density.FontSection,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
         });
-        stack.Children.Add(new TextBlock { Text = "Architectural drafting for OSAS", FontSize = Density.FontBody });
-        stack.Children.Add(new TextBlock
-        {
-            Text = "Open Source Architecture Suite — with O-Studio and O-CoreOp",
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = Density.FontBody,
-        });
+        stack.Children.Add(new TextBlock { Text = "Architectural drafting with O-Studio and O-CoreOp", FontSize = Density.FontBody });
         if (version.Length > 0)
         {
             stack.Children.Add(new TextBlock { Text = "Version " + version, FontSize = Density.FontBody });
@@ -39,7 +33,7 @@ internal static class AboutWindow
             TextWrapping = TextWrapping.Wrap,
             FontSize = Density.FontBody,
         });
-        stack.Children.Add(Density.Secondary("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.", TextWrapping.Wrap));
+        stack.Children.Add(Density.Secondary("MIT OR Apache-2.0.", TextWrapping.Wrap));
         Density.Apply(stack);
         _window?.Close();
         var window = new Window

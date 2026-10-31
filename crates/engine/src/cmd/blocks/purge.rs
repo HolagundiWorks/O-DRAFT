@@ -2,7 +2,7 @@
 //! zero-length geometry or empty text.
 //!
 //! The JSON form takes `{type?, names?}` and purges without asking. Typed, it asks for the type,
-//! the names and whether to verify each one, as AutoCAD's -PURGE does.
+//! the names and whether to verify each one, as -PURGE does.
 
 use std::collections::{HashSet, VecDeque};
 

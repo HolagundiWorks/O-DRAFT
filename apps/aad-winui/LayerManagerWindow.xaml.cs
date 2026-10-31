@@ -268,12 +268,12 @@ public sealed partial class LayerManagerWindow : Window
         {
             return;
         }
-        var next = await Ask("Layer color", "Index, name, or #RRGGBB. ByLayer is not a layer color.", row.ColorName, "Apply");
-        if (next == null || next.Trim() == row.ColorName)
+        var next = await IndexColorWindow.PickAsync(this, row.ColorName, allowByLayerByBlock: false);
+        if (next == null || next == row.ColorName)
         {
             return;
         }
-        Set(row.Name, new Dictionary<string, object> { ["name"] = row.Name, ["color"] = next.Trim() });
+        Set(row.Name, new Dictionary<string, object> { ["name"] = row.Name, ["color"] = next });
     }
 
     private void OnLinetype(object sender, RoutedEventArgs e)

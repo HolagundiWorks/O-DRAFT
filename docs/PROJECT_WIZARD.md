@@ -98,7 +98,7 @@ the naming rules only for when DWG writing exists.
 File > Project Wizard (`apps/aad-winui/ProjectWizardWindow.cs`, engine command `project.wizard`,
 `cmd/wizard.rs`) sets up a new single drawing in five pages: the project (name, client, location,
 site address, property ID, site area, plot use, authority, date, summary); the team and company
-(architect, engineer, and a button that reads the OSAS company file); the building (drawing unit,
+(architect, engineer, and a button that reads the O-Studio company file); the building (drawing unit,
 floors above ground, basements, terrace, a default floor-to-floor height and an editable list of
 floor names and heights, slab and beam defaults, one level per floor or not); the standards
 (architectural, permit and presentation layer sets, the five discipline tabs, symbol blocks); and a

@@ -7,10 +7,9 @@ O-Draft has two block libraries for services and structure:
 | Smart blocks | `assets/smartblocks/*.json`, built into the engine | O-Draft's own parametric definitions: sizes, counts and options are parameters |
 | Discipline DXF blocks | `assets/blocks/<discipline>/` | 79 static CC0 symbols and details (plumbing, HVAC, electrical, structural / RCC, interior) |
 
-Smart blocks are not AutoCAD dynamic blocks. O-Draft does not read the dynamic-block data
-(parameters, actions, visibility states) that AutoCAD stores in DWG and DXF files; such blocks
-open as their current static geometry. Smart blocks give the same kind of result (one definition,
-many sizes and variants) with an open, documented format and engine commands.
+Smart blocks use O-Draft's parametric format (`osas-smartblocks` v1): one definition, many sizes
+and variants, with an open, documented format and engine commands. DWG and DXF files may carry
+dynamic-block metadata from other programs; O-Draft opens that geometry as static blocks only.
 
 ## Commands
 
@@ -184,8 +183,8 @@ site's terms.
 | [CADProfi / CP-Symbols](https://novedge.com/collections/cadprofi) | Commercial |
 | Manufacturer block downloads (sanitary ware, HVAC units, luminaires) | Each manufacturer's terms; usually use only, no redistribution |
 
-No openly licensed source of AutoCAD dynamic blocks was found for these disciplines, which is why
-the parametric library is O-Draft's own.
+No openly licensed parametric block catalog was found for these disciplines at the time the
+library was built, which is why the parametric library is O-Draft's own.
 
 ## Performance
 
@@ -216,7 +215,7 @@ the parametric library is O-Draft's own.
 - Grips for count parameters (bars, chairs, shutters) and for the switch board; these are edited
   in Properties.
 - Discipline DXFs and a smart block picker in the egui window.
-- Reading AutoCAD dynamic-block data from DWG/DXF.
+- Import of DWG/DXF dynamic-block metadata (parameters, actions, visibility).
 - Take-off rows from smart block parameters (for example column or footing concrete).
 
 ## Tabs

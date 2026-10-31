@@ -239,11 +239,11 @@ fn about(ctx: &egui::Context, open: &mut bool) {
                 }
                 _ => {
                     ui.heading("O-Draft");
-                    ui.label("Drafting. Part of OSAS, the Open Source Architecture Suit.");
+                    ui.label("Drafting with O-Studio and O-CoreOp.");
                     ui.label(crate::tf!("Version {version}", version = env!("CARGO_PKG_VERSION")));
                     ui.add_space(6.0);
                     ui.label(crate::tl!("2D architectural drafting. Open source, written in Rust."));
-                    ui.label(RichText::new(crate::tl!("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.")).small().color(t.text_faint));
+                    ui.label(RichText::new(crate::tl!("MIT OR Apache-2.0.")).small().color(t.text_faint));
                 }
             }
         });

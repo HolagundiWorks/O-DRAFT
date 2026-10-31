@@ -100,7 +100,7 @@ pub fn get(s: &Session, name: &str) -> Option<Value> {
 fn as_bool(v: &Value) -> Option<bool> {
     v.as_bool().or_else(|| v.as_i64().map(|i| i != 0)).or_else(|| v.as_str().and_then(|s| s.trim().parse::<i64>().ok()).map(|i| i != 0))
 }
-/// QPMODE is -1/0 (off), 1 or 2 (on) in AutoCAD; booleans work too.
+/// QPMODE is -1/0 (off), 1 or 2 (on) in the catalog; booleans work too.
 fn as_i(v: &Value) -> Option<i64> {
     v.as_i64().or_else(|| v.as_bool().map(i64::from)).or_else(|| v.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
 }
